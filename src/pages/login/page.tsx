@@ -97,7 +97,7 @@ const LoginPage = () => {
               <input
                 id="email"
                 type="email"
-                placeholder="Entrez votre e-mai"
+                placeholder="Entrez votre e-mail"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
@@ -179,7 +179,7 @@ const LoginPage = () => {
                   Processing...
                 </span>
               ) : mode === "login" ? (
-                "Sign In"
+                "Se connecter"
               ) : (
                 "Créer un compte"
               )}

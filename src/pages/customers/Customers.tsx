@@ -1,7 +1,6 @@
 "use client";
 
 import type React from "react";
-
 import { useState, useEffect } from "react";
 import {
   Users,
@@ -10,6 +9,7 @@ import {
   Trash2,
   Phone,
   Mail,
+  Calendar,
   DollarSign,
   ShoppingBag,
   RefreshCw,
@@ -42,9 +42,7 @@ export default function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
-    null
-  );
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -60,15 +58,6 @@ export default function Customers() {
   useEffect(() => {
     fetchCustomers();
   }, [currentPage]);
-
-  // Add this useEffect to refresh customer data periodically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchCustomers();
-    }, 30000); // Refresh every 30 seconds
-
-    return () => clearInterval(interval);
-  }, []);
 
   const fetchCustomers = async () => {
     try {
@@ -86,7 +75,6 @@ export default function Customers() {
       setTotalPages(data.totalPages);
     } catch (error) {
       console.error("Error fetching customers:", error);
-      // Show error message to user
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -98,27 +86,43 @@ export default function Customers() {
     await fetchCustomers();
   };
 
-  // Filter customers based on search term
   const filteredCustomers = customers.filter(
     (customer) =>
       customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.phone.includes(searchTerm) ||
-      (customer.email &&
-        customer.email.toLowerCase().includes(searchTerm.toLowerCase()))
+      (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  // Calculate total revenue from VALID customers (same logic as dashboard)
   const calculateTotalRevenue = () => {
     return customers.reduce((sum, customer) => sum + customer.totalSpent, 0);
   };
 
   const formatDate = (dateString: string) => {
-    if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleDateString("fr-FR", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    if (!dateString || dateString === "null" || dateString === "undefined") return "N/A";
+    try {
+      return new Date(dateString).toLocaleDateString("fr-FR", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch (error) {
+      return "N/A";
+    }
+  };
+
+  const formatDateTime = (dateString: string) => {
+    if (!dateString || dateString === "null" || dateString === "undefined") return "N/A";
+    try {
+      return new Date(dateString).toLocaleDateString("fr-FR", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch (error) {
+      return "N/A";
+    }
   };
 
   const formatCurrency = (amount: number) => {
@@ -143,7 +147,7 @@ export default function Customers() {
       if (response.ok) {
         setShowAddModal(false);
         setFormData({ name: "", phone: "", email: "" });
-        fetchCustomers();
+        await fetchCustomers();
       } else {
         console.error("Failed to add customer:", response.status);
       }
@@ -164,7 +168,7 @@ export default function Customers() {
         });
 
         if (response.ok) {
-          fetchCustomers();
+          await fetchCustomers();
         } else {
           console.error("Failed to delete customer:", response.status);
         }
@@ -178,7 +182,6 @@ export default function Customers() {
     try {
       setRecalculating(customerId);
 
-      // First, check if the recalculate endpoint exists
       const response = await fetch(
         `${serverUrl}/customers/${customerId}/recalculate`,
         {
@@ -191,11 +194,9 @@ export default function Customers() {
       );
 
       if (response.ok) {
-        // Refresh the customer data
         await fetchCustomers();
         alert("Statistiques recalculées avec succès!");
       } else if (response.status === 404) {
-        // Endpoint doesn't exist - show manual instructions
         alert(
           "Fonction de recalcul non disponible. Pour corriger les statistiques:\n\n" +
             "1. Allez dans l'historique des ventes\n" +
@@ -205,9 +206,7 @@ export default function Customers() {
       }
     } catch (error) {
       console.error("Error recalculating customer stats:", error);
-      alert(
-        "Erreur lors du recalcul. Vérifiez la console pour plus de détails."
-      );
+      alert("Erreur lors du recalcul. Vérifiez la console pour plus de détails.");
     } finally {
       setRecalculating(null);
     }
@@ -231,9 +230,7 @@ export default function Customers() {
             disabled={refreshing}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
-            <RefreshCw
-              className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
-            />
+            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "Actualisation..." : "Actualiser"}
           </button>
           <button
@@ -245,7 +242,6 @@ export default function Customers() {
         </div>
       </div>
 
-      {/* Search and Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="md:col-span-2">
           <div className="relative">
@@ -264,9 +260,7 @@ export default function Customers() {
             <Users className="w-5 h-5 text-blue-600" />
             <div>
               <p className="text-sm text-gray-600">Nombre Total de Clients</p>
-              <p className="text-xl font-semibold text-gray-900">
-                {customers.length}
-              </p>
+              <p className="text-xl font-semibold text-gray-900">{customers.length}</p>
             </div>
           </div>
         </div>
@@ -279,19 +273,17 @@ export default function Customers() {
                 {formatCurrency(calculateTotalRevenue())}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                {customers.filter((c) => c.totalSpent > 0).length} clients
-                actifs
+                {customers.filter((c) => c.totalSpent > 0).length} clients actifs
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Warning Banner if stats might be inaccurate */}
       {customers.some(
         (customer) =>
           customer.totalPurchases > 0 &&
-          (customer.totalSpent === 0 || customer.totalSpent > 100000) // Suspicious values
+          (customer.totalSpent === 0 || customer.totalSpent > 100000)
       ) && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <div className="flex items-center gap-2">
@@ -321,9 +313,7 @@ export default function Customers() {
             disabled={refreshing}
             className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800"
           >
-            <RefreshCw
-              className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
-            />
+            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
             Actualiser
           </button>
         </div>
@@ -428,9 +418,7 @@ export default function Customers() {
                         >
                           <RefreshCw
                             className={`w-4 h-4 ${
-                              recalculating === customer._id
-                                ? "animate-spin"
-                                : ""
+                              recalculating === customer._id ? "animate-spin" : ""
                             }`}
                           />
                         </button>
@@ -450,7 +438,6 @@ export default function Customers() {
           )}
         </div>
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
             <div className="text-sm text-gray-700">
@@ -465,9 +452,7 @@ export default function Customers() {
                 Précédent
               </button>
               <button
-                onClick={() =>
-                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-                }
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                 disabled={currentPage === totalPages}
                 className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
               >
@@ -479,77 +464,182 @@ export default function Customers() {
       </div>
 
       {showAddModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <form
-            onSubmit={handleAddCustomer}
-            className="bg-white p-6 rounded-lg shadow-lg w-96"
-          >
-            <h2 className="text-lg font-semibold mb-4">Ajouter un Client</h2>
-            <input
-              type="text"
-              placeholder="Nom"
-              value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
-              className="w-full mb-3 border rounded p-2"
-            />
-            <input
-              type="text"
-              placeholder="Téléphone"
-              value={formData.phone}
-              onChange={(e) =>
-                setFormData({ ...formData, phone: e.target.value })
-              }
-              className="w-full mb-3 border rounded p-2"
-            />
-            <input
-              type="email"
-              placeholder="Email"
-              value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
-              className="w-full mb-3 border rounded p-2"
-            />
-            <div className="flex justify-end gap-3">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-md w-full mx-4">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Ajouter un Nouveau Client</h3>
               <button
-                type="button"
                 onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 bg-gray-200 rounded"
+                className="text-gray-400 hover:text-gray-600"
               >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded"
-              >
-                Ajouter
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
-          </form>
+
+            <form onSubmit={handleAddCustomer} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nom *</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone *</label>
+                <input
+                  type="tel"
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="submit"
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Ajouter le Client
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Annuler
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
+
       {showModal && selectedCustomer && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-96">
-            <h2 className="text-lg font-semibold mb-4">Détails Client</h2>
-            <p>
-              <strong>Nom:</strong> {selectedCustomer.name}
-            </p>
-            <p>
-              <strong>Téléphone:</strong> {selectedCustomer.phone}
-            </p>
-            <p>
-              <strong>Email:</strong> {selectedCustomer.email}
-            </p>
-            <div className="flex justify-end mt-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Détails du client</h3>
               <button
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded"
+                className="text-gray-400 hover:text-gray-600"
               >
-                Fermer
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center">
+                  <span className="text-xl font-medium text-blue-600">
+                    {selectedCustomer.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div>
+                  <h4 className="text-xl font-semibold text-gray-900">{selectedCustomer.name}</h4>
+                  <p className="text-gray-600">
+                    Client depuis {formatDate(selectedCustomer.createdAt)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Numéro de téléphone</label>
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-gray-400" />
+                    <span className="text-sm text-gray-900">{selectedCustomer.phone}</span>
+                  </div>
+                </div>
+                {selectedCustomer.email && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm text-gray-900">{selectedCustomer.email}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <div className="flex items-center gap-2">
+                    <ShoppingBag className="w-5 h-5 text-blue-600" />
+                    <div>
+                      <p className="text-sm text-blue-600">Nombre total d'achats</p>
+                      <p className="text-xl font-semibold text-blue-900">{selectedCustomer.totalPurchases}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-5 h-5 text-green-600" />
+                    <div>
+                      <p className="text-sm text-green-600">Somme dépensée</p>
+                      <p className="text-xl font-semibold text-green-900">
+                        {formatCurrency(selectedCustomer.totalSpent)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-purple-600" />
+                    <div>
+                      <p className="text-sm text-purple-600">Premier Achat</p>
+                      <p className="text-sm font-semibold text-purple-900">
+                        {formatDateTime(selectedCustomer.firstPurchaseDate)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-4">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-orange-600" />
+                    <div>
+                      <p className="text-sm text-orange-600">Dernier Achat</p>
+                      <p className="text-sm font-semibold text-orange-900">
+                        {formatDateTime(selectedCustomer.lastPurchaseDate)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => recalculateCustomerStats(selectedCustomer._id)}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Recalculer les Statistiques
+                </button>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Fermer
+                </button>
+              </div>
             </div>
           </div>
         </div>
