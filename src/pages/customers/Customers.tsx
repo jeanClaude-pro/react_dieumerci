@@ -10,7 +10,6 @@ import {
   Trash2,
   Phone,
   Mail,
-  Calendar,
   DollarSign,
   ShoppingBag,
   RefreshCw,
@@ -43,7 +42,9 @@ export default function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
+    null
+  );
   const [showModal, setShowModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -75,11 +76,11 @@ export default function Customers() {
       const response = await fetch(
         `${serverUrl}/customers?page=${currentPage}&limit=10&timestamp=${Date.now()}`
       );
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data: CustomersResponse = await response.json();
       setCustomers(data.customers);
       setTotalPages(data.totalPages);
@@ -102,7 +103,8 @@ export default function Customers() {
     (customer) =>
       customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.phone.includes(searchTerm) ||
-      (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase()))
+      (customer.email &&
+        customer.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   // Calculate total revenue from VALID customers (same logic as dashboard)
@@ -153,16 +155,13 @@ export default function Customers() {
   const handleDeleteCustomer = async (customerId: string) => {
     if (confirm("Êtes-vous sûr de vouloir supprimer ce client?")) {
       try {
-        const response = await fetch(
-          `${serverUrl}/customers/${customerId}`,
-          {
-            method: "DELETE",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-            },
-          }
-        );
+        const response = await fetch(`${serverUrl}/customers/${customerId}`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          },
+        });
 
         if (response.ok) {
           fetchCustomers();
@@ -178,7 +177,7 @@ export default function Customers() {
   const recalculateCustomerStats = async (customerId: string) => {
     try {
       setRecalculating(customerId);
-      
+
       // First, check if the recalculate endpoint exists
       const response = await fetch(
         `${serverUrl}/customers/${customerId}/recalculate`,
@@ -199,14 +198,16 @@ export default function Customers() {
         // Endpoint doesn't exist - show manual instructions
         alert(
           "Fonction de recalcul non disponible. Pour corriger les statistiques:\n\n" +
-          "1. Allez dans l'historique des ventes\n" +
-          "2. Modifiez puis sauvegardez une vente de ce client\n" +
-          "3. Les statistiques seront automatiquement recalculées"
+            "1. Allez dans l'historique des ventes\n" +
+            "2. Modifiez puis sauvegardez une vente de ce client\n" +
+            "3. Les statistiques seront automatiquement recalculées"
         );
       }
     } catch (error) {
       console.error("Error recalculating customer stats:", error);
-      alert("Erreur lors du recalcul. Vérifiez la console pour plus de détails.");
+      alert(
+        "Erreur lors du recalcul. Vérifiez la console pour plus de détails."
+      );
     } finally {
       setRecalculating(null);
     }
@@ -230,8 +231,10 @@ export default function Customers() {
             disabled={refreshing}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Actualisation...' : 'Actualiser'}
+            <RefreshCw
+              className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+            />
+            {refreshing ? "Actualisation..." : "Actualiser"}
           </button>
           <button
             onClick={() => setShowAddModal(true)}
@@ -276,7 +279,8 @@ export default function Customers() {
                 {formatCurrency(calculateTotalRevenue())}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                {customers.filter(c => c.totalSpent > 0).length} clients actifs
+                {customers.filter((c) => c.totalSpent > 0).length} clients
+                actifs
               </p>
             </div>
           </div>
@@ -284,9 +288,10 @@ export default function Customers() {
       </div>
 
       {/* Warning Banner if stats might be inaccurate */}
-      {customers.some(customer => 
-        customer.totalPurchases > 0 && 
-        (customer.totalSpent === 0 || customer.totalSpent > 100000) // Suspicious values
+      {customers.some(
+        (customer) =>
+          customer.totalPurchases > 0 &&
+          (customer.totalSpent === 0 || customer.totalSpent > 100000) // Suspicious values
       ) && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <div className="flex items-center gap-2">
@@ -296,8 +301,9 @@ export default function Customers() {
                 Attention: Statistiques potentiellement inexactes
               </p>
               <p className="text-sm text-yellow-700">
-                Certaines statistiques clients peuvent être incorrectes suite à des modifications de ventes.
-                Utilisez "Recalculer les statistiques" pour corriger.
+                Certaines statistiques clients peuvent être incorrectes suite à
+                des modifications de ventes. Utilisez "Recalculer les
+                statistiques" pour corriger.
               </p>
             </div>
           </div>
@@ -315,7 +321,9 @@ export default function Customers() {
             disabled={refreshing}
             className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800"
           >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+            />
             Actualiser
           </button>
         </div>
@@ -418,7 +426,13 @@ export default function Customers() {
                           className="text-green-600 hover:text-green-900 p-1 rounded disabled:opacity-50"
                           title="Recalculer les statistiques"
                         >
-                          <RefreshCw className={`w-4 h-4 ${recalculating === customer._id ? 'animate-spin' : ''}`} />
+                          <RefreshCw
+                            className={`w-4 h-4 ${
+                              recalculating === customer._id
+                                ? "animate-spin"
+                                : ""
+                            }`}
+                          />
                         </button>
                         <button
                           onClick={() => handleDeleteCustomer(customer._id)}
@@ -464,8 +478,82 @@ export default function Customers() {
         )}
       </div>
 
-      {/* Rest of your modals remain the same */}
-      {/* ... (Add Customer Modal and Customer Details Modal code remains unchanged) ... */}
+      {showAddModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <form
+            onSubmit={handleAddCustomer}
+            className="bg-white p-6 rounded-lg shadow-lg w-96"
+          >
+            <h2 className="text-lg font-semibold mb-4">Ajouter un Client</h2>
+            <input
+              type="text"
+              placeholder="Nom"
+              value={formData.name}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
+              className="w-full mb-3 border rounded p-2"
+            />
+            <input
+              type="text"
+              placeholder="Téléphone"
+              value={formData.phone}
+              onChange={(e) =>
+                setFormData({ ...formData, phone: e.target.value })
+              }
+              className="w-full mb-3 border rounded p-2"
+            />
+            <input
+              type="email"
+              placeholder="Email"
+              value={formData.email}
+              onChange={(e) =>
+                setFormData({ ...formData, email: e.target.value })
+              }
+              className="w-full mb-3 border rounded p-2"
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="px-4 py-2 bg-gray-200 rounded"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white rounded"
+              >
+                Ajouter
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      {showModal && selectedCustomer && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-96">
+            <h2 className="text-lg font-semibold mb-4">Détails Client</h2>
+            <p>
+              <strong>Nom:</strong> {selectedCustomer.name}
+            </p>
+            <p>
+              <strong>Téléphone:</strong> {selectedCustomer.phone}
+            </p>
+            <p>
+              <strong>Email:</strong> {selectedCustomer.email}
+            </p>
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 bg-blue-600 text-white rounded"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
