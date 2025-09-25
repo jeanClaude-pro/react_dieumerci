@@ -1,0 +1,114 @@
+"use client";
+
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
+import Sidebar from "./components/Sidebar";
+import Products from "./pages/products/products";
+import SalesHistory from "./pages/history/SalesHistory";
+import Dashboard from "./pages/dashboard/Dashboard";
+import Analytics from "./pages/analytics/Analytics";
+import Customers from "./pages/customers/Customers";
+import LoginPage from "./pages/login/page";
+import NewSale from "./pages/NewSale";
+import { RequireAuth } from "./components/RequireAuth";
+import { AuthProvider } from "./context/AuthProvider";
+
+export default function App() {
+  const token = localStorage.getItem("token");
+  const isAuthenticated = !!token;
+
+  return (
+    <AuthProvider>
+      <ToastContainer position="top-right" autoClose={3000} newestOnTop />
+
+      <Router>
+        <div className="min-h-screen flex bg-background">
+          <div className="fixed">
+            <Sidebar />
+          </div>
+
+          {/* Main content */}
+          <main className="flex-1 overflow-auto ml-[80px] md:ml-[280px]">
+            <div className="h-full">
+              <Routes>
+                <Route
+                  path="/products"
+                  element={
+                    <RequireAuth>
+                      <Products />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/new-sale"
+                  element={
+                    <RequireAuth>
+                      <NewSale />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/"
+                  element={
+                    <RequireAuth>
+                      <NewSale />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/sales"
+                  element={
+                    <RequireAuth>
+                      <SalesHistory />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <RequireAuth>
+                      <Dashboard />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/reports"
+                  element={
+                    <RequireAuth>
+                      <Analytics />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/customers"
+                  element={
+                    <RequireAuth>
+                      <Customers />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/login"
+                  element={
+                    isAuthenticated ? (
+                      <Navigate to="/" replace />
+                    ) : (
+                      <LoginPage />
+                    )
+                  }
+                />
+              </Routes>
+            </div>
+          </main>
+        </div>
+      </Router>
+    </AuthProvider>
+  );
+}
