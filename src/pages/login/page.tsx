@@ -34,16 +34,16 @@ const LoginPage = () => {
     try {
       if (mode === "register") {
         await registerApi({ username, email, password });
-        toast.success("Registration successful! Please sign in.");
+        toast.success("Inscription réussie ! Veuillez vous connecter.");
         setMode("login");
       } else {
-        const { user, token } = await loginApi({ email, password }); // server returns both
-        setAuth({ token, user }); // stores in context + localStorage
-        toast.success("Login successful!");
+        const { user, token } = await loginApi({ email, password });
+        setAuth({ token, user });
+        toast.success("Connexion réussie !");
         navigate("/");
       }
     } catch (err: any) {
-      const msg = err?.message || "An error occurred";
+      const msg = err?.message || "Une erreur est survenue";
       setError(msg);
       toast.error(msg);
     } finally {
@@ -57,12 +57,12 @@ const LoginPage = () => {
         <div className="p-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">
-              {mode === "login" ? "Content de vous revoir !" : "Créer un compte"}
+              {mode === "login" ? "Bon retour" : "Créer un compte"}
             </h1>
             <p className="text-gray-600">
               {mode === "login"
-                ? "Connectez-vous"
-                : "Join us to get started"}
+                ? "Connectez-vous pour continuer votre voyage"
+                : "Rejoignez-nous pour commencer"}
             </p>
           </div>
 
@@ -73,12 +73,12 @@ const LoginPage = () => {
                   htmlFor="username"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  Nom
+                  Nom d'utilisateur
                 </label>
                 <input
                   id="username"
                   type="text"
-                  placeholder="Enter your username"
+                  placeholder="Entrez votre nom d'utilisateur"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
@@ -97,7 +97,7 @@ const LoginPage = () => {
               <input
                 id="email"
                 type="email"
-                placeholder="Entrez votre e-mail"
+                placeholder="Entrez votre email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
@@ -129,7 +129,7 @@ const LoginPage = () => {
                   htmlFor="confirmPassword"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  Confirmez le mot de passe
+                  Confirmer le mot de passe
                 </label>
                 <input
                   id="confirmPassword"
@@ -176,7 +176,7 @@ const LoginPage = () => {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     ></path>
                   </svg>
-                  Processing...
+                  Traitement en cours...
                 </span>
               ) : mode === "login" ? (
                 "Se connecter"
@@ -186,8 +186,31 @@ const LoginPage = () => {
             </button>
           </form>
 
-         
+          <div className="mt-6 text-center">
+            <p className="text-gray-600">
+              {mode === "login"
+                ? "Vous n'avez pas de compte ? "
+                : "Vous avez déjà un compte ? "}
+              <button
+                onClick={() => {
+                  setMode(mode === "login" ? "register" : "login");
+                  setError("");
+                }}
+                className="text-indigo-600 font-medium hover:text-indigo-800 focus:outline-none focus:underline transition"
+              >
+                {mode === "login" ? "S'inscrire" : "Se connecter"}
+              </button>
+            </p>
+          </div>
         </div>
+
+        {mode === "login" && (
+          <div className="bg-gray-50 p-4 border-t border-gray-200 text-center">
+            <p className="text-xs text-gray-500">
+              En continuant, vous acceptez nos Conditions d'utilisation et notre Politique de confidentialité.
+            </p>
+          </div>
+        )}
       </div>
 
       <ToastContainer
