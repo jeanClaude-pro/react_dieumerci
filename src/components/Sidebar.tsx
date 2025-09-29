@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
@@ -121,12 +121,30 @@ export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showTimeWarning, setShowTimeWarning] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const location = useLocation();
   const { token, user, clearAuth } = useAuth();
+  
+  const sidebarRef = useRef<HTMLElement>(null);
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const touchEndX = useRef(0);
 
   const isAuthed = Boolean(token && user);
   const isStaff = user?.role === "staff";
   const isRestricted = isStaff && isRestrictedTime();
+
+  // Check if mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Update current time every minute
   useEffect(() => {
@@ -153,6 +171,47 @@ export default function Sidebar() {
       }
     }
   }, [isAuthed, isStaff, isRestricted, currentTime]);
+
+  // Touch event handlers for swipe gestures
+  useEffect(() => {
+    const sidebarElement = sidebarRef.current;
+    if (!sidebarElement || !isMobile) return;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      touchEndX.current = e.touches[0].clientX;
+    };
+
+    const handleTouchEnd = () => {
+      const touchDiffX = touchEndX.current - touchStartX.current;
+      const touchDiffY = Math.abs(touchEndX.current - touchStartX.current);
+      
+      // Only trigger swipe if horizontal movement is significant and vertical movement is minimal
+      if (Math.abs(touchDiffX) > 50 && touchDiffY < 100) {
+        if (touchDiffX > 0) {
+          // Swipe right - expand sidebar
+          setIsCollapsed(false);
+        } else {
+          // Swipe left - collapse sidebar
+          setIsCollapsed(true);
+        }
+      }
+    };
+
+    sidebarElement.addEventListener('touchstart', handleTouchStart);
+    sidebarElement.addEventListener('touchmove', handleTouchMove);
+    sidebarElement.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      sidebarElement.removeEventListener('touchstart', handleTouchStart);
+      sidebarElement.removeEventListener('touchmove', handleTouchMove);
+      sidebarElement.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isMobile]);
 
   // Check if user has access to a specific item
   const hasAccess = (item: SidebarItem): boolean => {
@@ -187,10 +246,12 @@ export default function Sidebar() {
 
   return (
     <motion.aside
+      ref={sidebarRef}
       initial={false}
       animate={{ width: isCollapsed ? 80 : 280 }}
       transition={{ duration: 0.3, ease: "easeInOut" }}
       className="bg-gray-900 border-r border-gray-800 flex flex-col h-screen relative"
+      style={{ touchAction: "pan-y" }} // Enable vertical scrolling while allowing swipe gestures
     >
       {/* Auto-logout Warning Modal */}
       <AnimatePresence>
@@ -575,7 +636,7 @@ export default function Sidebar() {
                     transition={{ duration: 0.2 }}
                     className="font-medium text-sm"
                   >
-                    Logout
+                    Se déconnecter
                   </motion.span>
                 )}
               </AnimatePresence>
