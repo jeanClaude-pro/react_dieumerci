@@ -17,6 +17,7 @@ import Analytics from "./pages/analytics/Analytics";
 import Customers from "./pages/customers/Customers";
 import LoginPage from "./pages/login/page";
 import NewSale from "./pages/NewSale";
+import Reservation from "./pages/Reservation";
 import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider } from "./context/AuthProvider";
 
@@ -51,6 +52,14 @@ export default function App() {
                   element={
                     <RequireAuth>
                       <NewSale />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/reservation"
+                  element={
+                    <RequireAuth>
+                      <Reservation />
                     </RequireAuth>
                   }
                 />

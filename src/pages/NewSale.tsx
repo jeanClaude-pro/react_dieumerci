@@ -38,6 +38,73 @@ async function readJsonSafe(res: Response) {
   return { __nonJson: true, text };
 }
 
+// Print service for ESC/POS printing
+class PrintService {
+  static async printReceipt(receiptData: any, type: 'sale' | 'reservation' = 'sale'): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/print/receipt`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ receiptData, type }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to print receipt');
+      }
+
+      const result = await response.json();
+      return result.success;
+    } catch (error) {
+      console.error('Print receipt error:', error);
+      throw error;
+    }
+  }
+
+  static async printStub(receiptData: any, type: 'sale' | 'reservation' = 'sale'): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/print/stub`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ receiptData, type }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to print stub');
+      }
+
+      const result = await response.json();
+      return result.success;
+    } catch (error) {
+      console.error('Print stub error:', error);
+      throw error;
+    }
+  }
+
+  static async printReceiptAndStub(receiptData: any, type: 'sale' | 'reservation' = 'sale'): Promise<boolean> {
+    try {
+      // Print receipt first
+      await this.printReceipt(receiptData, type);
+      
+      // Small delay between prints
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Print stub
+      await this.printStub(receiptData, type);
+      
+      return true;
+    } catch (error) {
+      console.error('Print receipt and stub error:', error);
+      throw error;
+    }
+  }
+}
+
 export default function NewSale() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -45,6 +112,7 @@ export default function NewSale() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [receiptData, setReceiptData] = useState<any>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const [stubCounter, setStubCounter] = useState(1);
 
   // Get the current user from your auth context
   const { user: currentUser } = useAuth();
@@ -152,6 +220,15 @@ export default function NewSale() {
       ]);
     }
 
+    // Update local product stock
+    setProducts(prevProducts => 
+      prevProducts.map(p => 
+        p._id === product._id 
+          ? { ...p, stock: p.stock - quantity }
+          : p
+      )
+    );
+
     // Reset form fields
     setForm((f) => ({
       ...f,
@@ -161,9 +238,19 @@ export default function NewSale() {
   }
 
   function removeFromCart(index: number) {
+    const itemToRemove = cart[index];
     const newCart = [...cart];
     newCart.splice(index, 1);
     setCart(newCart);
+
+    // Restore stock when item is removed from cart
+    setProducts(prevProducts =>
+      prevProducts.map(p =>
+        p._id === itemToRemove.productId
+          ? { ...p, stock: p.stock + itemToRemove.quantity }
+          : p
+      )
+    );
   }
 
   function authHeader(): Record<string, string> {
@@ -172,130 +259,264 @@ export default function NewSale() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  const printReceipt = () => {
+  // Updated 88mm thermal printer compatible receipt
+  const printReceiptAndStub = () => {
     if (receiptRef.current) {
-      const printWindow = window.open("", "_blank", "width=800,height=600");
+      const printWindow = window.open("", "_blank", "width=320,height=800");
       if (printWindow) {
         printWindow.document.write(`
-          <html>
-            <head>
-              <title>Reçu</title>
-              <style>
-                body { 
-                  font-family: Arial, sans-serif; 
-                  margin: 0; 
-                  padding: 20px; 
-                  background-color: #fff;
-                }
-                .receipt { 
-                  max-width: 300px; 
-                  margin: 0 auto; 
-                  border: 1px solid #ccc; 
-                  padding: 15px; 
-                  box-shadow: 0 0 10px rgba(0,0,0,0.1);
-                }
-                .header { 
-                  text-align: center; 
-                  margin-bottom: 15px; 
-                  border-bottom: 1px solid #eee; 
-                  padding-bottom: 10px;
-                }
-                .item { 
-                  display: flex; 
-                  justify-content: space-between; 
-                  margin-bottom: 5px; 
-                }
-                .total { 
-                  font-weight: bold; 
-                  border-top: 1px solid #000; 
-                  padding-top: 10px; 
-                  margin-top: 10px;
-                }
-                .footer { 
-                  text-align: center; 
-                  margin-top: 20px; 
-                  font-size: 0.9em; 
-                  color: #666;
-                }
-                .sales-person {
-                  margin-top: 10px;
-                  font-style: italic;
-                  text-align: center;
-                }
-                @media print {
-                  body { margin: 0; padding: 15px; }
-                  .receipt { box-shadow: none; border: none; }
-                }
-              </style>
-            </head>
-            <body onload="window.print(); window.onafterprint = function() { window.close(); }">
-              <div class="receipt">
-                <div class="header">
-                  <h2>${receiptData.shopName}</h2>
-                  <p>${receiptData.shopAddress}</p>
-                  <p>Téléphone:</p>
-                  <p>${receiptData.shopNumber}</p>
-                  <p>Date: ${receiptData.date}</p>
-                  <p>Reçu #: ${receiptData.receiptNumber}</p>
-                </div>
-                
-                <div class="customer">
-                  <h3>Details du client</h3>
-                  <p>Nom: ${receiptData.customerName}</p>
-                  <p>Numéro de téléphone: ${receiptData.customerPhone}</p>
-                  ${
-                    receiptData.customerEmail
-                      ? `<p>Email: ${receiptData.customerEmail}</p>`
-                      : ""
-                  }
-                </div>
-                
-                <h3>Articles</h3>
-                ${receiptData.items
-                  .map(
-                    (item: CartItem) => `
-                  <div class="item">
-                    <span>${item.quantity} x ${item.name}</span>
-                    <span>$${item.total.toFixed(2)}</span>
-                  </div>
-                `
-                  )
-                  .join("")}
-                
-                <div class="total">
-                  <div class="item">
-                    <span>Total:</span>
-                    <span>$${receiptData.total.toFixed(2)}</span>
-                  </div>
-                  <div class="item">
-                    <span>Methode de payement:</span>
-                    <span>${receiptData.paymentMethod.toUpperCase()}</span>
-                  </div>
-                </div>
-                
-                <div class="sales-person">
-                  <p>Agent: ${receiptData.salesPerson}</p>
-                </div>
-                
-                <div class="footer">
-                  <p>Merci pour votre achat ! ✅</p>
-                  <p>À bientôt!✅ </p>
-                </div>
-              </div>
-            </body>
-          </html>
-        `);
+  <html>
+    <head>
+      <style>
+        body { 
+          font-family: 'Courier New', monospace; 
+          margin: 0; 
+          padding: 2mm; 
+          font-size: 10px;
+          width: 88mm;
+          background-color: white;
+        }
+        .receipt, .stub { 
+          width: 84mm;
+          margin: 0 auto;
+          padding: 1mm;
+          border: none;
+        }
+        .stub { 
+          page-break-before: always;
+          margin-top: 5mm;
+        }
+        .header { 
+          text-align: center; 
+          margin-bottom: 2mm; 
+          border-bottom: 1px solid #000; 
+          padding-bottom: 1mm;
+        }
+        .item { 
+          display: block; 
+          margin-bottom: 1mm; 
+          clear: both;
+        }
+        .item span:first-child { 
+          float: left; 
+          text-align: left;
+          width: 70%;
+        }
+        .item span:last-child { 
+          float: right; 
+          text-align: right;
+          width: 30%;
+        }
+        .total { 
+          font-weight: bold; 
+          border-top: 1px solid #000; 
+          padding-top: 2mm; 
+          margin-top: 2mm;
+          clear: both;
+        }
+        .footer, .stub-footer { 
+          text-align: center; 
+          margin-top: 3mm; 
+          font-size: 9px; 
+        }
+        .stub-footer { 
+          border-top: 1px dashed #000;
+          padding-top: 2mm;
+        }
+        .sales-person {
+          margin-top: 2mm;
+          text-align: center;
+          font-style: italic;
+        }
+        .stub-number {
+          font-weight: bold;
+          text-align: center;
+          margin-top: 2mm;
+          font-size: 11px;
+        }
+        .clear { 
+          clear: both; 
+        }
+        .customer {
+          margin: 2mm 0;
+        }
+        .customer p {
+          margin: 1mm 0;
+        }
+        @media print {
+          body { 
+            margin: 0 !important; 
+            padding: 0 !important; 
+            width: 88mm !important;
+            font-size: 10px !important;
+          }
+          .receipt, .stub { 
+            border: none !important; 
+            box-shadow: none !important; 
+            margin: 0 auto !important;
+            padding: 1mm !important;
+            width: 84mm !important;
+          }
+          .stub { 
+            margin-top: 5mm !important;
+          }
+        }
+      </style>
+    </head>
+    <body onload="window.print(); window.onafterprint = function() { window.close(); }">
+      <!-- RECEIPT -->
+      <div class="receipt">
+        <div class="header">
+          <h3 style="margin: 1mm 0; font-size: 12px;">${receiptData.shopName}</h3>
+          <p style="margin: 1mm 0; font-size: 11px;"><strong>_Chez Dan Collection_</strong></p>
+          <p style="margin: 1mm 0; font-size: 9px;">${receiptData.shopAddress}</p>
+          <p style="margin: 1mm 0; font-size: 9px;">${receiptData.shopRegistration}</p>
+          <p style="margin: 1mm 0; font-size: 9px;">${receiptData.shopNumber}</p>
+          <p style="margin: 1mm 0;">Date: ${receiptData.date}</p>
+          <p style="margin: 1mm 0;">Reçu #: ${receiptData.receiptNumber}</p>
+        </div>
+        
+        <div class="customer">
+          <p style="margin: 1mm 0;"><strong>Client:</strong> ${receiptData.customerName}</p>
+          <p style="margin: 1mm 0;"><strong>Tél:</strong> ${receiptData.customerPhone}</p>
+          ${
+            receiptData.customerEmail
+              ? `<p style="margin: 1mm 0;"><strong>Email:</strong> ${receiptData.customerEmail}</p>`
+              : ""
+          }
+        </div>
+        
+        <p style="margin: 2mm 0 1mm 0; font-weight: bold;">Articles:</p>
+        ${receiptData.items
+          .map(
+            (item: CartItem) => `
+          <div class="item">
+            <span>${item.quantity}x ${item.name.substring(0, 20)}</span>
+            <span>$${item.total.toFixed(2)}</span>
+          </div>
+          <div class="clear"></div>
+        `
+          )
+          .join("")}
+        
+        <div class="total">
+          <div class="item">
+            <span>Total:</span>
+            <span>$${receiptData.total.toFixed(2)}</span>
+          </div>
+          <div class="clear"></div>
+          <div class="item">
+            <span>Paiement:</span>
+            <span>${receiptData.paymentMethod.toUpperCase()}</span>
+          </div>
+          <div class="clear"></div>
+        </div>
+        
+        <div class="sales-person">
+          <p>Agent: ${receiptData.salesPerson}</p>
+        </div>
+        
+        <div class="footer">
+          <p>Merci pour votre achat ! ✅</p>
+          <p>Non échangeable - Non remboursable</p>
+          <p>À bientôt! ✅</p>
+        </div>
+      </div>
 
+      <!-- SALE STUB -->
+      <div class="stub">
+        <div class="header">
+          <h3 style="margin: 1mm 0; font-size: 12px;">${receiptData.shopName}</h3>
+          <p style="margin: 1mm 0; font-size: 11px;"><strong>_Chez Dan Collection_</strong></p>
+          <p style="margin: 1mm 0; font-size: 9px;">${receiptData.shopAddress}</p>
+          <p style="margin: 1mm 0; font-size: 9px;">${receiptData.shopRegistration}</p>
+          <p style="margin: 1mm 0; font-size: 9px;">${receiptData.shopNumber}</p>
+          <p style="margin: 1mm 0;">Date: ${receiptData.date}</p>
+          <p style="margin: 1mm 0;">Reçu #: ${receiptData.receiptNumber}</p>
+        </div>
+        
+        <div class="customer">
+          <p style="margin: 1mm 0;"><strong>Client:</strong> ${receiptData.customerName}</p>
+          <p style="margin: 1mm 0;"><strong>Tél:</strong> ${receiptData.customerPhone}</p>
+          ${
+            receiptData.customerEmail
+              ? `<p style="margin: 1mm 0;"><strong>Email:</strong> ${receiptData.customerEmail}</p>`
+              : ""
+          }
+        </div>
+        
+        <p style="margin: 2mm 0 1mm 0; font-weight: bold;">Articles:</p>
+        ${receiptData.items
+          .map(
+            (item: CartItem) => `
+          <div class="item">
+            <span>${item.quantity}x ${item.name.substring(0, 20)}</span>
+            <span>$${item.total.toFixed(2)}</span>
+          </div>
+          <div class="clear"></div>
+        `
+          )
+          .join("")}
+        
+        <div class="total">
+          <div class="item">
+            <span>Total:</span>
+            <span>$${receiptData.total.toFixed(2)}</span>
+          </div>
+          <div class="clear"></div>
+          <div class="item">
+            <span>Paiement:</span>
+            <span>${receiptData.paymentMethod.toUpperCase()}</span>
+          </div>
+          <div class="clear"></div>
+        </div>
+        
+        <div class="sales-person">
+          <p>Agent: ${receiptData.salesPerson}</p>
+        </div>
+        
+        <div class="stub-footer">
+          <div class="stub-number">
+            SOUCHE N°${receiptData.stubNumber} DU JOUR
+          </div>
+          <p>Merci pour votre achat ! ✅</p>
+          <p>Non échangeable - Non remboursable</p>
+          <p>À bientôt! ✅</p>
+        </div>
+      </div>
+    </body>
+  </html>
+`);
         printWindow.document.close();
       }
+    }
+  };
+
+  // New ESC/POS printing function
+  const printWithESCPOS = async (receiptData: any) => {
+    try {
+      await PrintService.printReceiptAndStub(receiptData, 'sale');
+      return true;
+    } catch (error: any) {
+      console.error('ESC/POS printing failed, falling back to browser printing:', error);
+      // Fallback to browser printing
+      printReceiptAndStub();
+      return false;
     }
   };
 
   useEffect(() => {
     if (receiptData) {
       // Small delay to ensure the receipt data is set
-      const timer = setTimeout(() => {
-        printReceipt();
+      const timer = setTimeout(async () => {
+        try {
+          // Try ESC/POS printing first, fallback to browser printing
+          await printWithESCPOS(receiptData);
+          // Increment stub counter for next sale
+          setStubCounter((prev) => prev + 1);
+        } catch (error) {
+          console.error('Printing failed:', error);
+        }
       }, 100);
 
       return () => clearTimeout(timer);
@@ -348,10 +569,11 @@ export default function NewSale() {
       }
 
       // Prepare receipt data
-      setReceiptData({
+      const newReceiptData = {
         shopName: "ETS. DIEU MERCI",
         shopAddress: "Av Manono Coin Munama N°39,C.Kenya, Lubumbashi",
         shopNumber: "+243 977 771 421 / +243 853 549 102",
+        shopRegistration: "RCCM: 14-A-017885",
         customerName: form.customerName,
         customerPhone: form.customerPhone,
         customerEmail: form.customerEmail,
@@ -361,7 +583,10 @@ export default function NewSale() {
         salesPerson: currentUser?.username || "Vendeur", // Use username or fallback
         date: new Date().toLocaleString(),
         receiptNumber: Math.floor(100000 + Math.random() * 900000),
-      });
+        stubNumber: stubCounter, // Add stub number
+      };
+
+      setReceiptData(newReceiptData);
 
       // Reset form and cart
       setForm({
@@ -375,10 +600,12 @@ export default function NewSale() {
       });
       setCart([]);
 
-      setMessage("✅ Vente effectuée avec succès ! Impression du reçu...");
+      setMessage(
+        "✅ Vente effectuée avec succès ! Impression du reçu et de la souche..."
+      );
       setSubmitting(false);
     } catch (e: any) {
-      setError(e?.message || "La vente n’a pas pu être effectuée");
+      setError(e?.message || "La vente n'a pas pu être effectuée");
       setSubmitting(false);
     }
   }
@@ -441,7 +668,7 @@ export default function NewSale() {
               step="0.01"
               name="unitPrice"
               value={form.unitPrice}
-              onChange={handleChange}
+              onChange={(e) => setForm({ ...form, unitPrice: e.target.value })}
               placeholder={
                 product?.price ? `e.g. ${product.price}` : "Entrer le prix"
               }
@@ -511,7 +738,7 @@ export default function NewSale() {
                         onClick={() => removeFromCart(index)}
                         className="text-red-600 hover:text-red-800"
                       >
-                        Remove
+                        Enlever
                       </button>
                     </td>
                   </tr>
@@ -613,7 +840,7 @@ export default function NewSale() {
         </button>
       </div>
 
-      {/* Hidden receipt container */}
+      {/* Hidden receipt container (keep as fallback) */}
       <div ref={receiptRef} style={{ display: "none" }} />
     </div>
   );

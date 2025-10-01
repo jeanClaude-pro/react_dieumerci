@@ -20,6 +20,8 @@ import {
   LogIn,
   User,
   Clock,
+  Calendar,
+  History,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -60,6 +62,13 @@ const sidebarSections: SidebarSection[] = [
         path: "/",
         roles: ["admin", "staff"] // Both admin and staff can access POS
       },
+      { 
+        id: "reservation", 
+        label: "Reservation", 
+        icon: Calendar, 
+        path: "/reservation",
+        roles: ["admin", "staff"] // Both admin and staff can access reservation
+      },
     ],
   },
   {
@@ -83,6 +92,13 @@ const sidebarSections: SidebarSection[] = [
         icon: TrendingUp, 
         path: "/sales",
         roles: ["admin", "staff"] // Both admin and staff can access sales history
+      },
+      { 
+        id: "reservation-history", 
+        label: "Historique de reservation", 
+        icon: History, 
+        path: "/reservation-history",
+        roles: ["admin", "staff"] // Both admin and staff can access reservation history
       },
       { 
         id: "reports", 
