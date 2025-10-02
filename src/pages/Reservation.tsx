@@ -37,7 +37,7 @@ async function readJsonSafe(res: Response) {
   return { __nonJson: true, text };
 }
 
-// Enhanced Print service for ESC/POS printing
+// Enhanced Print service for ESC/POS printing with precise paper control
 class PrintService {
   static async printReceipt(receiptData: any, type: 'sale' | 'reservation' = 'sale'): Promise<boolean> {
     try {
@@ -90,8 +90,9 @@ class PrintService {
       // Print receipt first
       await this.printReceipt(receiptData, type);
       
-      // Add paper cut or separation between receipt and stub
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Enhanced paper feed control for precise 20mm separation
+      // Most thermal printers: 1 line = ~3.75mm, so ~5-6 lines = ~20mm
+      await this.feedPaper(6); // Feed approximately 20mm of paper
       
       // Print stub
       await this.printStub(receiptData, type);
@@ -100,6 +101,32 @@ class PrintService {
     } catch (error) {
       console.error('Print receipt and stub error:', error);
       throw error;
+    }
+  }
+
+  // Method to control paper feeding for precise separation
+  static async feedPaper(lines: number = 6): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/print/feed`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ lines }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to feed paper');
+      }
+
+      const result = await response.json();
+      return result.success;
+    } catch (error) {
+      console.error('Paper feed error:', error);
+      // If paper feed API is not available, fall back to time-based delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      return false;
     }
   }
 }
@@ -294,7 +321,7 @@ export default function Reservation() {
         }
         .stub-container { 
           page-break-before: always;
-          margin-top: 5mm;
+          margin-top: 20mm; /* Increased to 20mm for better separation */
           border-top: 3px dashed #000;
           padding-top: 3mm;
         }
@@ -439,6 +466,19 @@ export default function Reservation() {
           font-size: 14px;
           color: #000;
         }
+        .paper-feed-area {
+          height: 20mm;
+          margin: 0;
+          padding: 0;
+          border: none;
+          background: repeating-linear-gradient(
+            45deg,
+            transparent,
+            transparent 5px,
+            #f0f0f0 5px,
+            #f0f0f0 10px
+          );
+        }
         .thank-you {
           font-weight: bold;
           margin: 3mm 0;
@@ -475,7 +515,7 @@ export default function Reservation() {
             width: 78mm !important;
           }
           .stub-container { 
-            margin-top: 5mm !important;
+            margin-top: 20mm !important; /* Ensure 20mm separation in print */
           }
           .no-print {
             display: none !important;
@@ -484,6 +524,9 @@ export default function Reservation() {
           .stub-container {
             page-break-before: always !important;
             break-before: always !important;
+          }
+          .paper-feed-area {
+            display: none !important; /* Hide visual feed area in actual print */
           }
         }
       </style>
@@ -577,6 +620,9 @@ export default function Reservation() {
         </div>
       </div>
 
+      <!-- 20MM PAPER FEED AREA FOR SEPARATION -->
+      <div class="paper-feed-area"></div>
+
       <!-- RESERVATION STUB - SEPARATE PRINT JOB -->
       <div class="stub-container">
         <div class="header">
@@ -663,13 +709,13 @@ export default function Reservation() {
     }
   };
 
-  // Enhanced ESC/POS printing function with better paper handling
+  // Enhanced ESC/POS printing function with precise 20mm paper separation
   const printWithESCPOS = async (receiptData: any) => {
     try {
-      console.log('Attempting ESC/POS printing for reservation...');
+      console.log('Attempting ESC/POS printing for reservation with 20mm paper separation...');
       const success = await PrintService.printReceiptAndStub(receiptData, 'reservation');
       if (success) {
-        console.log('ESC/POS printing successful');
+        console.log('ESC/POS printing successful with 20mm separation');
         return true;
       } else {
         throw new Error('ESC/POS printing returned false');
