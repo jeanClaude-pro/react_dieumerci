@@ -91,7 +91,7 @@ class PrintService {
       await this.printReceipt(receiptData, type);
       
       // Add paper cut or separation between receipt and stub
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Print stub
       await this.printStub(receiptData, type);
@@ -259,7 +259,7 @@ export default function Reservation() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  // Enhanced thermal printer compatible receipt for reservations
+  // Enhanced thermal printer compatible receipt for reservations with larger fonts
   const printReceiptAndStub = () => {
     if (receiptRef.current) {
       const printWindow = window.open("", "_blank", "width=320,height=800");
@@ -277,178 +277,213 @@ export default function Reservation() {
         body { 
           font-family: 'Courier New', Courier, monospace; 
           margin: 0; 
-          padding: 2mm; 
-          font-size: 11px;
-          font-weight: normal;
-          line-height: 1.2;
-          width: 88mm;
+          padding: 1mm; 
+          font-size: 15px;
+          font-weight: bold;
+          line-height: 1.3;
+          width: 80mm;
           background-color: white;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
         }
         .receipt-container, .stub-container { 
-          width: 84mm;
+          width: 78mm;
           margin: 0 auto;
           padding: 1mm;
           border: none;
         }
         .stub-container { 
           page-break-before: always;
-          margin-top: 8mm;
-          border-top: 2px dashed #000;
+          margin-top: 5mm;
+          border-top: 3px dashed #000;
           padding-top: 3mm;
         }
         .header { 
           text-align: center; 
           margin-bottom: 3mm; 
-          border-bottom: 1px solid #000; 
+          border-bottom: 2px solid #000; 
           padding-bottom: 2mm;
         }
         .shop-name {
-          font-size: 13px;
+          font-size: 18px;
           font-weight: bold;
-          margin-bottom: 1mm;
+          margin-bottom: 2mm;
           text-transform: uppercase;
+          letter-spacing: 1px;
         }
         .shop-details {
-          font-size: 9px;
+          font-size: 13px;
           margin-bottom: 1mm;
-          line-height: 1.1;
+          line-height: 1.2;
+          font-weight: bold;
         }
         .receipt-title {
-          font-size: 11px;
+          font-size: 16px;
           font-weight: bold;
-          margin: 2mm 0;
+          margin: 3mm 0;
           text-decoration: underline;
+          text-align: center;
         }
         .reservation-badge {
           background-color: #000;
           color: white;
-          padding: 1mm 2mm;
+          padding: 3mm 2mm;
           font-weight: bold;
           text-align: center;
-          margin: 2mm 0;
-          font-size: 12px;
+          margin: 3mm 0;
+          font-size: 16px;
+          border: 2px solid #000;
         }
         .item-row { 
           display: flex;
           justify-content: space-between;
-          margin-bottom: 1.5mm;
+          margin-bottom: 2mm;
           padding-bottom: 1mm;
-          border-bottom: 1px dotted #ccc;
+          border-bottom: 1px solid #ccc;
         }
         .item-name {
           flex: 3;
           text-align: left;
           font-weight: bold;
+          font-size: 14px;
         }
         .item-details {
           flex: 2;
           text-align: right;
+          font-weight: bold;
+          font-size: 14px;
         }
         .item-quantity {
           font-weight: bold;
         }
         .total-section { 
           font-weight: bold; 
-          border-top: 2px solid #000; 
+          border-top: 3px solid #000; 
           padding-top: 3mm; 
           margin-top: 3mm;
         }
         .total-row {
           display: flex;
           justify-content: space-between;
-          margin-bottom: 1mm;
+          margin-bottom: 2mm;
+          font-size: 15px;
         }
         .payment-method {
           text-transform: uppercase;
           font-weight: bold;
+          font-size: 15px;
         }
         .footer { 
           text-align: center; 
           margin-top: 4mm; 
-          font-size: 9px;
-          border-top: 1px solid #000;
-          padding-top: 2mm;
+          font-size: 13px;
+          border-top: 2px solid #000;
+          padding-top: 3mm;
+          font-weight: bold;
         }
         .stub-footer { 
           text-align: center; 
           margin-top: 4mm; 
-          font-size: 9px;
-          border-top: 2px dashed #000;
+          font-size: 13px;
+          border-top: 3px dashed #000;
           padding-top: 3mm;
+          font-weight: bold;
         }
         .sales-person {
           margin-top: 3mm;
           text-align: center;
-          font-style: italic;
-          font-size: 10px;
+          font-weight: bold;
+          font-size: 14px;
+          background-color: #f0f0f0;
+          padding: 2mm;
+          border: 1px solid #000;
         }
         .stub-number {
           font-weight: bold;
           text-align: center;
           margin: 3mm 0;
-          font-size: 12px;
-          background-color: #f0f0f0;
-          padding: 2mm;
-          border: 1px solid #000;
+          font-size: 16px;
+          background-color: #000;
+          color: white;
+          padding: 3mm;
+          border: 2px solid #000;
         }
         .customer-info {
           margin: 3mm 0;
-          padding: 2mm;
+          padding: 3mm;
           background-color: #f9f9f9;
-          border: 1px solid #ddd;
+          border: 2px solid #000;
+          font-weight: bold;
         }
         .customer-field {
-          margin-bottom: 1mm;
+          margin-bottom: 2mm;
+          font-size: 14px;
         }
         .reservation-info {
           background-color: #fffacd;
-          border: 1px solid #ffd700;
-          padding: 2mm;
-          margin: 2mm 0;
+          border: 2px solid #ffd700;
+          padding: 3mm;
+          margin: 3mm 0;
           font-weight: bold;
+          font-size: 14px;
         }
         .separator {
-          border-top: 1px dashed #000;
+          border-top: 2px dashed #000;
+          margin: 3mm 0;
+          height: 2px;
+        }
+        .cut-line {
+          text-align: center;
           margin: 2mm 0;
+          font-weight: bold;
+          font-size: 14px;
+          color: #000;
         }
         .thank-you {
           font-weight: bold;
-          margin: 2mm 0;
+          margin: 3mm 0;
+          font-size: 15px;
         }
         .warning {
-          font-size: 8px;
-          color: #666;
-          margin: 1mm 0;
+          font-size: 12px;
+          color: #000;
+          margin: 2mm 0;
+          font-weight: bold;
         }
         .notes {
-          margin: 2mm 0;
-          padding: 1mm;
+          margin: 3mm 0;
+          padding: 2mm;
           background-color: #f5f5f5;
           border-left: 3px solid #ccc;
-          font-size: 10px;
+          font-size: 13px;
+          font-weight: bold;
         }
         @media print {
           body { 
             margin: 0 !important; 
             padding: 0 !important; 
-            width: 88mm !important;
-            font-size: 11px !important;
+            width: 80mm !important;
+            font-size: 15px !important;
             background: white !important;
+            font-weight: bold !important;
           }
           .receipt-container, .stub-container { 
             border: none !important; 
             box-shadow: none !important; 
             margin: 0 auto !important;
             padding: 1mm !important;
-            width: 84mm !important;
+            width: 78mm !important;
           }
           .stub-container { 
-            margin-top: 8mm !important;
+            margin-top: 5mm !important;
           }
           .no-print {
             display: none !important;
+          }
+          /* Force page break and paper cut between receipt and stub */
+          .stub-container {
+            page-break-before: always !important;
+            break-before: always !important;
           }
         }
       </style>
@@ -459,11 +494,11 @@ export default function Reservation() {
         <div class="header">
           <div class="shop-name">${receiptData.shopName}</div>
           <div class="shop-details">${receiptData.shopAddress}</div>
-          <div class="shop-details">${receiptData.shopNumber}</div>
+          <div class="shop-details">TEL: ${receiptData.shopNumber}</div>
           <div class="shop-details">${receiptData.shopRegistration}</div>
           <div class="separator"></div>
-          <div><strong>Date:</strong> ${receiptData.date}</div>
-          <div><strong>Reçu #:</strong> ${receiptData.receiptNumber}</div>
+          <div class="shop-details">DATE: ${receiptData.date}</div>
+          <div class="shop-details">RECU #: ${receiptData.receiptNumber}</div>
         </div>
         
         <div class="reservation-badge">
@@ -471,40 +506,39 @@ export default function Reservation() {
         </div>
         
         <div class="reservation-info">
-          <div><strong>Date de réservation:</strong> ${receiptData.reservationDate}</div>
-          <div><strong>Heure de réservation:</strong> ${receiptData.reservationTime}</div>
+          <div>DATE RESERVATION: ${receiptData.reservationDate}</div>
+          <div>HEURE RESERVATION: ${receiptData.reservationTime}</div>
         </div>
         
         <div class="customer-info">
-          <div class="customer-field"><strong>Client:</strong> ${receiptData.customerName.toUpperCase()}</div>
-          <div class="customer-field"><strong>Tél:</strong> ${receiptData.customerPhone}</div>
+          <div class="customer-field">CLIENT: ${receiptData.customerName.toUpperCase()}</div>
+          <div class="customer-field">TELEPHONE: ${receiptData.customerPhone}</div>
           ${
             receiptData.customerEmail
-              ? `<div class="customer-field"><strong>Email:</strong> ${receiptData.customerEmail}</div>`
+              ? `<div class="customer-field">EMAIL: ${receiptData.customerEmail}</div>`
               : ""
           }
         </div>
         
         ${receiptData.notes ? `
           <div class="notes">
-            <strong>Notes:</strong> ${receiptData.notes}
+            <strong>NOTES:</strong> ${receiptData.notes}
           </div>
         ` : ''}
         
-        <div class="receipt-title">ARTICLES RÉSERVÉS:</div>
+        <div class="receipt-title">ARTICLES RÉSERVÉS</div>
         ${receiptData.items
           .map(
             (item: CartItem) => `
           <div class="item-row">
-            <div class="item-name">${item.name.substring(0, 24)}</div>
+            <div class="item-name">${item.quantity}x ${item.name.substring(0, 20)}</div>
             <div class="item-details">
-              <span class="item-quantity">${item.quantity}x</span> 
-              @$${item.unitPrice.toFixed(2)}
+              $${item.total.toFixed(2)}
             </div>
           </div>
           <div class="item-row">
-            <div class="item-name"></div>
-            <div class="item-details"><strong>$${item.total.toFixed(2)}</strong></div>
+            <div class="item-name">@ $${item.unitPrice.toFixed(2)}/unite</div>
+            <div class="item-details"></div>
           </div>
         `
           )
@@ -517,36 +551,41 @@ export default function Reservation() {
           </div>
           <div class="total-row">
             <div>ACOMPTE TOTAL:</div>
-            <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
+            <div>$${receiptData.total.toFixed(2)}</div>
           </div>
           <div class="total-row">
-            <div>MODE DE PAIEMENT:</div>
+            <div>PAIEMENT:</div>
             <div class="payment-method">${receiptData.paymentMethod.toUpperCase()}</div>
           </div>
         </div>
         
         <div class="sales-person">
-          Agent: ${receiptData.salesPerson.toUpperCase()}
+          VENDEUR: ${receiptData.salesPerson.toUpperCase()}
         </div>
         
         <div class="footer">
           <div class="thank-you">MERCI POUR VOTRE RÉSERVATION !</div>
-          <div class="warning">Présentez ce reçu pour retirer vos articles</div>
-          <div class="warning">Validité: 7 jours à partir de la date de réservation</div>
-          <div class="warning">Non remboursable - Report possible sous 48h</div>
-          <div class="thank-you">À BIENTÔT !</div>
+          <div class="warning">Presentez ce reçu pour retirer vos articles</div>
+          <div class="warning">Validité: 7 jours</div>
+          <div class="warning">Non remboursable</div>
+          <div class="thank-you">A BIENTOT !</div>
+        </div>
+
+        <!-- PAPER CUT INDICATOR -->
+        <div class="cut-line">
+          ✄ ────────────────────────── ✄
         </div>
       </div>
 
-      <!-- RESERVATION STUB - SEPARATE PAGE -->
+      <!-- RESERVATION STUB - SEPARATE PRINT JOB -->
       <div class="stub-container">
         <div class="header">
           <div class="shop-name">${receiptData.shopName}</div>
           <div class="shop-details">${receiptData.shopAddress}</div>
-          <div class="shop-details">${receiptData.shopNumber}</div>
+          <div class="shop-details">TEL: ${receiptData.shopNumber}</div>
           <div class="separator"></div>
-          <div><strong>Date:</strong> ${receiptData.date}</div>
-          <div><strong>Reçu #:</strong> ${receiptData.receiptNumber}</div>
+          <div class="shop-details">DATE: ${receiptData.date}</div>
+          <div class="shop-details">RECU #: ${receiptData.receiptNumber}</div>
         </div>
         
         <div class="stub-number">
@@ -558,35 +597,34 @@ export default function Reservation() {
         </div>
         
         <div class="reservation-info">
-          <div><strong>Date réservation:</strong> ${receiptData.reservationDate}</div>
-          <div><strong>Heure réservation:</strong> ${receiptData.reservationTime}</div>
+          <div>DATE RESERVATION: ${receiptData.reservationDate}</div>
+          <div>HEURE RESERVATION: ${receiptData.reservationTime}</div>
         </div>
         
         <div class="customer-info">
-          <div class="customer-field"><strong>Client:</strong> ${receiptData.customerName.toUpperCase()}</div>
-          <div class="customer-field"><strong>Tél:</strong> ${receiptData.customerPhone}</div>
+          <div class="customer-field">CLIENT: ${receiptData.customerName.toUpperCase()}</div>
+          <div class="customer-field">TELEPHONE: ${receiptData.customerPhone}</div>
         </div>
         
         ${receiptData.notes ? `
           <div class="notes">
-            <strong>Notes:</strong> ${receiptData.notes}
+            <strong>NOTES:</strong> ${receiptData.notes}
           </div>
         ` : ''}
         
-        <div class="receipt-title">ARTICLES RÉSERVÉS:</div>
+        <div class="receipt-title">ARTICLES RÉSERVÉS</div>
         ${receiptData.items
           .map(
             (item: CartItem) => `
           <div class="item-row">
-            <div class="item-name">${item.name.substring(0, 24)}</div>
+            <div class="item-name">${item.quantity}x ${item.name.substring(0, 20)}</div>
             <div class="item-details">
-              <span class="item-quantity">${item.quantity}x</span> 
-              @$${item.unitPrice.toFixed(2)}
+              $${item.total.toFixed(2)}
             </div>
           </div>
           <div class="item-row">
-            <div class="item-name"></div>
-            <div class="item-details"><strong>$${item.total.toFixed(2)}</strong></div>
+            <div class="item-name">@ $${item.unitPrice.toFixed(2)}/unite</div>
+            <div class="item-details"></div>
           </div>
         `
           )
@@ -595,7 +633,7 @@ export default function Reservation() {
         <div class="total-section">
           <div class="total-row">
             <div>ACOMPTE PERÇU:</div>
-            <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
+            <div>$${receiptData.total.toFixed(2)}</div>
           </div>
           <div class="total-row">
             <div>PAIEMENT:</div>
@@ -604,16 +642,17 @@ export default function Reservation() {
         </div>
         
         <div class="sales-person">
-          Agent: ${receiptData.salesPerson.toUpperCase()}
+          VENDEUR: ${receiptData.salesPerson.toUpperCase()}
         </div>
         
         <div class="stub-footer">
-          <div class="thank-you">SOUCHE RÉSERVATION - ${receiptData.shopName}</div>
-          <div class="warning">Conserver cette souche pour suivi</div>
-          <div class="warning">Reçu #: ${receiptData.receiptNumber}</div>
+          <div class="thank-you">SOUCHE RÉSERVATION</div>
+          <div class="warning">${receiptData.shopName}</div>
+          <div class="warning">Conserver cette souche</div>
+          <div class="warning">Recu #: ${receiptData.receiptNumber}</div>
           <div class="warning">Date: ${receiptData.date}</div>
           <div class="warning">Client: ${receiptData.customerName}</div>
-          <div class="warning">Tél: ${receiptData.customerPhone}</div>
+          <div class="warning">Tel: ${receiptData.customerPhone}</div>
         </div>
       </div>
     </body>
@@ -624,7 +663,7 @@ export default function Reservation() {
     }
   };
 
-  // Enhanced ESC/POS printing function with better error handling
+  // Enhanced ESC/POS printing function with better paper handling
   const printWithESCPOS = async (receiptData: any) => {
     try {
       console.log('Attempting ESC/POS printing for reservation...');

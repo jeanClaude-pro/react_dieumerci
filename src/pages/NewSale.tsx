@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useState, useRef } from "react";
-// Update the import path to the correct location of useAuth
-import { useAuth } from "../hooks/useAuth"; // Import your useAuth hook
+import { useAuth } from "../hooks/useAuth";
 
 interface Product {
   _id: string;
@@ -92,7 +91,7 @@ class PrintService {
       await this.printReceipt(receiptData, type);
       
       // Add paper cut or separation between receipt and stub
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Print stub
       await this.printStub(receiptData, type);
@@ -259,7 +258,7 @@ export default function NewSale() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  // Enhanced thermal printer compatible receipt with better readability
+  // Enhanced thermal printer compatible receipt with larger fonts
   const printReceiptAndStub = () => {
     if (receiptRef.current) {
       const printWindow = window.open("", "_blank", "width=320,height=800");
@@ -267,7 +266,7 @@ export default function NewSale() {
         printWindow.document.write(`
   <html>
     <head>
-      <title>Receipt</title>
+      <title>Sale Receipt</title>
       <style>
         * {
           margin: 0;
@@ -277,196 +276,227 @@ export default function NewSale() {
         body { 
           font-family: 'Courier New', Courier, monospace; 
           margin: 0; 
-          padding: 2mm; 
-          font-size: 11px;
-          font-weight: normal;
-          line-height: 1.2;
-          width: 88mm;
+          padding: 1mm; 
+          font-size: 15px;
+          font-weight: bold;
+          line-height: 1.3;
+          width: 80mm;
           background-color: white;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
         }
         .receipt-container, .stub-container { 
-          width: 84mm;
+          width: 78mm;
           margin: 0 auto;
           padding: 1mm;
           border: none;
         }
         .stub-container { 
           page-break-before: always;
-          margin-top: 8mm;
-          border-top: 2px dashed #000;
+          margin-top: 5mm;
+          border-top: 3px dashed #000;
           padding-top: 3mm;
         }
         .header { 
           text-align: center; 
           margin-bottom: 3mm; 
-          border-bottom: 1px solid #000; 
+          border-bottom: 2px solid #000; 
           padding-bottom: 2mm;
         }
         .shop-name {
-          font-size: 13px;
+          font-size: 18px;
           font-weight: bold;
-          margin-bottom: 1mm;
+          margin-bottom: 2mm;
           text-transform: uppercase;
+          letter-spacing: 1px;
         }
         .shop-details {
-          font-size: 9px;
+          font-size: 13px;
           margin-bottom: 1mm;
-          line-height: 1.1;
+          line-height: 1.2;
+          font-weight: bold;
         }
         .receipt-title {
-          font-size: 11px;
+          font-size: 16px;
           font-weight: bold;
-          margin: 2mm 0;
+          margin: 3mm 0;
           text-decoration: underline;
+          text-align: center;
         }
         .item-row { 
           display: flex;
           justify-content: space-between;
-          margin-bottom: 1.5mm;
+          margin-bottom: 2mm;
           padding-bottom: 1mm;
-          border-bottom: 1px dotted #ccc;
+          border-bottom: 1px solid #ccc;
         }
         .item-name {
           flex: 3;
           text-align: left;
           font-weight: bold;
+          font-size: 14px;
         }
         .item-details {
           flex: 2;
           text-align: right;
+          font-weight: bold;
+          font-size: 14px;
         }
         .item-quantity {
           font-weight: bold;
         }
         .total-section { 
           font-weight: bold; 
-          border-top: 2px solid #000; 
+          border-top: 3px solid #000; 
           padding-top: 3mm; 
           margin-top: 3mm;
         }
         .total-row {
           display: flex;
           justify-content: space-between;
-          margin-bottom: 1mm;
+          margin-bottom: 2mm;
+          font-size: 15px;
         }
         .payment-method {
           text-transform: uppercase;
           font-weight: bold;
+          font-size: 15px;
         }
         .footer { 
           text-align: center; 
           margin-top: 4mm; 
-          font-size: 9px;
-          border-top: 1px solid #000;
-          padding-top: 2mm;
+          font-size: 13px;
+          border-top: 2px solid #000;
+          padding-top: 3mm;
+          font-weight: bold;
         }
         .stub-footer { 
           text-align: center; 
           margin-top: 4mm; 
-          font-size: 9px;
-          border-top: 2px dashed #000;
+          font-size: 13px;
+          border-top: 3px dashed #000;
           padding-top: 3mm;
+          font-weight: bold;
         }
         .sales-person {
           margin-top: 3mm;
           text-align: center;
-          font-style: italic;
-          font-size: 10px;
+          font-weight: bold;
+          font-size: 14px;
+          background-color: #f0f0f0;
+          padding: 2mm;
+          border: 1px solid #000;
         }
         .stub-number {
           font-weight: bold;
           text-align: center;
           margin: 3mm 0;
-          font-size: 12px;
-          background-color: #f0f0f0;
-          padding: 2mm;
-          border: 1px solid #000;
+          font-size: 16px;
+          background-color: #000;
+          color: white;
+          padding: 3mm;
+          border: 2px solid #000;
         }
         .customer-info {
           margin: 3mm 0;
-          padding: 2mm;
+          padding: 3mm;
           background-color: #f9f9f9;
-          border: 1px solid #ddd;
+          border: 2px solid #000;
+          font-weight: bold;
         }
         .customer-field {
-          margin-bottom: 1mm;
+          margin-bottom: 2mm;
+          font-size: 14px;
         }
         .separator {
-          border-top: 1px dashed #000;
+          border-top: 2px dashed #000;
+          margin: 3mm 0;
+          height: 2px;
+        }
+        .cut-line {
+          text-align: center;
           margin: 2mm 0;
+          font-weight: bold;
+          font-size: 14px;
+          color: #000;
         }
         .thank-you {
           font-weight: bold;
-          margin: 2mm 0;
+          margin: 3mm 0;
+          font-size: 15px;
         }
         .warning {
-          font-size: 8px;
-          color: #666;
-          margin: 1mm 0;
+          font-size: 12px;
+          color: #000;
+          margin: 2mm 0;
+          font-weight: bold;
         }
         @media print {
           body { 
             margin: 0 !important; 
             padding: 0 !important; 
-            width: 88mm !important;
-            font-size: 11px !important;
+            width: 80mm !important;
+            font-size: 15px !important;
             background: white !important;
+            font-weight: bold !important;
           }
           .receipt-container, .stub-container { 
             border: none !important; 
             box-shadow: none !important; 
             margin: 0 auto !important;
             padding: 1mm !important;
-            width: 84mm !important;
+            width: 78mm !important;
           }
           .stub-container { 
-            margin-top: 8mm !important;
+            margin-top: 5mm !important;
           }
           .no-print {
             display: none !important;
+          }
+          /* Force page break and paper cut between receipt and stub */
+          .stub-container {
+            page-break-before: always !important;
+            break-before: always !important;
           }
         }
       </style>
     </head>
     <body onload="window.print(); setTimeout(() => { window.close(); }, 500);">
-      <!-- RECEIPT -->
+      <!-- SALE RECEIPT -->
       <div class="receipt-container">
         <div class="header">
           <div class="shop-name">${receiptData.shopName}</div>
           <div class="shop-details">${receiptData.shopAddress}</div>
-          <div class="shop-details">${receiptData.shopNumber}</div>
+          <div class="shop-details">TEL: ${receiptData.shopNumber}</div>
           <div class="shop-details">${receiptData.shopRegistration}</div>
           <div class="separator"></div>
-          <div><strong>Date:</strong> ${receiptData.date}</div>
-          <div><strong>Reçu #:</strong> ${receiptData.receiptNumber}</div>
+          <div class="shop-details">DATE: ${receiptData.date}</div>
+          <div class="shop-details">RECU #: ${receiptData.receiptNumber}</div>
         </div>
         
         <div class="customer-info">
-          <div class="customer-field"><strong>Client:</strong> ${receiptData.customerName}</div>
-          <div class="customer-field"><strong>Tél:</strong> ${receiptData.customerPhone}</div>
+          <div class="customer-field">CLIENT: ${receiptData.customerName.toUpperCase()}</div>
+          <div class="customer-field">TELEPHONE: ${receiptData.customerPhone}</div>
           ${
             receiptData.customerEmail
-              ? `<div class="customer-field"><strong>Email:</strong> ${receiptData.customerEmail}</div>`
+              ? `<div class="customer-field">EMAIL: ${receiptData.customerEmail}</div>`
               : ""
           }
         </div>
         
-        <div class="receipt-title">ARTICLES ACHETÉS:</div>
+        <div class="receipt-title">ARTICLES ACHETES</div>
         ${receiptData.items
           .map(
             (item: CartItem) => `
           <div class="item-row">
-            <div class="item-name">${item.name.substring(0, 24)}</div>
+            <div class="item-name">${item.quantity}x ${item.name.substring(0, 20)}</div>
             <div class="item-details">
-              <span class="item-quantity">${item.quantity}x</span> 
-              @$${item.unitPrice.toFixed(2)}
+              $${item.total.toFixed(2)}
             </div>
           </div>
           <div class="item-row">
-            <div class="item-name"></div>
-            <div class="item-details"><strong>$${item.total.toFixed(2)}</strong></div>
+            <div class="item-name">@ $${item.unitPrice.toFixed(2)}/unite</div>
+            <div class="item-details"></div>
           </div>
         `
           )
@@ -479,69 +509,7 @@ export default function NewSale() {
           </div>
           <div class="total-row">
             <div>TOTAL:</div>
-            <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
-          </div>
-          <div class="total-row">
-            <div>MODE DE PAIEMENT:</div>
-            <div class="payment-method">${receiptData.paymentMethod.toUpperCase()}</div>
-          </div>
-        </div>
-        
-        <div class="sales-person">
-          Vendeur: ${receiptData.salesPerson}
-        </div>
-        
-        <div class="footer">
-          <div class="thank-you">MERCI POUR VOTRE ACHAT !</div>
-          <div class="warning">Article non échangeable - Non remboursable</div>
-          <div class="warning">Garantie: 7 jours pour défauts de fabrication</div>
-          <div class="thank-you">À BIENTÔT !</div>
-        </div>
-      </div>
-
-      <!-- SALE STUB - SEPARATE PAGE -->
-      <div class="stub-container">
-        <div class="header">
-          <div class="shop-name">${receiptData.shopName}</div>
-          <div class="shop-details">${receiptData.shopAddress}</div>
-          <div class="shop-details">${receiptData.shopNumber}</div>
-          <div class="separator"></div>
-          <div><strong>Date:</strong> ${receiptData.date}</div>
-          <div><strong>Reçu #:</strong> ${receiptData.receiptNumber}</div>
-        </div>
-        
-        <div class="stub-number">
-          SOUCHE N°${receiptData.stubNumber} DU JOUR
-        </div>
-        
-        <div class="customer-info">
-          <div class="customer-field"><strong>Client:</strong> ${receiptData.customerName}</div>
-          <div class="customer-field"><strong>Tél:</strong> ${receiptData.customerPhone}</div>
-        </div>
-        
-        <div class="receipt-title">ARTICLES VENDUS:</div>
-        ${receiptData.items
-          .map(
-            (item: CartItem) => `
-          <div class="item-row">
-            <div class="item-name">${item.name.substring(0, 24)}</div>
-            <div class="item-details">
-              <span class="item-quantity">${item.quantity}x</span> 
-              @$${item.unitPrice.toFixed(2)}
-            </div>
-          </div>
-          <div class="item-row">
-            <div class="item-name"></div>
-            <div class="item-details"><strong>$${item.total.toFixed(2)}</strong></div>
-          </div>
-        `
-          )
-          .join("")}
-        
-        <div class="total-section">
-          <div class="total-row">
-            <div>TOTAL VENTE:</div>
-            <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
+            <div>$${receiptData.total.toFixed(2)}</div>
           </div>
           <div class="total-row">
             <div>PAIEMENT:</div>
@@ -550,13 +518,80 @@ export default function NewSale() {
         </div>
         
         <div class="sales-person">
-          Vendeur: ${receiptData.salesPerson}
+          VENDEUR: ${receiptData.salesPerson.toUpperCase()}
+        </div>
+        
+        <div class="footer">
+          <div class="thank-you">MERCI POUR VOTRE ACHAT !</div>
+          <div class="warning">Article non echangeable</div>
+          <div class="warning">Non remboursable</div>
+          <div class="thank-you">A BIENTOT !</div>
+        </div>
+
+        <!-- PAPER CUT INDICATOR -->
+        <div class="cut-line">
+          ✄ ────────────────────────── ✄
+        </div>
+      </div>
+
+      <!-- SALE STUB - SEPARATE PRINT JOB -->
+      <div class="stub-container">
+        <div class="header">
+          <div class="shop-name">${receiptData.shopName}</div>
+          <div class="shop-details">${receiptData.shopAddress}</div>
+          <div class="shop-details">TEL: ${receiptData.shopNumber}</div>
+          <div class="separator"></div>
+          <div class="shop-details">DATE: ${receiptData.date}</div>
+          <div class="shop-details">RECU #: ${receiptData.receiptNumber}</div>
+        </div>
+        
+        <div class="stub-number">
+          SOUCHE N°${receiptData.stubNumber}
+        </div>
+        
+        <div class="customer-info">
+          <div class="customer-field">CLIENT: ${receiptData.customerName.toUpperCase()}</div>
+          <div class="customer-field">TELEPHONE: ${receiptData.customerPhone}</div>
+        </div>
+        
+        <div class="receipt-title">ARTICLES VENDUS</div>
+        ${receiptData.items
+          .map(
+            (item: CartItem) => `
+          <div class="item-row">
+            <div class="item-name">${item.quantity}x ${item.name.substring(0, 20)}</div>
+            <div class="item-details">
+              $${item.total.toFixed(2)}
+            </div>
+          </div>
+          <div class="item-row">
+            <div class="item-name">@ $${item.unitPrice.toFixed(2)}/unite</div>
+            <div class="item-details"></div>
+          </div>
+        `
+          )
+          .join("")}
+        
+        <div class="total-section">
+          <div class="total-row">
+            <div>TOTAL VENTE:</div>
+            <div>$${receiptData.total.toFixed(2)}</div>
+          </div>
+          <div class="total-row">
+            <div>PAIEMENT:</div>
+            <div class="payment-method">${receiptData.paymentMethod.toUpperCase()}</div>
+          </div>
+        </div>
+        
+        <div class="sales-person">
+          VENDEUR: ${receiptData.salesPerson.toUpperCase()}
         </div>
         
         <div class="stub-footer">
-          <div class="thank-you">SOUCHE DE CAISSE - ${receiptData.shopName}</div>
-          <div class="warning">Conserver cette souche pour vérification</div>
-          <div class="warning">Reçu #: ${receiptData.receiptNumber}</div>
+          <div class="thank-you">SOUCHE DE CAISSE</div>
+          <div class="warning">${receiptData.shopName}</div>
+          <div class="warning">Conserver cette souche</div>
+          <div class="warning">Recu #: ${receiptData.receiptNumber}</div>
           <div class="warning">Date: ${receiptData.date}</div>
         </div>
       </div>
@@ -568,10 +603,10 @@ export default function NewSale() {
     }
   };
 
-  // Enhanced ESC/POS printing function with better error handling
+  // Enhanced ESC/POS printing function with better paper handling
   const printWithESCPOS = async (receiptData: any) => {
     try {
-      console.log('Attempting ESC/POS printing...');
+      console.log('Attempting ESC/POS printing with paper cut...');
       const success = await PrintService.printReceiptAndStub(receiptData, 'sale');
       if (success) {
         console.log('ESC/POS printing successful');
@@ -659,13 +694,13 @@ export default function NewSale() {
         shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
         shopNumber: "+243 977 771 421 / +243 853 549 102",
         shopRegistration: "RCCM: 14-A-017885",
-        customerName: form.customerName.toUpperCase(),
+        customerName: form.customerName,
         customerPhone: form.customerPhone,
         customerEmail: form.customerEmail,
         items: cart,
         total: cartTotal,
         paymentMethod: form.paymentMethod,
-        salesPerson: currentUser?.username?.toUpperCase() || "VENDEUR",
+        salesPerson: currentUser?.username || "VENDEUR",
         date: new Date().toLocaleString('fr-FR', {
           day: '2-digit',
           month: '2-digit',
