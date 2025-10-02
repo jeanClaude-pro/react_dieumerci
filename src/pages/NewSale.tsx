@@ -518,7 +518,7 @@ export default function NewSale() {
         </div>
         
         <div class="sales-person">
-          VENDEUR: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
+          Agent: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
         </div>
         
         <div class="footer">
@@ -584,7 +584,7 @@ export default function NewSale() {
         </div>
         
         <div class="sales-person">
-          VENDEUR: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
+          Agent: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
         </div>
         
         <div class="stub-footer">
@@ -700,7 +700,7 @@ export default function NewSale() {
         items: cart,
         total: cartTotal,
         paymentMethod: form.paymentMethod,
-        salesPerson: currentUser?.username || "VENDEUR",
+        salesPerson: currentUser?.username || "Agent",
         date: new Date().toLocaleString('fr-FR', {
           day: '2-digit',
           month: '2-digit',
