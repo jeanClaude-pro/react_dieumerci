@@ -465,21 +465,21 @@ export default function NewSale() {
       <!-- SALE RECEIPT -->
       <div class="receipt-container">
         <div class="header">
-          <div class="shop-name">${receiptData.shopName}</div>
-          <div class="shop-details">${receiptData.shopAddress}</div>
-          <div class="shop-details">TEL: ${receiptData.shopNumber}</div>
-          <div class="shop-details">${receiptData.shopRegistration}</div>
+          <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
+          <div class="shop-details"><strong>${receiptData.shopAddress}</strong></div>
+          <div class="shop-details">TEL: <strong>${receiptData.shopNumber}</strong></div>
+          <div class="shop-details"><strong>${receiptData.shopRegistration}</strong></div>
           <div class="separator"></div>
-          <div class="shop-details">DATE: ${receiptData.date}</div>
-          <div class="shop-details">RECU #: ${receiptData.receiptNumber}</div>
+          <div class="shop-details">DATE: <strong>${receiptData.date}</strong></div>
+          <div class="shop-details">RECU #: <strong>${receiptData.receiptNumber}</strong></div>
         </div>
         
         <div class="customer-info">
-          <div class="customer-field">CLIENT: ${receiptData.customerName.toUpperCase()}</div>
-          <div class="customer-field">TELEPHONE: ${receiptData.customerPhone}</div>
+          <div class="customer-field">CLIENT: <strong>${receiptData.customerName.toUpperCase()}</strong></div>
+          <div class="customer-field">TELEPHONE: <strong>${receiptData.customerPhone}</strong></div>
           ${
             receiptData.customerEmail
-              ? `<div class="customer-field">EMAIL: ${receiptData.customerEmail}</div>`
+              ? `<div class="customer-field">EMAIL: <strong>${receiptData.customerEmail}</strong></div>`
               : ""
           }
         </div>
@@ -491,11 +491,11 @@ export default function NewSale() {
           <div class="item-row">
             <div class="item-name">${item.quantity}x ${item.name.substring(0, 20)}</div>
             <div class="item-details">
-              $${item.total.toFixed(2)}
+              <strong>$${item.total.toFixed(2)}</strong>
             </div>
           </div>
           <div class="item-row">
-            <div class="item-name">@ $${item.unitPrice.toFixed(2)}/unite</div>
+            <div class="item-name">@ <strong>$${item.unitPrice.toFixed(2)}</strong>/unite</div>
             <div class="item-details"></div>
           </div>
         `
@@ -505,27 +505,27 @@ export default function NewSale() {
         <div class="total-section">
           <div class="total-row">
             <div>SOUS-TOTAL:</div>
-            <div>$${receiptData.total.toFixed(2)}</div>
+            <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
           </div>
           <div class="total-row">
             <div>TOTAL:</div>
-            <div>$${receiptData.total.toFixed(2)}</div>
+            <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
           </div>
           <div class="total-row">
             <div>PAIEMENT:</div>
-            <div class="payment-method">${receiptData.paymentMethod.toUpperCase()}</div>
+            <div class="payment-method"><strong>${receiptData.paymentMethod.toUpperCase()}</strong></div>
           </div>
         </div>
         
         <div class="sales-person">
-          VENDEUR: ${receiptData.salesPerson.toUpperCase()}
+          VENDEUR: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
         </div>
         
         <div class="footer">
-          <div class="thank-you">MERCI POUR VOTRE ACHAT !</div>
-          <div class="warning">Article non echangeable</div>
-          <div class="warning">Non remboursable</div>
-          <div class="thank-you">A BIENTOT !</div>
+          <div class="thank-you"><strong>MERCI POUR VOTRE ACHAT !</strong></div>
+          <div class="warning"><strong>Article non echangeable</strong></div>
+          <div class="warning"><strong>Non remboursable</strong></div>
+          <div class="thank-you"><strong>A BIENTOT !</strong></div>
         </div>
 
         <!-- PAPER CUT INDICATOR -->
@@ -537,21 +537,21 @@ export default function NewSale() {
       <!-- SALE STUB - SEPARATE PRINT JOB -->
       <div class="stub-container">
         <div class="header">
-          <div class="shop-name">${receiptData.shopName}</div>
-          <div class="shop-details">${receiptData.shopAddress}</div>
-          <div class="shop-details">TEL: ${receiptData.shopNumber}</div>
+          <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
+          <div class="shop-details"><strong>${receiptData.shopAddress}</strong></div>
+          <div class="shop-details">TEL: <strong>${receiptData.shopNumber}</strong></div>
           <div class="separator"></div>
-          <div class="shop-details">DATE: ${receiptData.date}</div>
-          <div class="shop-details">RECU #: ${receiptData.receiptNumber}</div>
+          <div class="shop-details">DATE: <strong>${receiptData.date}</strong></div>
+          <div class="shop-details">RECU #: <strong>${receiptData.receiptNumber}</strong></div>
         </div>
         
         <div class="stub-number">
-          SOUCHE N°${receiptData.stubNumber}
+          SOUCHE N°<strong>${receiptData.stubNumber}</strong>
         </div>
         
         <div class="customer-info">
-          <div class="customer-field">CLIENT: ${receiptData.customerName.toUpperCase()}</div>
-          <div class="customer-field">TELEPHONE: ${receiptData.customerPhone}</div>
+          <div class="customer-field">CLIENT: <strong>${receiptData.customerName.toUpperCase()}</strong></div>
+          <div class="customer-field">TELEPHONE: <strong>${receiptData.customerPhone}</strong></div>
         </div>
         
         <div class="receipt-title">ARTICLES VENDUS</div>
@@ -561,11 +561,11 @@ export default function NewSale() {
           <div class="item-row">
             <div class="item-name">${item.quantity}x ${item.name.substring(0, 20)}</div>
             <div class="item-details">
-              $${item.total.toFixed(2)}
+              <strong>$${item.total.toFixed(2)}</strong>
             </div>
           </div>
           <div class="item-row">
-            <div class="item-name">@ $${item.unitPrice.toFixed(2)}/unite</div>
+            <div class="item-name">@ <strong>$${item.unitPrice.toFixed(2)}</strong>/unite</div>
             <div class="item-details"></div>
           </div>
         `
@@ -575,24 +575,24 @@ export default function NewSale() {
         <div class="total-section">
           <div class="total-row">
             <div>TOTAL VENTE:</div>
-            <div>$${receiptData.total.toFixed(2)}</div>
+            <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
           </div>
           <div class="total-row">
             <div>PAIEMENT:</div>
-            <div class="payment-method">${receiptData.paymentMethod.toUpperCase()}</div>
+            <div class="payment-method"><strong>${receiptData.paymentMethod.toUpperCase()}</strong></div>
           </div>
         </div>
         
         <div class="sales-person">
-          VENDEUR: ${receiptData.salesPerson.toUpperCase()}
+          VENDEUR: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
         </div>
         
         <div class="stub-footer">
-          <div class="thank-you">SOUCHE DE CAISSE</div>
-          <div class="warning">${receiptData.shopName}</div>
-          <div class="warning">Conserver cette souche</div>
-          <div class="warning">Recu #: ${receiptData.receiptNumber}</div>
-          <div class="warning">Date: ${receiptData.date}</div>
+          <div class="thank-you"><strong>SOUCHE DE CAISSE</strong></div>
+          <div class="warning"><strong>${receiptData.shopName}</strong></div>
+          <div class="warning"><strong>Conserver cette souche</strong></div>
+          <div class="warning">Recu #: <strong>${receiptData.receiptNumber}</strong></div>
+          <div class="warning">Date: <strong>${receiptData.date}</strong></div>
         </div>
       </div>
     </body>
