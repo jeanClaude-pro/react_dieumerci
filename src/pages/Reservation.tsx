@@ -139,6 +139,7 @@ export default function Reservation() {
   const [receiptData, setReceiptData] = useState<any>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const [stubCounter, setStubCounter] = useState(1);
+  const [receiptCounter, setReceiptCounter] = useState(1);
 
   // Get the current user from your auth context
   const { user: currentUser } = useAuth();
@@ -293,6 +294,7 @@ export default function Reservation() {
       printWindow.document.write(`
   <html>
     <head>
+      <title>Reservation Receipt</title>
       <style>
         * {
           margin: 0;
@@ -606,6 +608,7 @@ export default function Reservation() {
       printWindow.document.write(`
   <html>
     <head>
+      <title>Reservation Stub</title>
       <style>
         * {
           margin: 0;
@@ -925,6 +928,7 @@ export default function Reservation() {
       setStubCounter((prev) => prev + 1);
     }, 3000);
   };
+
   // Enhanced ESC/POS printing function with precise 20mm paper separation
   const printWithESCPOS = async (receiptData: any) => {
     try {
@@ -1021,6 +1025,7 @@ export default function Reservation() {
       }
 
       // Enhanced receipt data with better formatting for reservations
+      const currentYear = new Date().getFullYear();
       const newReceiptData = {
         shopName: "ETS. DIEU MERCI",
         shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
@@ -1040,7 +1045,7 @@ export default function Reservation() {
           hour: '2-digit',
           minute: '2-digit'
         }),
-        receiptNumber: `RES${Date.now().toString().slice(-6)}`,
+        receiptNumber: `RES${receiptCounter}${currentYear}`,
         stubNumber: stubCounter.toString().padStart(3, '0'),
         reservationDate: reservationDate,
         reservationTime: reservationTime,
@@ -1061,6 +1066,9 @@ export default function Reservation() {
         notes: "",
       });
       setCart([]);
+
+      // Increment receipt counter for next reservation
+      setReceiptCounter(prev => prev + 1);
 
       setMessage(
         "✅ Reservation effectuée avec succès ! Impression du reçu et de la souche..."

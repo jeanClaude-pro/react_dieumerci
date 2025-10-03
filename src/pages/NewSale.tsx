@@ -139,6 +139,7 @@ export default function NewSale() {
   const [receiptData, setReceiptData] = useState<any>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const [stubCounter, setStubCounter] = useState(1);
+  const [receiptCounter, setReceiptCounter] = useState(1);
 
   // Get the current user from your auth context
   const { user: currentUser } = useAuth();
@@ -292,6 +293,7 @@ export default function NewSale() {
       printWindow.document.write(`
   <html>
     <head>
+      <title>Sale Receipt</title>
       <style>
         * {
           margin: 0;
@@ -558,6 +560,7 @@ export default function NewSale() {
       printWindow.document.write(`
   <html>
     <head>
+      <title>Sale Stub</title>
       <style>
         * {
           margin: 0;
@@ -834,6 +837,7 @@ export default function NewSale() {
       setStubCounter((prev) => prev + 1);
     }, 3000);
   };
+
   // Enhanced ESC/POS printing function with precise 20mm paper separation
   const printWithESCPOS = async (receiptData: any) => {
     try {
@@ -917,6 +921,7 @@ export default function NewSale() {
       }
 
       // Enhanced receipt data with better formatting
+      const currentYear = new Date().getFullYear();
       const newReceiptData = {
         shopName: "ETS. DIEU MERCI",
         shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
@@ -936,7 +941,7 @@ export default function NewSale() {
           hour: '2-digit',
           minute: '2-digit'
         }),
-        receiptNumber: `R${Date.now().toString().slice(-6)}`,
+        receiptNumber: `DL${receiptCounter}${currentYear}`,
         stubNumber: stubCounter.toString().padStart(3, '0'),
       };
 
@@ -953,6 +958,9 @@ export default function NewSale() {
         paymentMethod: form.paymentMethod,
       });
       setCart([]);
+
+      // Increment receipt counter for next sale
+      setReceiptCounter(prev => prev + 1);
 
       setMessage(
         "✅ Vente effectuée avec succès ! Impression du reçu et de la souche..."
