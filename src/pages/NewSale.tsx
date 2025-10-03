@@ -249,6 +249,7 @@ export default function NewSale() {
   <html>
     <head>
       <title>Sale Receipt</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
         * {
           margin: 0;
@@ -387,6 +388,10 @@ export default function NewSale() {
           font-weight: bold;
         }
         @media print {
+          @page {
+            margin: 0 !important;
+            size: 80mm auto !important;
+          }
           body { 
             margin: 0 !important; 
             padding: 0 !important; 
@@ -396,6 +401,8 @@ export default function NewSale() {
             font-weight: bold !important;
             height: auto !important;
             overflow: hidden !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           .receipt-container { 
             border: none !important; 
@@ -404,9 +411,17 @@ export default function NewSale() {
             padding: 1mm !important;
             width: 78mm !important;
             page-break-after: avoid !important;
+            page-break-inside: avoid !important;
           }
           .cut-line {
             page-break-after: always !important;
+            margin-bottom: 0 !important;
+          }
+          /* Remove any browser-added headers/footers */
+          body::after,
+          body::before {
+            display: none !important;
+            content: none !important;
           }
         }
       </style>
@@ -479,7 +494,12 @@ export default function NewSale() {
       </div>
       <script>
         window.onload = function() {
-          window.print();
+          // Try to disable print headers/footers via JS
+          try {
+            window.print();
+          } catch(e) {
+            console.error('Print error:', e);
+          }
           setTimeout(() => {
             window.close();
           }, 1000);
@@ -500,6 +520,7 @@ export default function NewSale() {
   <html>
     <head>
       <title>Sale Stub</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
         * {
           margin: 0;
@@ -648,6 +669,10 @@ export default function NewSale() {
           font-weight: bold;
         }
         @media print {
+          @page {
+            margin: 0 !important;
+            size: 80mm auto !important;
+          }
           body { 
             margin: 0 !important; 
             padding: 0 !important; 
@@ -657,6 +682,8 @@ export default function NewSale() {
             font-weight: bold !important;
             height: auto !important;
             overflow: hidden !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           .stub-container { 
             border: none !important; 
@@ -665,9 +692,17 @@ export default function NewSale() {
             padding: 1mm !important;
             width: 78mm !important;
             page-break-after: avoid !important;
+            page-break-inside: avoid !important;
           }
           .cut-line {
             page-break-after: always !important;
+            margin-bottom: 0 !important;
+          }
+          /* Remove any browser-added headers/footers */
+          body::after,
+          body::before {
+            display: none !important;
+            content: none !important;
           }
         }
       </style>
@@ -735,7 +770,12 @@ export default function NewSale() {
       </div>
       <script>
         window.onload = function() {
-          window.print();
+          // Try to disable print headers/footers via JS
+          try {
+            window.print();
+          } catch(e) {
+            console.error('Print error:', e);
+          }
           setTimeout(() => {
             window.close();
           }, 1000);
