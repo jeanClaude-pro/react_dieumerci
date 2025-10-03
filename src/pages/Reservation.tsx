@@ -177,13 +177,13 @@ export default function Reservation() {
   function handleAddToCart() {
     if (!product || quantity <= 0 || unitPrice <= 0) return;
 
-    // Check if product already exists in cart
+    // ✅ UPDATED: Check if product with same ID AND same price already exists in cart
     const existingItemIndex = cart.findIndex(
-      (item) => item.productId === product._id
+      (item) => item.productId === product._id && item.unitPrice === unitPrice
     );
 
     if (existingItemIndex >= 0) {
-      // Update existing item
+      // ✅ UPDATED: Update existing item (same product + same price)
       const updatedCart = [...cart];
       updatedCart[existingItemIndex] = {
         ...updatedCart[existingItemIndex],
@@ -192,7 +192,7 @@ export default function Reservation() {
       };
       setCart(updatedCart);
     } else {
-      // Add new item
+      // ✅ UPDATED: Add new item (either different product OR same product but different price)
       setCart([
         ...cart,
         {
