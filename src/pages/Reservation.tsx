@@ -293,7 +293,6 @@ export default function Reservation() {
       printWindow.document.write(`
   <html>
     <head>
-      <title>Reservation Receipt</title>
       <style>
         * {
           margin: 0;
@@ -607,7 +606,6 @@ export default function Reservation() {
       printWindow.document.write(`
   <html>
     <head>
-      <title>Reservation Stub</title>
       <style>
         * {
           margin: 0;

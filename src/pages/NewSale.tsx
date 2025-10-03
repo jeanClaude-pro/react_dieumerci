@@ -292,7 +292,6 @@ export default function NewSale() {
       printWindow.document.write(`
   <html>
     <head>
-      <title>Sale Receipt</title>
       <style>
         * {
           margin: 0;
@@ -559,7 +558,6 @@ export default function NewSale() {
       printWindow.document.write(`
   <html>
     <head>
-      <title>Sale Stub</title>
       <style>
         * {
           margin: 0;
