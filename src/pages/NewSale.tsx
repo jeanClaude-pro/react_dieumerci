@@ -250,285 +250,305 @@ export default function NewSale() {
     const printWindow = window.open("", "_blank", "width=320,height=600");
     if (printWindow) {
       printWindow.document.write(`
-  <html>
-    <head>
-      <title>Sale Receipt</title>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
+<html>
+  <head>
+    <title>Sale Receipt</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body { 
+        font-family: 'Courier New', Courier, monospace; 
+        margin: 0; 
+        padding: 0; 
+        font-size: 13px;
+        font-weight: bold;
+        line-height: 1.1;
+        width: 72mm;
+        background-color: white;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        display: flex;
+        justify-content: center;
+      }
+      .receipt-container { 
+        width: 70mm;
+        margin: 0 auto;
+        padding: 0.5mm;
+        border: none;
+        text-align: center;
+      }
+      .header { 
+        text-align: center; 
+        margin-bottom: 1mm; 
+        padding-bottom: 1mm;
+        border-bottom: 2px double #000;
+      }
+      .shop-name {
+        font-size: 15px;
+        font-weight: bold;
+        margin-bottom: 0.5mm;
+        text-transform: uppercase;
+      }
+      .shop-details {
+        font-size: 11px;
+        margin-bottom: 0.3mm;
+        line-height: 1;
+        font-weight: bold;
+      }
+      .receipt-info {
+        margin: 1mm 0;
+        padding: 1mm;
+        background-color: #f8f8f8;
+        border-left: 3px solid #000;
+      }
+      .receipt-title {
+        font-size: 13px;
+        font-weight: bold;
+        margin: 1mm 0;
+        text-transform: uppercase;
+        background-color: #000;
+        color: white;
+        padding: 1mm;
+        border-radius: 2px;
+      }
+      .items-section {
+        margin: 1mm 0;
+        padding: 1mm;
+        background-color: #fafafa;
+        border: 1px solid #eee;
+      }
+      .item-row { 
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.5mm;
+        padding: 0 1mm;
+        border-bottom: 1px dotted #ddd;
+      }
+      .item-name {
+        text-align: left;
+        font-weight: bold;
+        font-size: 12px;
+        flex: 1;
+      }
+      .item-details {
+        text-align: right;
+        font-weight: bold;
+        font-size: 12px;
+        flex: 1;
+      }
+      .total-section { 
+        font-weight: bold; 
+        margin-top: 1mm;
+        padding: 1mm;
+        background-color: #f0f0f0;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+      }
+      .total-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.3mm;
+        font-size: 13px;
+        padding: 0 1mm;
+      }
+      .payment-method {
+        text-transform: uppercase;
+        font-weight: bold;
+        font-size: 13px;
+        color: #000;
+      }
+      .footer { 
+        text-align: center; 
+        margin-top: 1mm; 
+        font-size: 11px;
+        font-weight: bold;
+        padding: 1mm;
+        background-color: #f8f8f8;
+        border-top: 1px dashed #000;
+      }
+      .sales-person {
+        margin-top: 1mm;
+        text-align: center;
+        font-weight: bold;
+        font-size: 12px;
+        padding: 1mm;
+        background-color: #e8e8e8;
+        border: 1px solid #ccc;
+        border-radius: 2px;
+      }
+      .customer-info {
+        margin: 1mm 0;
+        padding: 1mm;
+        font-weight: bold;
+        text-align: center;
+        background-color: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+      }
+      .customer-field {
+        margin-bottom: 0.3mm;
+        font-size: 12px;
+      }
+      .separator {
+        border-top: 1px dashed #000;
+        margin: 1mm 0;
+      }
+      .cut-line {
+        text-align: center;
+        margin: 1mm 0;
+        font-weight: bold;
+        font-size: 11px;
+        color: #000;
+        letter-spacing: 1px;
+      }
+      .thank-you {
+        font-weight: bold;
+        margin: 0.5mm 0;
+        font-size: 12px;
+      }
+      .warning {
+        font-size: 10px;
+        color: #000;
+        margin: 0.3mm 0;
+        font-weight: bold;
+      }
+      .section-divider {
+        height: 2px;
+        background: linear-gradient(to right, transparent, #000, transparent);
+        margin: 1mm 0;
+      }
+      @media print {
+        @page {
+          margin: 0 !important;
+          size: 72mm auto !important;
         }
         body { 
-          font-family: 'Courier New', Courier, monospace; 
-          margin: 0; 
-          padding: 0.5mm; 
-          font-size: 14px;
-          font-weight: bold;
-          line-height: 1.2;
-          width: 72mm;
-          background-color: white;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
+          margin: 0 !important; 
+          padding: 0 !important; 
+          width: 72mm !important;
+          font-size: 13px !important;
+          background: white !important;
+          font-weight: bold !important;
+          height: auto !important;
+          overflow: hidden !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          display: flex !important;
+          justify-content: center !important;
         }
         .receipt-container { 
-          width: 70mm;
-          margin: 0 auto;
-          padding: 0.5mm;
-          border: none;
-        }
-        .header { 
-          text-align: center; 
-          margin-bottom: 2mm; 
-          border-bottom: 2px solid #000; 
-          padding-bottom: 1mm;
-        }
-        .shop-name {
-          font-size: 16px;
-          font-weight: bold;
-          margin-bottom: 1mm;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-        .shop-details {
-          font-size: 12px;
-          margin-bottom: 0.5mm;
-          line-height: 1.1;
-          font-weight: bold;
-        }
-        .receipt-title {
-          font-size: 14px;
-          font-weight: bold;
-          margin: 2mm 0;
-          text-decoration: underline;
-          text-align: center;
-        }
-        .item-row { 
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 1mm;
-          padding-bottom: 0.5mm;
-          border-bottom: 1px solid #ccc;
-        }
-        .item-name {
-          flex: 3;
-          text-align: left;
-          font-weight: bold;
-          font-size: 13px;
-          word-wrap: break-word;
-          max-width: 45mm;
-          overflow: hidden;
-        }
-        .item-details {
-          flex: 2;
-          text-align: right;
-          font-weight: bold;
-          font-size: 13px;
-          min-width: 25mm;
-        }
-        .total-section { 
-          font-weight: bold; 
-          border-top: 2px solid #000; 
-          padding-top: 2mm; 
-          margin-top: 2mm;
-        }
-        .total-row {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 1mm;
-          font-size: 14px;
-        }
-        .payment-method {
-          text-transform: uppercase;
-          font-weight: bold;
-          font-size: 14px;
-        }
-        .footer { 
-          text-align: center; 
-          margin-top: 3mm; 
-          font-size: 12px;
-          border-top: 2px solid #000;
-          padding-top: 2mm;
-          font-weight: bold;
-        }
-        .sales-person {
-          margin-top: 2mm;
-          text-align: center;
-          font-weight: bold;
-          font-size: 13px;
-          background-color: #f0f0f0;
-          padding: 1mm;
-          border: 1px solid #000;
-        }
-        .customer-info {
-          margin: 2mm 0;
-          padding: 2mm;
-          background-color: #f9f9f9;
-          border: 2px solid #000;
-          font-weight: bold;
-        }
-        .customer-field {
-          margin-bottom: 1mm;
-          font-size: 13px;
-        }
-        .separator {
-          border-top: 2px dashed #000;
-          margin: 2mm 0;
-          height: 2px;
+          border: none !important; 
+          box-shadow: none !important; 
+          margin: 0 auto !important;
+          padding: 0.5mm !important;
+          width: 70mm !important;
+          page-break-after: avoid !important;
+          page-break-inside: avoid !important;
         }
         .cut-line {
-          text-align: center;
-          margin: 1mm 0;
-          font-weight: bold;
-          font-size: 13px;
-          color: #000;
+          page-break-after: always !important;
+          margin-bottom: 0 !important;
         }
-        .thank-you {
-          font-weight: bold;
-          margin: 2mm 0;
-          font-size: 14px;
+        body::after,
+        body::before {
+          display: none !important;
+          content: none !important;
         }
-        .warning {
-          font-size: 11px;
-          color: #000;
-          margin: 1mm 0;
-          font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="receipt-container">
+      <div class="header">
+        <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
+        <div class="shop-details"><strong>${receiptData.shopAddress}</strong></div>
+        <div class="shop-details">TEL: <strong>${receiptData.shopNumber}</strong></div>
+        <div class="shop-details"><strong>${receiptData.shopRegistration}</strong></div>
+      </div>
+      
+      <div class="section-divider"></div>
+      
+      <div class="receipt-info">
+        <div class="shop-details">DATE: <strong>${receiptData.date}</strong></div>
+        <div class="shop-details">RECU #: <strong>${receiptData.receiptNumber}</strong></div>
+      </div>
+      
+      <div class="customer-info">
+        <div class="customer-field">CLIENT: <strong>${receiptData.customerName.toUpperCase()}</strong></div>
+        <div class="customer-field">TELEPHONE: <strong>${receiptData.customerPhone}</strong></div>
+        ${
+          receiptData.customerEmail
+            ? `<div class="customer-field">EMAIL: <strong>${receiptData.customerEmail}</strong></div>`
+            : ""
         }
-        @media print {
-          @page {
-            margin: 0 !important;
-            size: 80mm auto !important;
-          }
-          body { 
-            margin: 0 !important; 
-            padding: 0 !important; 
-            width: 72mm !important;
-            font-size: 14px !important;
-            background: white !important;
-            font-weight: bold !important;
-            height: auto !important;
-            overflow: hidden !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          .receipt-container { 
-            border: none !important; 
-            box-shadow: none !important; 
-            margin: 0 auto !important;
-            padding: 0.5mm !important;
-            width: 70mm !important;
-            page-break-after: avoid !important;
-            page-break-inside: avoid !important;
-          }
-          .cut-line {
-            page-break-after: always !important;
-            margin-bottom: 0 !important;
-          }
-          /* Remove any browser-added headers/footers */
-          body::after,
-          body::before {
-            display: none !important;
-            content: none !important;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="receipt-container">
-        <div class="header">
-          <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
-          <div class="shop-details"><strong>${
-            receiptData.shopAddress
-          }</strong></div>
-          <div class="shop-details">TEL: <strong>${
-            receiptData.shopNumber
-          }</strong></div>
-          <div class="shop-details"><strong>${
-            receiptData.shopRegistration
-          }</strong></div>
-          <div class="separator"></div>
-          <div class="shop-details">DATE: <strong>${
-            receiptData.date
-          }</strong></div>
-          <div class="shop-details">RECU #: <strong>${
-            receiptData.receiptNumber
-          }</strong></div>
-        </div>
-        
-        <div class="customer-info">
-          <div class="customer-field">CLIENT: <strong>${receiptData.customerName.toUpperCase()}</strong></div>
-          <div class="customer-field">TELEPHONE: <strong>${
-            receiptData.customerPhone
-          }</strong></div>
-          ${
-            receiptData.customerEmail
-              ? `<div class="customer-field">EMAIL: <strong>${receiptData.customerEmail}</strong></div>`
-              : ""
-          }
-        </div>
-        
-        <div class="receipt-title">ARTICLES ACHETES</div>
-        ${receiptData.items
-          .map(
-            (item: CartItem) => `
-          <div class="item-row">
-            <div class="item-name"><strong>${item.name.substring(0, 18)}</strong></div>
-            <div class="item-details">
-              <strong>${item.quantity}PcsX$${item.unitPrice.toFixed(
-              2
-            )}</strong>
-            </div>
-          </div>
-        `
-          )
-          .join("")}
-        
-        <div class="total-section">
-          <div class="total-row">
-            <div><strong>SOUS-TOTAL:</strong></div>
-            <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
-          </div>
-          <div class="total-row">
-            <div><strong>TOTAL:</strong></div>
-            <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
-          </div>
-          <div class="total-row">
-            <div><strong>PAIEMENT:</strong></div>
-            <div class="payment-method"><strong>${receiptData.paymentMethod.toUpperCase()}</strong></div>
+      </div>
+      
+      <div class="receipt-title">ARTICLES ACHETES</div>
+      
+      <div class="items-section">
+      ${receiptData.items
+        .map(
+          (item: CartItem) => `
+        <div class="item-row">
+          <div class="item-name"><strong>${item.name}</strong></div>
+          <div class="item-details">
+            <strong>${item.quantity}PcsX$${item.unitPrice.toFixed(2)}</strong>
           </div>
         </div>
-        
-        <div class="sales-person">
-          Agent: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
+      `
+        )
+        .join("")}
+      </div>
+      
+      <div class="total-section">
+        <div class="total-row">
+          <div><strong>SOUS-TOTAL:</strong></div>
+          <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
         </div>
-        
-        <div class="footer">
-          <div class="thank-you"><strong>MERCI POUR VOTRE ACHAT !</strong></div>
-          <div class="warning"><strong>Article non echangeable</strong></div>
-          <div class="warning"><strong>Non remboursable</strong></div>
-          <div class="thank-you"><strong>A BIENTOT !</strong></div>
+        <div class="total-row">
+          <div><strong>TOTAL:</strong></div>
+          <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
         </div>
-        <!-- PAPER CUT INDICATOR -->
-        <div class="cut-line">
-          ✄ ────────────────────────── ✄
+        <div class="total-row">
+          <div><strong>PAIEMENT:</strong></div>
+          <div class="payment-method"><strong>${receiptData.paymentMethod.toUpperCase()}</strong></div>
         </div>
       </div>
-      <script>
-        window.onload = function() {
-          // Try to disable print headers/footers via JS
-          try {
-            window.print();
-          } catch(e) {
-            console.error('Print error:', e);
-          }
-          setTimeout(() => {
-            window.close();
-          }, 1000);
-        };
-      </script>
-    </body>
-  </html>
+      
+      <div class="sales-person">
+        Agent: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
+      </div>
+      
+      <div class="footer">
+        <div class="thank-you"><strong>MERCI POUR VOTRE ACHAT !</strong></div>
+        <div class="warning"><strong>Article non echangeable</strong></div>
+        <div class="warning"><strong>Non remboursable</strong></div>
+        <div class="thank-you"><strong>A BIENTOT !</strong></div>
+      </div>
+      
+      <!-- PAPER CUT INDICATOR -->
+      <div class="cut-line">
+        ✄ ────────────────────────── ✄
+      </div>
+    </div>
+    <script>
+      window.onload = function() {
+        try {
+          window.print();
+        } catch(e) {
+          console.error('Print error:', e);
+        }
+        setTimeout(() => {
+          window.close();
+        }, 1000);
+      };
+    </script>
+  </body>
+</html>
 `);
       printWindow.document.close();
     }
@@ -539,274 +559,310 @@ export default function NewSale() {
     const printWindow = window.open("", "_blank", "width=320,height=600");
     if (printWindow) {
       printWindow.document.write(`
-  <html>
-    <head>
-      <title>Sale Stub</title>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
+<html>
+  <head>
+    <title>Sale Stub</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body { 
+        font-family: 'Courier New', Courier, monospace; 
+        margin: 0; 
+        padding: 0; 
+        font-size: 13px;
+        font-weight: bold;
+        line-height: 1.1;
+        width: 72mm;
+        background-color: white;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        display: flex;
+        justify-content: center;
+      }
+      .stub-container { 
+        width: 70mm;
+        margin: 0 auto;
+        padding: 0.5mm;
+        border: none;
+        text-align: center;
+      }
+      .header { 
+        text-align: center; 
+        margin-bottom: 1mm; 
+        padding-bottom: 1mm;
+        border-bottom: 2px double #000;
+      }
+      .shop-name {
+        font-size: 14px;
+        font-weight: bold;
+        margin-bottom: 0.5mm;
+        text-transform: uppercase;
+      }
+      .shop-details {
+        font-size: 11px;
+        margin-bottom: 0.3mm;
+        line-height: 1;
+        font-weight: bold;
+      }
+      .receipt-info {
+        margin: 1mm 0;
+        padding: 1mm;
+        background-color: #f8f8f8;
+        border-left: 3px solid #000;
+      }
+      .receipt-title {
+        font-size: 13px;
+        font-weight: bold;
+        margin: 1mm 0;
+        text-transform: uppercase;
+        background-color: #000;
+        color: white;
+        padding: 1mm;
+        border-radius: 2px;
+      }
+      .stub-number {
+        font-size: 13px;
+        font-weight: bold;
+        margin: 1mm 0;
+        text-transform: uppercase;
+        background-color: #333;
+        color: white;
+        padding: 1mm 2mm;
+        border-radius: 3px;
+      }
+      .items-section {
+        margin: 1mm 0;
+        padding: 1mm;
+        background-color: #fafafa;
+        border: 1px solid #eee;
+      }
+      .item-row { 
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.5mm;
+        padding: 0 1mm;
+        border-bottom: 1px dotted #ddd;
+      }
+      .item-name {
+        text-align: left;
+        font-weight: bold;
+        font-size: 12px;
+        flex: 1;
+      }
+      .item-details {
+        text-align: right;
+        font-weight: bold;
+        font-size: 12px;
+        flex: 1;
+      }
+      .total-section { 
+        font-weight: bold; 
+        margin-top: 1mm;
+        padding: 1mm;
+        background-color: #f0f0f0;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+      }
+      .total-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.3mm;
+        font-size: 13px;
+        padding: 0 1mm;
+      }
+      .payment-method {
+        text-transform: uppercase;
+        font-weight: bold;
+        font-size: 13px;
+      }
+      .stub-footer { 
+        text-align: center; 
+        margin-top: 1mm; 
+        font-size: 11px;
+        font-weight: bold;
+        padding: 1mm;
+        background-color: #e8e8e8;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+      }
+      .sales-person {
+        margin-top: 1mm;
+        text-align: center;
+        font-weight: bold;
+        font-size: 12px;
+        padding: 1mm;
+        background-color: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 2px;
+      }
+      .customer-info {
+        margin: 1mm 0;
+        padding: 1mm;
+        font-weight: bold;
+        text-align: center;
+        background-color: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+      }
+      .customer-field {
+        margin-bottom: 0.3mm;
+        font-size: 12px;
+      }
+      .separator {
+        border-top: 1px dashed #000;
+        margin: 1mm 0;
+      }
+      .cut-line {
+        text-align: center;
+        margin: 1mm 0;
+        font-weight: bold;
+        font-size: 11px;
+        color: #000;
+        letter-spacing: 1px;
+      }
+      .thank-you {
+        font-weight: bold;
+        margin: 0.5mm 0;
+        font-size: 12px;
+      }
+      .warning {
+        font-size: 10px;
+        color: #000;
+        margin: 0.3mm 0;
+        font-weight: bold;
+      }
+      .section-divider {
+        height: 2px;
+        background: linear-gradient(to right, transparent, #000, transparent);
+        margin: 1mm 0;
+      }
+      @media print {
+        @page {
+          margin: 0 !important;
+          size: 72mm auto !important;
         }
         body { 
-          font-family: 'Courier New', Courier, monospace; 
-          margin: 0; 
-          padding: 1mm; 
-          font-size: 15px;
-          font-weight: bold;
-          line-height: 1.3;
-          width: 80mm;
-          background-color: white;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
+          margin: 0 !important; 
+          padding: 0 !important; 
+          width: 72mm !important;
+          font-size: 13px !important;
+          background: white !important;
+          font-weight: bold !important;
+          height: auto !important;
+          overflow: hidden !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          display: flex !important;
+          justify-content: center !important;
         }
-        .receipt-container { 
-          width: 78mm;
-          margin: 0 auto;
-          padding: 1mm;
-          border: none;
-        }
-        .header { 
-          text-align: center; 
-          margin-bottom: 3mm; 
-          border-bottom: 2px solid #000; 
-          padding-bottom: 2mm;
-        }
-        .shop-name {
-          font-size: 18px;
-          font-weight: bold;
-          margin-bottom: 2mm;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-        }
-        .shop-details {
-          font-size: 13px;
-          margin-bottom: 1mm;
-          line-height: 1.2;
-          font-weight: bold;
-        }
-        .receipt-title {
-          font-size: 16px;
-          font-weight: bold;
-          margin: 3mm 0;
-          text-decoration: underline;
-          text-align: center;
-        }
-        .item-row { 
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 2mm;
-          padding-bottom: 1mm;
-          border-bottom: 1px solid #ccc;
-        }
-        .item-name {
-          flex: 3;
-          text-align: left;
-          font-weight: bold;
-          font-size: 14px;
-        }
-        .item-details {
-          flex: 2;
-          text-align: right;
-          font-weight: bold;
-          font-size: 14px;
-        }
-        .total-section { 
-          font-weight: bold; 
-          border-top: 3px solid #000; 
-          padding-top: 3mm; 
-          margin-top: 3mm;
-        }
-        .total-row {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 2mm;
-          font-size: 15px;
-        }
-        .payment-method {
-          text-transform: uppercase;
-          font-weight: bold;
-          font-size: 15px;
-        }
-        .footer { 
-          text-align: center; 
-          margin-top: 4mm; 
-          font-size: 13px;
-          border-top: 2px solid #000;
-          padding-top: 3mm;
-          font-weight: bold;
-        }
-        .sales-person {
-          margin-top: 3mm;
-          text-align: center;
-          font-weight: bold;
-          font-size: 14px;
-          background-color: #f0f0f0;
-          padding: 2mm;
-          border: 1px solid #000;
-        }
-        .customer-info {
-          margin: 3mm 0;
-          padding: 3mm;
-          background-color: #f9f9f9;
-          border: 2px solid #000;
-          font-weight: bold;
-        }
-        .customer-field {
-          margin-bottom: 2mm;
-          font-size: 14px;
-        }
-        .separator {
-          border-top: 2px dashed #000;
-          margin: 3mm 0;
-          height: 2px;
+        .stub-container { 
+          border: none !important; 
+          box-shadow: none !important; 
+          margin: 0 auto !important;
+          padding: 0.5mm !important;
+          width: 70mm !important;
+          page-break-after: avoid !important;
+          page-break-inside: avoid !important;
         }
         .cut-line {
-          text-align: center;
-          margin: 2mm 0;
-          font-weight: bold;
-          font-size: 14px;
-          color: #000;
+          page-break-after: always !important;
+          margin-bottom: 0 !important;
         }
-        .thank-you {
-          font-weight: bold;
-          margin: 3mm 0;
-          font-size: 15px;
+        body::after,
+        body::before {
+          display: none !important;
+          content: none !important;
         }
-        .warning {
-          font-size: 12px;
-          color: #000;
-          margin: 2mm 0;
-          font-weight: bold;
-        }
-        @media print {
-          @page {
-            margin: 0 !important;
-            size: 80mm auto !important;
-          }
-          body { 
-            margin: 0 !important; 
-            padding: 0 !important; 
-            width: 80mm !important;
-            font-size: 15px !important;
-            background: white !important;
-            font-weight: bold !important;
-            height: auto !important;
-            overflow: hidden !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          .receipt-container { 
-            border: none !important; 
-            box-shadow: none !important; 
-            margin: 0 auto !important;
-            padding: 1mm !important;
-            width: 78mm !important;
-            page-break-after: avoid !important;
-            page-break-inside: avoid !important;
-          }
-          .cut-line {
-            page-break-after: always !important;
-            margin-bottom: 0 !important;
-          }
-          /* Remove any browser-added headers/footers */
-          body::after,
-          body::before {
-            display: none !important;
-            content: none !important;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="stub-container">
-        <div class="header">
-          <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
-          <div class="shop-details"><strong>${
-            receiptData.shopAddress
-          }</strong></div>
-          <div class="shop-details">TEL: <strong>${
-            receiptData.shopNumber
-          }</strong></div>
-          <div class="separator"></div>
-          <div class="shop-details">DATE: <strong>${
-            receiptData.date
-          }</strong></div>
-          <div class="shop-details">RECU #: <strong>${
-            receiptData.receiptNumber
-          }</strong></div>
-        </div>
-        
-        <div class="stub-number">
-          SOUCHE N°<strong>${receiptData.stubNumber}</strong>
-        </div>
-        
-        <div class="customer-info">
-          <div class="customer-field">CLIENT: <strong>${receiptData.customerName.toUpperCase()}</strong></div>
-          <div class="customer-field">TELEPHONE: <strong>${
-            receiptData.customerPhone
-          }</strong></div>
-        </div>
-        
-        <div class="receipt-title">ARTICLES VENDUS</div>
-        ${receiptData.items
-          .map(
-            (item: CartItem) => `
-          <div class="item-row">
-            <div class="item-name"><strong>${item.name.substring(0, 18)}</strong></div>
-            <div class="item-details">
-              <strong>${item.quantity}PcsX$${item.unitPrice.toFixed(2)}</strong>
-            </div>
-          </div>
-        `
-          )
-          .join("")}
-        
-        <div class="total-section">
-          <div class="total-row">
-            <div><strong>TOTAL VENTE:</strong></div>
-            <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
-          </div>
-          <div class="total-row">
-            <div><strong>PAIEMENT:</strong></div>
-            <div class="payment-method"><strong>${receiptData.paymentMethod.toUpperCase()}</strong></div>
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stub-container">
+      <div class="header">
+        <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
+        <div class="shop-details"><strong>${receiptData.shopAddress}</strong></div>
+        <div class="shop-details">TEL: <strong>${receiptData.shopNumber}</strong></div>
+      </div>
+      
+      <div class="section-divider"></div>
+      
+      <div class="receipt-info">
+        <div class="shop-details">DATE: <strong>${receiptData.date}</strong></div>
+        <div class="shop-details">RECU #: <strong>${receiptData.receiptNumber}</strong></div>
+      </div>
+      
+      <div class="stub-number">
+        SOUCHE N°<strong>${receiptData.stubNumber}</strong>
+      </div>
+      
+      <div class="customer-info">
+        <div class="customer-field">CLIENT: <strong>${receiptData.customerName.toUpperCase()}</strong></div>
+        <div class="customer-field">TELEPHONE: <strong>${receiptData.customerPhone}</strong></div>
+      </div>
+      
+      <div class="receipt-title">ARTICLES VENDUS</div>
+      
+      <div class="items-section">
+      ${receiptData.items
+        .map(
+          (item: CartItem) => `
+        <div class="item-row">
+          <div class="item-name"><strong>${item.name}</strong></div>
+          <div class="item-details">
+            <strong>${item.quantity}PcsX$${item.unitPrice.toFixed(2)}</strong>
           </div>
         </div>
-        
-        <div class="sales-person">
-          Agent: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
+      `
+        )
+        .join("")}
+      </div>
+      
+      <div class="total-section">
+        <div class="total-row">
+          <div><strong>TOTAL VENTE:</strong></div>
+          <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
         </div>
-        
-        <div class="stub-footer">
-          <div class="thank-you"><strong>SOUCHE DE CAISSE</strong></div>
-          <div class="warning"><strong>${receiptData.shopName}</strong></div>
-          <div class="warning"><strong>Conserver cette souche</strong></div>
-          <div class="warning">Recu #: <strong>${
-            receiptData.receiptNumber
-          }</strong></div>
-          <div class="warning">Date: <strong>${receiptData.date}</strong></div>
-        </div>
-        <!-- PAPER CUT INDICATOR -->
-        <div class="cut-line">
-          ✄ ────────────────────────── ✄
+        <div class="total-row">
+          <div><strong>PAIEMENT:</strong></div>
+          <div class="payment-method"><strong>${receiptData.paymentMethod.toUpperCase()}</strong></div>
         </div>
       </div>
-      <script>
-        window.onload = function() {
-          // Try to disable print headers/footers via JS
-          try {
-            window.print();
-          } catch(e) {
-            console.error('Print error:', e);
-          }
-          setTimeout(() => {
-            window.close();
-          }, 1000);
-        };
-      </script>
-    </body>
-  </html>
+      
+      <div class="sales-person">
+        Agent: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
+      </div>
+      
+      <div class="stub-footer">
+        <div class="thank-you"><strong>SOUCHE DE CAISSE</strong></div>
+        <div class="warning"><strong>${receiptData.shopName}</strong></div>
+        <div class="warning"><strong>Conserver cette souche</strong></div>
+        <div class="warning">Recu #: <strong>${receiptData.receiptNumber}</strong></div>
+        <div class="warning">Date: <strong>${receiptData.date}</strong></div>
+      </div>
+      
+      <!-- PAPER CUT INDICATOR -->
+      <div class="cut-line">
+        ✄ ────────────────────────── ✄
+      </div>
+    </div>
+    <script>
+      window.onload = function() {
+        try {
+          window.print();
+        } catch(e) {
+          console.error('Print error:', e);
+        }
+        setTimeout(() => {
+          window.close();
+        }, 1000);
+      };
+    </script>
+  </body>
+</html>
 `);
       printWindow.document.close();
     }
