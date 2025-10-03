@@ -37,7 +37,7 @@ async function readJsonSafe(res: Response) {
   return { __nonJson: true, text };
 }
 
-// Enhanced Print service for ESC/POS printing with precise paper control
+// Simplified Print service for ESC/POS printing
 class PrintService {
   static async printReceipt(receiptData: any, type: 'sale' | 'reservation' = 'sale'): Promise<boolean> {
     try {
@@ -82,51 +82,6 @@ class PrintService {
     } catch (error) {
       console.error('Print stub error:', error);
       throw error;
-    }
-  }
-
-  static async printReceiptAndStub(receiptData: any, type: 'sale' | 'reservation' = 'sale'): Promise<boolean> {
-    try {
-      // Print receipt first
-      await this.printReceipt(receiptData, type);
-      
-      // Enhanced paper feed control for precise 20mm separation
-      // Most thermal printers: 1 line = ~3.75mm, so ~5-6 lines = ~20mm
-      await this.feedPaper(6); // Feed approximately 20mm of paper
-      
-      // Print stub
-      await this.printStub(receiptData, type);
-      
-      return true;
-    } catch (error) {
-      console.error('Print receipt and stub error:', error);
-      throw error;
-    }
-  }
-
-  // Method to control paper feeding for precise separation
-  static async feedPaper(lines: number = 6): Promise<boolean> {
-    try {
-      const response = await fetch(`${API_BASE}/print/feed`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-        body: JSON.stringify({ lines }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to feed paper');
-      }
-
-      const result = await response.json();
-      return result.success;
-    } catch (error) {
-      console.error('Paper feed error:', error);
-      // If paper feed API is not available, fall back to time-based delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      return false;
     }
   }
 }
@@ -286,7 +241,7 @@ export default function NewSale() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  // NEW: Separate print function for receipt only
+  // Print function for receipt only
   const printReceiptOnly = () => {
     const printWindow = window.open("", "_blank", "width=320,height=600");
     if (printWindow) {
@@ -431,16 +386,6 @@ export default function NewSale() {
           margin: 2mm 0;
           font-weight: bold;
         }
-        .print-instruction {
-          text-align: center;
-          font-weight: bold;
-          color: red;
-          font-size: 16px;
-          margin: 5mm 0;
-          padding: 3mm;
-          border: 2px solid red;
-          background-color: #fff0f0;
-        }
         @media print {
           body { 
             margin: 0 !important; 
@@ -449,6 +394,8 @@ export default function NewSale() {
             font-size: 15px !important;
             background: white !important;
             font-weight: bold !important;
+            height: auto !important;
+            overflow: hidden !important;
           }
           .receipt-container { 
             border: none !important; 
@@ -456,20 +403,15 @@ export default function NewSale() {
             margin: 0 auto !important;
             padding: 1mm !important;
             width: 78mm !important;
+            page-break-after: avoid !important;
           }
-          .no-print {
-            display: none !important;
-          }
-          .print-instruction {
-            display: none !important;
+          .cut-line {
+            page-break-after: always !important;
           }
         }
       </style>
     </head>
     <body>
-      <div class="print-instruction">
-        ⚠️ IMPRIMEZ LE REÇU - PREMIÈRE FEUILLE ⚠️
-      </div>
       <div class="receipt-container">
         <div class="header">
           <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
@@ -534,9 +476,6 @@ export default function NewSale() {
         <div class="cut-line">
           ✄ ────────────────────────── ✄
         </div>
-        <div class="print-instruction">
-          ⚠️ COUPEZ ICI - ATTENDEZ LA SOUCHE ⚠️
-        </div>
       </div>
       <script>
         window.onload = function() {
@@ -553,7 +492,7 @@ export default function NewSale() {
     }
   };
 
-  // NEW: Separate print function for stub only
+  // Print function for stub only
   const printStubOnly = () => {
     const printWindow = window.open("", "_blank", "width=320,height=600");
     if (printWindow) {
@@ -708,16 +647,6 @@ export default function NewSale() {
           margin: 2mm 0;
           font-weight: bold;
         }
-        .print-instruction {
-          text-align: center;
-          font-weight: bold;
-          color: red;
-          font-size: 16px;
-          margin: 5mm 0;
-          padding: 3mm;
-          border: 2px solid red;
-          background-color: #fff0f0;
-        }
         @media print {
           body { 
             margin: 0 !important; 
@@ -726,6 +655,8 @@ export default function NewSale() {
             font-size: 15px !important;
             background: white !important;
             font-weight: bold !important;
+            height: auto !important;
+            overflow: hidden !important;
           }
           .stub-container { 
             border: none !important; 
@@ -733,20 +664,15 @@ export default function NewSale() {
             margin: 0 auto !important;
             padding: 1mm !important;
             width: 78mm !important;
+            page-break-after: avoid !important;
           }
-          .no-print {
-            display: none !important;
-          }
-          .print-instruction {
-            display: none !important;
+          .cut-line {
+            page-break-after: always !important;
           }
         }
       </style>
     </head>
     <body>
-      <div class="print-instruction">
-        ⚠️ IMPRIMEZ LA SOUCHE - DEUXIÈME FEUILLE ⚠️
-      </div>
       <div class="stub-container">
         <div class="header">
           <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
@@ -806,9 +732,6 @@ export default function NewSale() {
         <div class="cut-line">
           ✄ ────────────────────────── ✄
         </div>
-        <div class="print-instruction">
-          ⚠️ COUPEZ ICI - IMPRESSION TERMINÉE ⚠️
-        </div>
       </div>
       <script>
         window.onload = function() {
@@ -825,30 +748,29 @@ export default function NewSale() {
     }
   };
 
-  // NEW: Sequential printing function
+  // Sequential printing function
   const printSequentially = () => {
     // Print receipt first
     printReceiptOnly();
     
-    // Wait 3 seconds then print stub
+    // Wait 2 seconds then print stub
     setTimeout(() => {
       printStubOnly();
       // Increment stub counter after both prints
       setStubCounter((prev) => prev + 1);
-    }, 3000);
+    }, 2000);
   };
 
-  // Enhanced ESC/POS printing function with precise 20mm paper separation
+  // ESC/POS printing function
   const printWithESCPOS = async (receiptData: any) => {
     try {
-      console.log('Attempting ESC/POS printing with 20mm paper separation...');
-      const success = await PrintService.printReceiptAndStub(receiptData, 'sale');
-      if (success) {
-        console.log('ESC/POS printing successful with 20mm separation');
-        return true;
-      } else {
-        throw new Error('ESC/POS printing returned false');
-      }
+      console.log('Attempting ESC/POS printing...');
+      // Print receipt
+      await PrintService.printReceipt(receiptData, 'sale');
+      // Print stub
+      await PrintService.printStub(receiptData, 'sale');
+      console.log('ESC/POS printing successful');
+      return true;
     } catch (error: any) {
       console.error('ESC/POS printing failed, falling back to browser printing:', error);
       // Fallback to sequential browser printing
