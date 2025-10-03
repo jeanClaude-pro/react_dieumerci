@@ -264,13 +264,13 @@ export default function Reservation() {
           font-size: 14px;
           font-weight: bold;
           line-height: 1.2;
-          width: 76mm;
+          width: 72mm;
           background-color: white;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
         }
         .receipt-container { 
-          width: 74mm;
+          width: 70mm;
           margin: 0 auto;
           padding: 0.5mm;
           border: none;
@@ -426,7 +426,7 @@ export default function Reservation() {
           body { 
             margin: 0 !important; 
             padding: 0 !important; 
-            width: 76mm !important;
+            width: 72mm !important;
             font-size: 14px !important;
             background: white !important;
             font-weight: bold !important;
@@ -440,7 +440,7 @@ export default function Reservation() {
             box-shadow: none !important; 
             margin: 0 auto !important;
             padding: 0.5mm !important;
-            width: 74mm !important;
+            width: 70mm !important;
             page-break-after: avoid !important;
             page-break-inside: avoid !important;
           }
@@ -582,13 +582,13 @@ export default function Reservation() {
           font-size: 13px;
           font-weight: bold;
           line-height: 1.2;
-          width: 76mm;
+          width: 72mm;
           background-color: white;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
         }
         .stub-container { 
-          width: 74mm;
+          width: 70mm;
           margin: 0 auto;
           padding: 0.5mm;
           border: none;
@@ -744,7 +744,7 @@ export default function Reservation() {
           body { 
             margin: 0 !important; 
             padding: 0 !important; 
-            width: 76mm !important;
+            width: 72mm !important;
             font-size: 13px !important;
             background: white !important;
             font-weight: bold !important;
@@ -758,7 +758,7 @@ export default function Reservation() {
             box-shadow: none !important; 
             margin: 0 auto !important;
             padding: 0.5mm !important;
-            width: 74mm !important;
+            width: 70mm !important;
             page-break-after: avoid !important;
             page-break-inside: avoid !important;
           }
