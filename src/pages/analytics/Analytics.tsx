@@ -325,7 +325,7 @@ export default function Analytics() {
     const topProducts = Array.from(productStats.entries())
       .map(([name, stats]) => ({ name, ...stats }))
       .sort((a: any, b: any) => b.quantity - a.quantity)
-      .slice(0, 5);
+      .slice(0, 100);
 
     // Top customers
     const topCustomers = customers
@@ -808,7 +808,7 @@ export default function Analytics() {
         <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Package className="w-5 h-5" />
-            Produits les Plus Vendus
+            Articles Vendus
           </h3>
           <div className="space-y-3">
             {analytics.topProducts.map((product, index) => (
