@@ -13,6 +13,7 @@ import {
   Plus,
   Minus,
   RefreshCw,
+  Printer,
 } from "lucide-react";
 import jsPDF from "jspdf";
 
@@ -261,6 +262,315 @@ export default function SalesHistory() {
       style: "currency",
       currency: "USD",
     }).format(amount);
+  };
+
+  // Print function for ESC/POS receipt - opens print dialog
+  const printESC_POSReceipt = (sale: Sale) => {
+    const printWindow = window.open("", "_blank", "width=320,height=600");
+    if (printWindow) {
+      printWindow.document.write(`
+<html>
+  <head>
+    <title>Sale Receipt - ESC/POS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body { 
+        font-family: 'Courier New', Courier, monospace; 
+        margin: 0; 
+        padding: 0; 
+        font-size: 13px;
+        font-weight: bold;
+        line-height: 1.1;
+        width: 72mm;
+        background-color: white;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        display: flex;
+        justify-content: center;
+      }
+      .receipt-container { 
+        width: 70mm;
+        margin: 0 auto;
+        padding: 0.5mm;
+        border: none;
+        text-align: center;
+      }
+      .header { 
+        text-align: center; 
+        margin-bottom: 1mm; 
+        padding-bottom: 1mm;
+        border-bottom: 2px double #000;
+      }
+      .shop-name {
+        font-size: 15px;
+        font-weight: bold;
+        margin-bottom: 0.5mm;
+        text-transform: uppercase;
+      }
+      .shop-details {
+        font-size: 11px;
+        margin-bottom: 0.3mm;
+        line-height: 1;
+        font-weight: bold;
+      }
+      .receipt-info {
+        margin: 1mm 0;
+        padding: 1mm;
+        background-color: #f8f8f8;
+        border-left: 3px solid #000;
+      }
+      .receipt-title {
+        font-size: 13px;
+        font-weight: bold;
+        margin: 1mm 0;
+        text-transform: uppercase;
+        background-color: #000;
+        color: white;
+        padding: 1mm;
+        border-radius: 2px;
+      }
+      .items-section {
+        margin: 1mm 0;
+        padding: 1mm;
+        background-color: #fafafa;
+        border: 1px solid #eee;
+      }
+      .item-row { 
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.5mm;
+        padding: 0 1mm;
+        border-bottom: 1px dotted #ddd;
+      }
+      .item-name {
+        text-align: left;
+        font-weight: bold;
+        font-size: 12px;
+        flex: 1;
+      }
+      .item-details {
+        text-align: right;
+        font-weight: bold;
+        font-size: 12px;
+        flex: 1;
+      }
+      .total-section { 
+        font-weight: bold; 
+        margin-top: 1mm;
+        padding: 1mm;
+        background-color: #f0f0f0;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+      }
+      .total-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.3mm;
+        font-size: 13px;
+        padding: 0 1mm;
+      }
+      .payment-method {
+        text-transform: uppercase;
+        font-weight: bold;
+        font-size: 13px;
+        color: #000;
+      }
+      .footer { 
+        text-align: center; 
+        margin-top: 1mm; 
+        font-size: 11px;
+        font-weight: bold;
+        padding: 1mm;
+        background-color: #f8f8f8;
+        border-top: 1px dashed #000;
+      }
+      .sales-person {
+        margin-top: 1mm;
+        text-align: center;
+        font-weight: bold;
+        font-size: 12px;
+        padding: 1mm;
+        background-color: #e8e8e8;
+        border: 1px solid #ccc;
+        border-radius: 2px;
+      }
+      .customer-info {
+        margin: 1mm 0;
+        padding: 1mm;
+        font-weight: bold;
+        text-align: center;
+        background-color: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+      }
+      .customer-field {
+        margin-bottom: 0.3mm;
+        font-size: 12px;
+      }
+      .separator {
+        border-top: 1px dashed #000;
+        margin: 1mm 0;
+      }
+      .cut-line {
+        text-align: center;
+        margin: 1mm 0;
+        font-weight: bold;
+        font-size: 11px;
+        color: #000;
+        letter-spacing: 1px;
+      }
+      .thank-you {
+        font-weight: bold;
+        margin: 0.5mm 0;
+        font-size: 12px;
+      }
+      .warning {
+        font-size: 10px;
+        color: #000;
+        margin: 0.3mm 0;
+        font-weight: bold;
+      }
+      .section-divider {
+        height: 2px;
+        background: linear-gradient(to right, transparent, #000, transparent);
+        margin: 1mm 0;
+      }
+      @media print {
+        @page {
+          margin: 0 !important;
+          size: 72mm auto !important;
+        }
+        body { 
+          margin: 0 !important; 
+          padding: 0 !important; 
+          width: 72mm !important;
+          font-size: 13px !important;
+          background: white !important;
+          font-weight: bold !important;
+          height: auto !important;
+          overflow: hidden !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          display: flex !important;
+          justify-content: center !important;
+        }
+        .receipt-container { 
+          border: none !important; 
+          box-shadow: none !important; 
+          margin: 0 auto !important;
+          padding: 0.5mm !important;
+          width: 70mm !important;
+          page-break-after: avoid !important;
+          page-break-inside: avoid !important;
+        }
+        .cut-line {
+          page-break-after: always !important;
+          margin-bottom: 0 !important;
+        }
+        body::after,
+        body::before {
+          display: none !important;
+          content: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="receipt-container">
+      <div class="header">
+        <div class="shop-name"><strong>ETS. DIEU MERCI</strong></div>
+        <div class="shop-details"><strong>Av Manono Coin Munama N°39, C. Kenya, Lubumbashi</strong></div>
+        <div class="shop-details">TEL: <strong>+243 977 771 421 / +243 853 549 102</strong></div>
+        <div class="shop-details"><strong>RCCM: 14-A-017885</strong></div>
+      </div>
+      
+      <div class="section-divider"></div>
+      
+      <div class="receipt-info">
+        <div class="shop-details">DATE: <strong>${formatDate(sale.createdAt)}</strong></div>
+        <div class="shop-details">RECU #: <strong>${sale.saleId}</strong></div>
+      </div>
+      
+      <div class="customer-info">
+        <div class="customer-field">CLIENT: <strong>${sale.customer.name.toUpperCase()}</strong></div>
+        <div class="customer-field">TELEPHONE: <strong>${sale.customer.phone}</strong></div>
+        ${
+          sale.customer.email
+            ? `<div class="customer-field">EMAIL: <strong>${sale.customer.email}</strong></div>`
+            : ""
+        }
+      </div>
+      
+      <div class="receipt-title">ARTICLES ACHETES</div>
+      
+      <div class="items-section">
+      ${sale.items
+        .map(
+          (item) => `
+        <div class="item-row">
+          <div class="item-name"><strong>${item.name}</strong></div>
+          <div class="item-details">
+            <strong>${item.quantity}PcsX$${item.price.toFixed(2)}</strong>
+          </div>
+        </div>
+      `
+        )
+        .join("")}
+      </div>
+      
+      <div class="total-section">
+        <div class="total-row">
+          <div><strong>SOUS-TOTAL:</strong></div>
+          <div><strong>$${sale.subtotal.toFixed(2)}</strong></div>
+        </div>
+        <div class="total-row">
+          <div><strong>TOTAL:</strong></div>
+          <div><strong>$${sale.total.toFixed(2)}</strong></div>
+        </div>
+        <div class="total-row">
+          <div><strong>PAIEMENT:</strong></div>
+          <div class="payment-method"><strong>${sale.paymentMethod.toUpperCase()}</strong></div>
+        </div>
+      </div>
+      
+      <div class="sales-person">
+        Agent: <strong>${(sale.salesPerson || 'Non spécifié').toUpperCase()}</strong>
+      </div>
+      
+      <div class="footer">
+        <div class="thank-you"><strong>MERCI POUR VOTRE ACHAT !</strong></div>
+        <div class="warning"><strong>Article non echangeable</strong></div>
+        <div class="warning"><strong>Non remboursable</strong></div>
+        <div class="thank-you"><strong>A BIENTOT !</strong></div>
+      </div>
+      
+      <!-- PAPER CUT INDICATOR -->
+      <div class="cut-line">
+        ✄ ────────────────────────── ✄
+      </div>
+    </div>
+    <script>
+      window.onload = function() {
+        try {
+          window.print();
+        } catch(e) {
+          console.error('Print error:', e);
+        }
+        setTimeout(() => {
+          window.close();
+        }, 1000);
+      };
+    </script>
+  </body>
+</html>
+`);
+      printWindow.document.close();
+    }
   };
 
   const generateReceiptPDF = (sale: Sale) => {
@@ -794,9 +1104,16 @@ export default function SalesHistory() {
                         <button
                           onClick={() => generateReceiptPDF(sale)}
                           className="text-green-600 hover:text-green-900 p-1 rounded"
-                          title="Download Receipt"
+                          title="Download PDF Receipt"
                         >
                           <Download className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => printESC_POSReceipt(sale)}
+                          className="text-purple-600 hover:text-purple-900 p-1 rounded"
+                          title="Print ESC/POS Receipt"
+                        >
+                          <Printer className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleVoidSale(sale)}
@@ -1005,7 +1322,14 @@ export default function SalesHistory() {
                   className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" />
-                  Télécharger le reçu
+                  Télécharger PDF
+                </button>
+                <button
+                  onClick={() => printESC_POSReceipt(selectedSale)}
+                  className="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Printer className="w-4 h-4" />
+                  Imprimer Reçu
                 </button>
                 <button
                   onClick={() => openEditModal(selectedSale)}

@@ -99,8 +99,6 @@ export default function NewSale() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [receiptData, setReceiptData] = useState<any>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
-  const [stubCounter, setStubCounter] = useState(1);
-  const [receiptCounter, setReceiptCounter] = useState(1);
 
   // Get the current user from your auth context
   const { user: currentUser } = useAuth();
@@ -876,8 +874,6 @@ export default function NewSale() {
     // Wait 2 seconds then print stub
     setTimeout(() => {
       printStubOnly();
-      // Increment stub counter after both prints
-      setStubCounter((prev) => prev + 1);
     }, 2000);
   };
 
@@ -965,8 +961,10 @@ export default function NewSale() {
         throw new Error(msg);
       }
 
-      // Enhanced receipt data with better formatting
-      const currentYear = new Date().getFullYear();
+      // Get the sale ID from the API response
+      const saleId = data.saleId || data._id;
+      
+      // Enhanced receipt data with better formatting - use actual sale ID
       const newReceiptData = {
         shopName: "ETS. DIEU MERCI",
         shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
@@ -986,8 +984,8 @@ export default function NewSale() {
           hour: "2-digit",
           minute: "2-digit",
         }),
-        receiptNumber: `DL${receiptCounter}${currentYear}`,
-        stubNumber: stubCounter.toString().padStart(3, "0"),
+        receiptNumber: saleId, // Use actual sale ID from API
+        stubNumber: saleId, // Use actual sale ID from API for stub as well
       };
 
       setReceiptData(newReceiptData);
@@ -1003,9 +1001,6 @@ export default function NewSale() {
         paymentMethod: form.paymentMethod,
       });
       setCart([]);
-
-      // Increment receipt counter for next sale
-      setReceiptCounter((prev) => prev + 1);
 
       setMessage(
         "✅ Vente effectuée avec succès ! Impression du reçu et de la souche..."

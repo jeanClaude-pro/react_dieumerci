@@ -86,27 +86,6 @@ class PrintService {
   }
 }
 
-// Helper function to generate unique reservation receipt number
-const generateReservationNumber = () => {
-  // Get current reservation counter from localStorage or initialize to 1
-  const storedCounter = localStorage.getItem('reservationCounter');
-  let counter = storedCounter ? parseInt(storedCounter, 10) : 1;
-  
-  // Generate timestamp component (last 4 digits of current timestamp)
-  const timestamp = Date.now().toString().slice(-4);
-  
-  // Get current year
-  const currentYear = new Date().getFullYear();
-  
-  // Create reservation number: RES + counter + year + timestamp
-  const reservationNumber = `RES${counter}${currentYear}${timestamp}`;
-  
-  // Increment and store the counter for next reservation
-  localStorage.setItem('reservationCounter', (counter + 1).toString());
-  
-  return reservationNumber;
-};
-
 export default function Reservation() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -114,7 +93,6 @@ export default function Reservation() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [receiptData, setReceiptData] = useState<any>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
-  const [stubCounter, setStubCounter] = useState(1);
 
   // Get the current user from your auth context
   const { user: currentUser } = useAuth();
@@ -971,8 +949,6 @@ export default function Reservation() {
     // Wait 2 seconds then print stub
     setTimeout(() => {
       printStubOnly();
-      // Increment stub counter after both prints
-      setStubCounter((prev) => prev + 1);
     }, 2000);
   };
 
@@ -1070,7 +1046,10 @@ export default function Reservation() {
         throw new Error(msg);
       }
 
-      // Enhanced receipt data with unique reservation number
+      // Get the reservation ID from the API response
+      const reservationId = data.saleId || data._id;
+      
+      // Enhanced receipt data with actual reservation ID
       const newReceiptData = {
         shopName: "ETS. DIEU MERCI",
         shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
@@ -1090,8 +1069,8 @@ export default function Reservation() {
           hour: '2-digit',
           minute: '2-digit'
         }),
-        receiptNumber: generateReservationNumber(), // Use the new unique reservation number generator
-        stubNumber: stubCounter.toString().padStart(3, '0'),
+        receiptNumber: reservationId, // Use actual reservation ID from API
+        stubNumber: reservationId, // Use actual reservation ID from API for stub as well
         reservationDate: reservationDate,
         reservationTime: reservationTime,
         notes: form.notes,
