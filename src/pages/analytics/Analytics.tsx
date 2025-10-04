@@ -15,6 +15,30 @@ import {
   ChevronRight,
 } from "lucide-react";
 
+// Define interfaces for the data structures
+interface SaleItem {
+  productId?: string;
+  name?: string;
+  quantity?: number;
+  price?: number;
+  total?: number;
+}
+
+interface Sale {
+  total: number;
+  status?: string;
+  createdAt?: string;
+  date?: string;
+  saleDate?: string;
+  items?: SaleItem[];
+}
+
+interface Customer {
+  name?: string;
+  totalSpent?: number;
+  totalPurchases?: number;
+}
+
 interface AnalyticsData {
   totalSales: number;
   totalRevenue: number;
@@ -64,7 +88,7 @@ export default function Analytics() {
       const salesData = await salesResponse.json();
       
       // Check if the API returns an array directly or wrapped in an object
-      let allSales = [];
+      let allSales: Sale[] = [];
       if (Array.isArray(salesData)) {
         allSales = salesData;
       } else if (salesData.sales && Array.isArray(salesData.sales)) {
@@ -79,14 +103,14 @@ export default function Analytics() {
       console.log(`Fetched ${allSales.length} sales from API`);
 
       // Filter out voided sales - only include completed sales
-      const completedSales = allSales.filter(sale => 
+      const completedSales = allSales.filter((sale: Sale) => 
         sale.status !== 'voided' && sale.status !== 'cancelled' && sale.status !== 'refunded'
       );
 
       console.log(`After filtering voided sales: ${completedSales.length} completed sales`);
 
       // Fetch customers data
-      let allCustomers = [];
+      let allCustomers: Customer[] = [];
       try {
         const customersResponse = await fetch(`${serverUrl}/customers?limit=0`);
         if (customersResponse.ok) {
@@ -122,7 +146,7 @@ export default function Analytics() {
         `${serverUrl}/sales?status=completed`
       ];
       
-      let allSales = [];
+      let allSales: Sale[] = [];
       
       for (const endpoint of endpoints) {
         try {
@@ -155,7 +179,7 @@ export default function Analytics() {
       console.log(`Alternative fetch got ${allSales.length} sales`);
       
       if (allSales.length > 0) {
-        const completedSales = allSales.filter(sale => 
+        const completedSales = allSales.filter((sale: Sale) => 
           sale.status !== 'voided' && sale.status !== 'cancelled' && sale.status !== 'refunded'
         );
         
@@ -168,13 +192,13 @@ export default function Analytics() {
   };
 
   const processAnalyticsData = (
-    sales: any[],
-    customers: any[]
+    sales: Sale[],
+    customers: Customer[]
   ): AnalyticsData => {
     console.log(`Processing ${sales.length} sales and ${customers.length} customers`);
 
     // Filter out any invalid sales (ensure they have required properties)
-    const validSales = sales.filter(sale => 
+    const validSales = sales.filter((sale: Sale) => 
       sale && typeof sale.total === 'number' && sale.items && Array.isArray(sale.items)
     );
 
@@ -182,14 +206,14 @@ export default function Analytics() {
 
     // Calculate totals using valid sales only
     const totalSales = validSales.length;
-    const totalRevenue = validSales.reduce((sum, sale) => sum + sale.total, 0);
+    const totalRevenue = validSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0);
     const totalCustomers = customers.length;
     
     // Count unique products from valid sales
     const productIds = new Set();
-    validSales.forEach(sale => {
+    validSales.forEach((sale: Sale) => {
       if (sale.items && Array.isArray(sale.items)) {
-        sale.items.forEach((item: any) => {
+        sale.items.forEach((item: SaleItem) => {
           if (item.productId) {
             productIds.add(item.productId);
           }
@@ -201,11 +225,11 @@ export default function Analytics() {
     console.log(`Calculated: ${totalSales} sales, $${totalRevenue} revenue, ${totalProducts} products`);
 
     // Sales by day (last 7 days) with day names in French
-    const salesByDay = getLast7Days().map((date) => {
+    const salesByDay = getLast7Days().map((date: Date) => {
       const daySales = validSales.filter(
-        (sale) => {
+        (sale: Sale) => {
           try {
-            const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate);
+            const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
             return saleDate.toDateString() === date.toDateString();
           } catch (error) {
             return false;
@@ -219,15 +243,15 @@ export default function Analytics() {
         }),
         dayName: date.toLocaleDateString("fr-FR", { weekday: "long" }),
         sales: daySales.length,
-        revenue: daySales.reduce((sum, sale) => sum + sale.total, 0),
+        revenue: daySales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
       };
     });
 
     // Sales by week (last 4 weeks) with start and end dates in French
-    const salesByWeek = getLast4Weeks().map((week, index) => {
-      const weekSales = validSales.filter((sale) => {
+    const salesByWeek = getLast4Weeks().map((week: { start: Date; end: Date }, index: number) => {
+      const weekSales = validSales.filter((sale: Sale) => {
         try {
-          const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate);
+          const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
           return saleDate >= week.start && saleDate <= week.end;
         } catch (error) {
           return false;
@@ -248,15 +272,15 @@ export default function Analytics() {
         startDate: startDateStr,
         endDate: endDateStr,
         sales: weekSales.length,
-        revenue: weekSales.reduce((sum, sale) => sum + sale.total, 0),
+        revenue: weekSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
       };
     });
 
     // Sales by month (last 6 months) with full month names in French
-    const salesByMonth = getLast6Months().map((month) => {
-      const monthSales = validSales.filter((sale) => {
+    const salesByMonth = getLast6Months().map((month: { month: number; year: number; shortName: string; fullName: string }) => {
+      const monthSales = validSales.filter((sale: Sale) => {
         try {
-          const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate);
+          const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
           return (
             saleDate.getMonth() === month.month &&
             saleDate.getFullYear() === month.year
@@ -269,7 +293,7 @@ export default function Analytics() {
         month: month.shortName,
         monthName: month.fullName,
         sales: monthSales.length,
-        revenue: monthSales.reduce((sum, sale) => sum + sale.total, 0),
+        revenue: monthSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
       };
     });
 
@@ -278,20 +302,20 @@ export default function Analytics() {
 
     // Top products
     const productStats = new Map();
-    validSales.forEach((sale) => {
+    validSales.forEach((sale: Sale) => {
       if (sale.items && Array.isArray(sale.items)) {
-        sale.items.forEach((item: any) => {
+        sale.items.forEach((item: SaleItem) => {
           const productName = item.name || 'Unknown Product';
           if (productStats.has(productName)) {
             const existing = productStats.get(productName);
             productStats.set(productName, {
               quantity: existing.quantity + (item.quantity || 0),
-              revenue: existing.revenue + (item.total || item.quantity * item.price || 0),
+              revenue: existing.revenue + (item.total || (item.quantity || 0) * (item.price || 0) || 0),
             });
           } else {
             productStats.set(productName, {
               quantity: item.quantity || 0,
-              revenue: item.total || item.quantity * item.price || 0,
+              revenue: item.total || (item.quantity || 0) * (item.price || 0) || 0,
             });
           }
         });
@@ -300,16 +324,16 @@ export default function Analytics() {
 
     const topProducts = Array.from(productStats.entries())
       .map(([name, stats]) => ({ name, ...stats }))
-      .sort((a, b) => b.quantity - a.quantity)
+      .sort((a: any, b: any) => b.quantity - a.quantity)
       .slice(0, 5);
 
     // Top customers
     const topCustomers = customers
-      .filter(customer => customer && customer.name)
-      .sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0))
+      .filter((customer: Customer) => customer && customer.name)
+      .sort((a: Customer, b: Customer) => (b.totalSpent || 0) - (a.totalSpent || 0))
       .slice(0, 5)
-      .map((customer) => ({
-        name: customer.name,
+      .map((customer: Customer) => ({
+        name: customer.name || 'Unknown Customer',
         purchases: customer.totalPurchases || 0,
         totalSpent: customer.totalSpent || 0,
       }));
@@ -333,7 +357,7 @@ export default function Analytics() {
   };
 
   // Calculate actual growth trends instead of random numbers
-  const calculateGrowthTrends = (sales: any[], salesByMonth: any[]) => {
+  const calculateGrowthTrends = (sales: Sale[], salesByMonth: any[]) => {
     if (salesByMonth.length < 2) {
       return {
         salesGrowth: 0,
@@ -354,9 +378,9 @@ export default function Analytics() {
       : currentMonth.revenue > 0 ? 100 : 0;
 
     // For customer growth, we'll use a simple calculation based on recent sales
-    const recentSales = sales.filter(sale => {
+    const recentSales = sales.filter((sale: Sale) => {
       try {
-        const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate);
+        const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
         const oneMonthAgo = new Date();
         oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
         return saleDate > oneMonthAgo;
@@ -374,7 +398,7 @@ export default function Analytics() {
     };
   };
 
-  const getLast7Days = () => {
+  const getLast7Days = (): Date[] => {
     const days = [];
     for (let i = 6; i >= 0; i--) {
       const date = new Date();
@@ -384,7 +408,7 @@ export default function Analytics() {
     return days;
   };
 
-  const getLast4Weeks = () => {
+  const getLast4Weeks = (): { start: Date; end: Date }[] => {
     const weeks = [];
     for (let i = 3; i >= 0; i--) {
       const end = new Date();
@@ -396,7 +420,7 @@ export default function Analytics() {
     return weeks;
   };
 
-  const getLast6Months = () => {
+  const getLast6Months = (): { month: number; year: number; shortName: string; fullName: string }[] => {
     const months = [];
     for (let i = 5; i >= 0; i--) {
       const date = new Date();
@@ -411,13 +435,13 @@ export default function Analytics() {
     return months;
   };
 
-  const getSalesByYear = (sales: any[]) => {
+  const getSalesByYear = (sales: Sale[]) => {
     const yearsMap = new Map();
     
     // Get all available years from sales data
-    const years = Array.from(new Set(sales.map(sale => {
+    const years = Array.from(new Set(sales.map((sale: Sale) => {
       try {
-        return new Date(sale.createdAt || sale.date || sale.saleDate).getFullYear();
+        return new Date(sale.createdAt || sale.date || sale.saleDate || '').getFullYear();
       } catch (error) {
         return new Date().getFullYear();
       }
@@ -437,9 +461,9 @@ export default function Analytics() {
     });
     
     // Populate with actual data
-    sales.forEach((sale) => {
+    sales.forEach((sale: Sale) => {
       try {
-        const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate);
+        const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
         const year = saleDate.getFullYear();
         const month = saleDate.getMonth();
         
@@ -457,7 +481,7 @@ export default function Analytics() {
       }
     });
     
-    return Array.from(yearsMap.values()).sort((a, b) => parseInt(b.year) - parseInt(a.year));
+    return Array.from(yearsMap.values()).sort((a: any, b: any) => parseInt(b.year) - parseInt(a.year));
   };
 
   const getAvailableYears = (): number[] => {
@@ -537,7 +561,7 @@ export default function Analytics() {
   }
 
   const chartData = getChartData();
-  const maxRevenue = Math.max(...chartData.map((d) => d.revenue), 1);
+  const maxRevenue = Math.max(...chartData.map((d: any) => d.revenue), 1);
   const availableYears = getAvailableYears();
 
   return (
@@ -709,7 +733,7 @@ export default function Analytics() {
                 Année {selectedYear}
               </h4>
               <div className="space-y-4 ml-4">
-                {chartData.map((month, index) => (
+                {chartData.map((month: any, index: number) => (
                   <div key={index} className="flex items-center gap-4">
                     <div className="w-40 text-sm text-gray-600 font-medium capitalize">
                       {"monthName" in month ? month.monthName : ""}
@@ -736,7 +760,7 @@ export default function Analytics() {
             </div>
           ) : (
             // Daily, Weekly, Monthly view
-            chartData.map((item, index) => (
+            chartData.map((item: any, index: number) => (
               <div key={index} className="flex items-center gap-4">
                 <div className="w-48 text-sm text-gray-600 font-medium">
                   {timeframe === "day" ? (
