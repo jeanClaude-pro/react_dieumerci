@@ -92,6 +92,27 @@ class PrintService {
   }
 }
 
+// Helper function to generate unique receipt number
+const generateReceiptNumber = () => {
+  // Get current receipt counter from localStorage or initialize to 1
+  const storedCounter = localStorage.getItem('receiptCounter');
+  let counter = storedCounter ? parseInt(storedCounter, 10) : 1;
+  
+  // Generate timestamp component (last 4 digits of current timestamp)
+  const timestamp = Date.now().toString().slice(-4);
+  
+  // Get current year
+  const currentYear = new Date().getFullYear();
+  
+  // Create receipt number: DL + counter + year + timestamp
+  const receiptNumber = `DL${counter}${currentYear}${timestamp}`;
+  
+  // Increment and store the counter for next sale
+  localStorage.setItem('receiptCounter', (counter + 1).toString());
+  
+  return receiptNumber;
+};
+
 export default function NewSale() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -100,10 +121,12 @@ export default function NewSale() {
   const [receiptData, setReceiptData] = useState<any>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const [stubCounter, setStubCounter] = useState(1);
-  const [receiptCounter, setReceiptCounter] = useState(1);
 
   // Get the current user from your auth context
   const { user: currentUser } = useAuth();
+
+  // Check if current user is admin
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.username === 'admin';
 
   const [form, setForm] = useState({
     productId: "",
@@ -965,8 +988,7 @@ export default function NewSale() {
         throw new Error(msg);
       }
 
-      // Enhanced receipt data with better formatting
-      const currentYear = new Date().getFullYear();
+      // Enhanced receipt data with unique receipt number
       const newReceiptData = {
         shopName: "ETS. DIEU MERCI",
         shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
@@ -986,7 +1008,7 @@ export default function NewSale() {
           hour: "2-digit",
           minute: "2-digit",
         }),
-        receiptNumber: `DL${receiptCounter}${currentYear}`,
+        receiptNumber: generateReceiptNumber(), // Use the new unique receipt number generator
         stubNumber: stubCounter.toString().padStart(3, "0"),
       };
 
@@ -1003,9 +1025,6 @@ export default function NewSale() {
         paymentMethod: form.paymentMethod,
       });
       setCart([]);
-
-      // Increment receipt counter for next sale
-      setReceiptCounter((prev) => prev + 1);
 
       setMessage(
         "✅ Vente effectuée avec succès ! Impression du reçu et de la souche..."
@@ -1048,8 +1067,11 @@ export default function NewSale() {
               </option>
               {products.map((p) => (
                 <option key={p._id} value={p._id}>
-                  {p.name}{" "}
-                  {typeof p.stock === "number" ? `(Stock: ${p.stock})` : ""}
+                  {p.name}
+                  {/* Show stock info only for admin users */}
+                  {isAdmin && typeof p.stock === "number" ? ` (Stock: ${p.stock})` : ""}
+                  {/* Show low stock warning for all users when stock is less than 50 */}
+                  {!isAdmin && typeof p.stock === "number" && p.stock < 50 ? ` (Stock faible: ${p.stock})` : ""}
                 </option>
               ))}
             </select>
@@ -1087,14 +1109,26 @@ export default function NewSale() {
 
         {product && typeof product.stock === "number" && (
           <p className="text-sm text-gray-600 mb-4">
-            Stock disponible: <strong>{product.stock}</strong>
-            {quantity > 0 && (
-              <span className="ml-4">
-                Stock restant après vente:{" "}
-                {product.stock - quantity >= 0
-                  ? product.stock - quantity
-                  : "❌ pas assez de stock!"}
-              </span>
+            {/* Show stock information based on user role */}
+            {isAdmin ? (
+              <>
+                Stock disponible: <strong>{product.stock}</strong>
+                {quantity > 0 && (
+                  <span className="ml-4">
+                    Stock restant après vente:{" "}
+                    {product.stock - quantity >= 0
+                      ? product.stock - quantity
+                      : "❌ pas assez de stock!"}
+                  </span>
+                )}
+              </>
+            ) : (
+              // For staff, only show warning when stock is low
+              product.stock < 50 && (
+                <span className="text-orange-600 font-semibold">
+                  ⚠️ Stock faible: {product.stock} unités restantes
+                </span>
+              )
             )}
           </p>
         )}

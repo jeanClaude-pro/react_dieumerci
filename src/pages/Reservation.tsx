@@ -86,6 +86,27 @@ class PrintService {
   }
 }
 
+// Helper function to generate unique reservation receipt number
+const generateReservationNumber = () => {
+  // Get current reservation counter from localStorage or initialize to 1
+  const storedCounter = localStorage.getItem('reservationCounter');
+  let counter = storedCounter ? parseInt(storedCounter, 10) : 1;
+  
+  // Generate timestamp component (last 4 digits of current timestamp)
+  const timestamp = Date.now().toString().slice(-4);
+  
+  // Get current year
+  const currentYear = new Date().getFullYear();
+  
+  // Create reservation number: RES + counter + year + timestamp
+  const reservationNumber = `RES${counter}${currentYear}${timestamp}`;
+  
+  // Increment and store the counter for next reservation
+  localStorage.setItem('reservationCounter', (counter + 1).toString());
+  
+  return reservationNumber;
+};
+
 export default function Reservation() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -94,10 +115,12 @@ export default function Reservation() {
   const [receiptData, setReceiptData] = useState<any>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const [stubCounter, setStubCounter] = useState(1);
-  const [receiptCounter, setReceiptCounter] = useState(1);
 
   // Get the current user from your auth context
   const { user: currentUser } = useAuth();
+
+  // Check if current user is admin
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.username === 'admin';
 
   const [form, setForm] = useState({
     productId: "",
@@ -1047,8 +1070,7 @@ export default function Reservation() {
         throw new Error(msg);
       }
 
-      // Enhanced receipt data with better formatting for reservations
-      const currentYear = new Date().getFullYear();
+      // Enhanced receipt data with unique reservation number
       const newReceiptData = {
         shopName: "ETS. DIEU MERCI",
         shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
@@ -1068,7 +1090,7 @@ export default function Reservation() {
           hour: '2-digit',
           minute: '2-digit'
         }),
-        receiptNumber: `RES${receiptCounter}${currentYear}`,
+        receiptNumber: generateReservationNumber(), // Use the new unique reservation number generator
         stubNumber: stubCounter.toString().padStart(3, '0'),
         reservationDate: reservationDate,
         reservationTime: reservationTime,
@@ -1089,9 +1111,6 @@ export default function Reservation() {
         notes: "",
       });
       setCart([]);
-
-      // Increment receipt counter for next reservation
-      setReceiptCounter(prev => prev + 1);
 
       setMessage(
         "✅ Reservation effectuée avec succès ! Impression du reçu et de la souche..."
@@ -1138,8 +1157,11 @@ export default function Reservation() {
               </option>
               {products.map((p) => (
                 <option key={p._id} value={p._id}>
-                  {p.name}{" "}
-                  {typeof p.stock === "number" ? `(Stock: ${p.stock})` : ""}
+                  {p.name}
+                  {/* Show stock info only for admin users */}
+                  {isAdmin && typeof p.stock === "number" ? ` (Stock: ${p.stock})` : ""}
+                  {/* Show low stock warning for all users when stock is less than 50 */}
+                  {!isAdmin && typeof p.stock === "number" && p.stock < 50 ? ` (Stock faible: ${p.stock})` : ""}
                 </option>
               ))}
             </select>
@@ -1177,14 +1199,26 @@ export default function Reservation() {
 
         {product && typeof product.stock === "number" && (
           <p className="text-sm text-gray-600 mb-4">
-            Stock disponible: <strong>{product.stock}</strong>
-            {quantity > 0 && (
-              <span className="ml-4">
-                Stock restant après reservation:{" "}
-                {product.stock - quantity >= 0
-                  ? product.stock - quantity
-                  : "❌ pas assez de stock!"}
-              </span>
+            {/* Show stock information based on user role */}
+            {isAdmin ? (
+              <>
+                Stock disponible: <strong>{product.stock}</strong>
+                {quantity > 0 && (
+                  <span className="ml-4">
+                    Stock restant après reservation:{" "}
+                    {product.stock - quantity >= 0
+                      ? product.stock - quantity
+                      : "❌ pas assez de stock!"}
+                  </span>
+                )}
+              </>
+            ) : (
+              // For staff, only show warning when stock is low
+              product.stock < 50 && (
+                <span className="text-orange-600 font-semibold">
+                  ⚠️ Stock faible: {product.stock} unités restantes
+                </span>
+              )
             )}
           </p>
         )}

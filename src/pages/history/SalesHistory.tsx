@@ -61,8 +61,6 @@ export default function SalesHistory() {
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [editForm, setEditForm] = useState({
     customer: { name: "", phone: "", email: "" },
@@ -86,12 +84,13 @@ export default function SalesHistory() {
     return () => {
       window.removeEventListener("salesUpdated", handleSalesUpdate);
     };
-  }, [currentPage]);
+  }, []);
 
   const fetchSales = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/sales`, {
+      // Remove pagination - fetch ALL sales at once
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/sales?limit=0`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
@@ -100,23 +99,100 @@ export default function SalesHistory() {
 
       if (res.ok) {
         const data = await res.json();
-        setSales(data.sales || data || []);
-        setTotalPages(data.pagination?.total || 1);
+        
+        // Handle different response formats
+        let allSales: Sale[] = [];
+        if (Array.isArray(data)) {
+          allSales = data;
+        } else if (data.sales && Array.isArray(data.sales)) {
+          allSales = data.sales;
+        } else if (data.data && Array.isArray(data.data)) {
+          allSales = data.data;
+        } else {
+          console.warn("Unexpected sales data structure:", data);
+          allSales = [];
+        }
+
+        console.log(`Fetched ${allSales.length} sales from API`);
+        
+        // Sort sales by date - newest first
+        const sortedSales = allSales.sort((a, b) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        
+        setSales(sortedSales);
       } else {
         console.error("Sales fetch failed:", res.status);
+        // Try alternative endpoints
+        await tryAlternativeFetch();
       }
     } catch (error) {
       console.error("Error loading sales:", error);
       setError("Failed to load sales");
+      // Try alternative endpoints
+      await tryAlternativeFetch();
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Alternative fetch method if the main one fails
+  const tryAlternativeFetch = async () => {
+    try {
+      console.log("SalesHistory: Trying alternative fetch method...");
+      
+      const endpoints = [
+        `${import.meta.env.VITE_API_URL}/sales?limit=1000`,
+        `${import.meta.env.VITE_API_URL}/sales/all`,
+      ];
+      
+      let allSales: Sale[] = [];
+      
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (Array.isArray(data)) {
+              allSales = data;
+              break;
+            } else if (data.sales && Array.isArray(data.sales)) {
+              allSales = data.sales;
+              break;
+            } else if (data.data && Array.isArray(data.data)) {
+              allSales = data.data;
+              break;
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch from ${endpoint}:`, error);
+          continue;
+        }
+      }
+      
+      console.log(`SalesHistory: Alternative fetch got ${allSales.length} sales`);
+      
+      // Sort sales by date - newest first
+      const sortedSales = allSales.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      
+      setSales(sortedSales);
+    } catch (error) {
+      console.error("SalesHistory: Alternative fetch also failed:", error);
     }
   };
 
   const fetchProducts = async () => {
     try {
       setLoadingProducts(true);
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/products`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/products?limit=0`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
@@ -743,31 +819,7 @@ export default function SalesHistory() {
           )}
         </div>
 
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-            <div className="text-sm text-gray-700">
-              Page {currentPage} of {totalPages}
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() =>
-                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-                }
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+        {/* REMOVED PAGINATION SECTION - No more page navigation */}
       </div>
 
       {/* Sale Details Modal */}

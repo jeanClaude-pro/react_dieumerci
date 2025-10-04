@@ -48,29 +48,122 @@ export default function Analytics() {
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
-      // Fetch sales data
-      const salesResponse = await fetch(`${serverUrl}/sales`, {
+      
+      // Fetch ALL sales data without pagination limits
+      const salesResponse = await fetch(`${serverUrl}/sales?limit=0`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
       });
+      
+      if (!salesResponse.ok) {
+        throw new Error(`Failed to fetch sales: ${salesResponse.status}`);
+      }
+      
       const salesData = await salesResponse.json();
+      
+      // Check if the API returns an array directly or wrapped in an object
+      let allSales = [];
+      if (Array.isArray(salesData)) {
+        allSales = salesData;
+      } else if (salesData.sales && Array.isArray(salesData.sales)) {
+        allSales = salesData.sales;
+      } else if (salesData.data && Array.isArray(salesData.data)) {
+        allSales = salesData.data;
+      } else {
+        console.warn("Unexpected sales data structure:", salesData);
+        allSales = [];
+      }
+
+      console.log(`Fetched ${allSales.length} sales from API`);
+
+      // Filter out voided sales - only include completed sales
+      const completedSales = allSales.filter(sale => 
+        sale.status !== 'voided' && sale.status !== 'cancelled' && sale.status !== 'refunded'
+      );
+
+      console.log(`After filtering voided sales: ${completedSales.length} completed sales`);
 
       // Fetch customers data
-      const customersResponse = await fetch(`${serverUrl}/customers`);
-      const customersData = await customersResponse.json();
+      let allCustomers = [];
+      try {
+        const customersResponse = await fetch(`${serverUrl}/customers?limit=0`);
+        if (customersResponse.ok) {
+          const customersData = await customersResponse.json();
+          allCustomers = Array.isArray(customersData) ? customersData : 
+                        customersData.customers || customersData.data || [];
+        }
+      } catch (error) {
+        console.error("Error fetching customers:", error);
+      }
 
       // Process the data to create analytics
-      const processedAnalytics = processAnalyticsData(
-        salesData.sales,
-        customersData.customers
-      );
+      const processedAnalytics = processAnalyticsData(completedSales, allCustomers);
       setAnalytics(processedAnalytics);
     } catch (error) {
       console.error("Error fetching analytics:", error);
+      // Fallback: try alternative API endpoints
+      await tryAlternativeFetch();
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Alternative fetch method if the main one fails
+  const tryAlternativeFetch = async () => {
+    try {
+      console.log("Trying alternative fetch method...");
+      
+      // Try to fetch sales with different endpoints
+      const endpoints = [
+        `${serverUrl}/sales?limit=1000`,
+        `${serverUrl}/sales/all`,
+        `${serverUrl}/sales?status=completed`
+      ];
+      
+      let allSales = [];
+      
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (Array.isArray(data)) {
+              allSales = data;
+              break;
+            } else if (data.sales && Array.isArray(data.sales)) {
+              allSales = data.sales;
+              break;
+            } else if (data.data && Array.isArray(data.data)) {
+              allSales = data.data;
+              break;
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch from ${endpoint}:`, error);
+          continue;
+        }
+      }
+      
+      console.log(`Alternative fetch got ${allSales.length} sales`);
+      
+      if (allSales.length > 0) {
+        const completedSales = allSales.filter(sale => 
+          sale.status !== 'voided' && sale.status !== 'cancelled' && sale.status !== 'refunded'
+        );
+        
+        const processedAnalytics = processAnalyticsData(completedSales, []);
+        setAnalytics(processedAnalytics);
+      }
+    } catch (error) {
+      console.error("Alternative fetch also failed:", error);
     }
   };
 
@@ -78,19 +171,46 @@ export default function Analytics() {
     sales: any[],
     customers: any[]
   ): AnalyticsData => {
-    // Calculate totals
-    const totalSales = sales.length;
-    const totalRevenue = sales.reduce((sum, sale) => sum + sale.total, 0);
+    console.log(`Processing ${sales.length} sales and ${customers.length} customers`);
+
+    // Filter out any invalid sales (ensure they have required properties)
+    const validSales = sales.filter(sale => 
+      sale && typeof sale.total === 'number' && sale.items && Array.isArray(sale.items)
+    );
+
+    console.log(`Valid sales for processing: ${validSales.length}`);
+
+    // Calculate totals using valid sales only
+    const totalSales = validSales.length;
+    const totalRevenue = validSales.reduce((sum, sale) => sum + sale.total, 0);
     const totalCustomers = customers.length;
-    const totalProducts = new Set(
-      sales.flatMap((sale) => sale.items.map((item: any) => item.productId))
-    ).size;
+    
+    // Count unique products from valid sales
+    const productIds = new Set();
+    validSales.forEach(sale => {
+      if (sale.items && Array.isArray(sale.items)) {
+        sale.items.forEach((item: any) => {
+          if (item.productId) {
+            productIds.add(item.productId);
+          }
+        });
+      }
+    });
+    const totalProducts = productIds.size;
+
+    console.log(`Calculated: ${totalSales} sales, $${totalRevenue} revenue, ${totalProducts} products`);
 
     // Sales by day (last 7 days) with day names in French
     const salesByDay = getLast7Days().map((date) => {
-      const daySales = sales.filter(
-        (sale) =>
-          new Date(sale.createdAt).toDateString() === date.toDateString()
+      const daySales = validSales.filter(
+        (sale) => {
+          try {
+            const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate);
+            return saleDate.toDateString() === date.toDateString();
+          } catch (error) {
+            return false;
+          }
+        }
       );
       return {
         date: date.toLocaleDateString("fr-FR", {
@@ -105,9 +225,13 @@ export default function Analytics() {
 
     // Sales by week (last 4 weeks) with start and end dates in French
     const salesByWeek = getLast4Weeks().map((week, index) => {
-      const weekSales = sales.filter((sale) => {
-        const saleDate = new Date(sale.createdAt);
-        return saleDate >= week.start && saleDate <= week.end;
+      const weekSales = validSales.filter((sale) => {
+        try {
+          const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate);
+          return saleDate >= week.start && saleDate <= week.end;
+        } catch (error) {
+          return false;
+        }
       });
       
       const startDateStr = week.start.toLocaleDateString("fr-FR", {
@@ -130,12 +254,16 @@ export default function Analytics() {
 
     // Sales by month (last 6 months) with full month names in French
     const salesByMonth = getLast6Months().map((month) => {
-      const monthSales = sales.filter((sale) => {
-        const saleDate = new Date(sale.createdAt);
-        return (
-          saleDate.getMonth() === month.month &&
-          saleDate.getFullYear() === month.year
-        );
+      const monthSales = validSales.filter((sale) => {
+        try {
+          const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate);
+          return (
+            saleDate.getMonth() === month.month &&
+            saleDate.getFullYear() === month.year
+          );
+        } catch (error) {
+          return false;
+        }
       });
       return {
         month: month.shortName,
@@ -146,25 +274,28 @@ export default function Analytics() {
     });
 
     // Sales by year (group by year with monthly breakdown) in French
-    const salesByYear = getSalesByYear(sales);
+    const salesByYear = getSalesByYear(validSales);
 
     // Top products
     const productStats = new Map();
-    sales.forEach((sale) => {
-      sale.items.forEach((item: any) => {
-        if (productStats.has(item.name)) {
-          const existing = productStats.get(item.name);
-          productStats.set(item.name, {
-            quantity: existing.quantity + item.quantity,
-            revenue: existing.revenue + item.total,
-          });
-        } else {
-          productStats.set(item.name, {
-            quantity: item.quantity,
-            revenue: item.total,
-          });
-        }
-      });
+    validSales.forEach((sale) => {
+      if (sale.items && Array.isArray(sale.items)) {
+        sale.items.forEach((item: any) => {
+          const productName = item.name || 'Unknown Product';
+          if (productStats.has(productName)) {
+            const existing = productStats.get(productName);
+            productStats.set(productName, {
+              quantity: existing.quantity + (item.quantity || 0),
+              revenue: existing.revenue + (item.total || item.quantity * item.price || 0),
+            });
+          } else {
+            productStats.set(productName, {
+              quantity: item.quantity || 0,
+              revenue: item.total || item.quantity * item.price || 0,
+            });
+          }
+        });
+      }
     });
 
     const topProducts = Array.from(productStats.entries())
@@ -174,20 +305,17 @@ export default function Analytics() {
 
     // Top customers
     const topCustomers = customers
-      .sort((a, b) => b.totalSpent - a.totalSpent)
+      .filter(customer => customer && customer.name)
+      .sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0))
       .slice(0, 5)
       .map((customer) => ({
         name: customer.name,
-        purchases: customer.totalPurchases,
-        totalSpent: customer.totalSpent,
+        purchases: customer.totalPurchases || 0,
+        totalSpent: customer.totalSpent || 0,
       }));
 
-    // Mock growth trends (in real app, compare with previous period)
-    const recentTrends = {
-      salesGrowth: Math.floor(Math.random() * 20) - 10, // -10 to +10
-      revenueGrowth: Math.floor(Math.random() * 25) - 5, // -5 to +20
-      customerGrowth: Math.floor(Math.random() * 15) + 5, // +5 to +20
-    };
+    // Calculate actual growth trends based on previous period data
+    const recentTrends = calculateGrowthTrends(validSales, salesByMonth);
 
     return {
       totalSales,
@@ -201,6 +329,48 @@ export default function Analytics() {
       topProducts,
       topCustomers,
       recentTrends,
+    };
+  };
+
+  // Calculate actual growth trends instead of random numbers
+  const calculateGrowthTrends = (sales: any[], salesByMonth: any[]) => {
+    if (salesByMonth.length < 2) {
+      return {
+        salesGrowth: 0,
+        revenueGrowth: 0,
+        customerGrowth: 0,
+      };
+    }
+
+    const currentMonth = salesByMonth[salesByMonth.length - 1];
+    const previousMonth = salesByMonth[salesByMonth.length - 2];
+
+    const salesGrowth = previousMonth.sales > 0 
+      ? Math.round(((currentMonth.sales - previousMonth.sales) / previousMonth.sales) * 100)
+      : currentMonth.sales > 0 ? 100 : 0;
+
+    const revenueGrowth = previousMonth.revenue > 0
+      ? Math.round(((currentMonth.revenue - previousMonth.revenue) / previousMonth.revenue) * 100)
+      : currentMonth.revenue > 0 ? 100 : 0;
+
+    // For customer growth, we'll use a simple calculation based on recent sales
+    const recentSales = sales.filter(sale => {
+      try {
+        const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate);
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+        return saleDate > oneMonthAgo;
+      } catch (error) {
+        return false;
+      }
+    });
+
+    const customerGrowth = recentSales.length > 10 ? 15 : 5; // Simple heuristic
+
+    return {
+      salesGrowth,
+      revenueGrowth,
+      customerGrowth,
     };
   };
 
@@ -245,7 +415,13 @@ export default function Analytics() {
     const yearsMap = new Map();
     
     // Get all available years from sales data
-    const years = Array.from(new Set(sales.map(sale => new Date(sale.createdAt).getFullYear())));
+    const years = Array.from(new Set(sales.map(sale => {
+      try {
+        return new Date(sale.createdAt || sale.date || sale.saleDate).getFullYear();
+      } catch (error) {
+        return new Date().getFullYear();
+      }
+    })));
     
     // Initialize all available years
     years.forEach(year => {
@@ -262,18 +438,22 @@ export default function Analytics() {
     
     // Populate with actual data
     sales.forEach((sale) => {
-      const saleDate = new Date(sale.createdAt);
-      const year = saleDate.getFullYear();
-      const month = saleDate.getMonth();
-      
-      if (yearsMap.has(year)) {
-        const yearData = yearsMap.get(year);
-        const monthData = yearData.months.find((m: any) => m.month === month);
+      try {
+        const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate);
+        const year = saleDate.getFullYear();
+        const month = saleDate.getMonth();
         
-        if (monthData) {
-          monthData.sales += 1;
-          monthData.revenue += sale.total;
+        if (yearsMap.has(year)) {
+          const yearData = yearsMap.get(year);
+          const monthData = yearData.months.find((m: any) => m.month === month);
+          
+          if (monthData) {
+            monthData.sales += 1;
+            monthData.revenue += sale.total;
+          }
         }
+      } catch (error) {
+        console.warn('Invalid sale date format:', sale);
       }
     });
     

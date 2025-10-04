@@ -38,20 +38,41 @@ export default function Dashboard() {
     try {
       setLoading(true);
 
-      // Fetch all required data
-      const [salesResponse, customersResponse, productsResponse] =
-        await Promise.all([
-          fetch(`${serverUrl}/sales`, {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-            },
-          }),
-          fetch(`${serverUrl}/customers`),
-          fetch(`${serverUrl}/products`),
-        ]);
-
+      // Fetch ALL sales data without pagination limits
+      const salesResponse = await fetch(`${serverUrl}/sales?limit=0`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+        },
+      });
+      
+      if (!salesResponse.ok) {
+        throw new Error(`Failed to fetch sales: ${salesResponse.status}`);
+      }
+      
       const salesData = await salesResponse.json();
+      
+      // Check if the API returns an array directly or wrapped in an object
+      let allSales = [];
+      if (Array.isArray(salesData)) {
+        allSales = salesData;
+      } else if (salesData.sales && Array.isArray(salesData.sales)) {
+        allSales = salesData.sales;
+      } else if (salesData.data && Array.isArray(salesData.data)) {
+        allSales = salesData.data;
+      } else {
+        console.warn("Unexpected sales data structure:", salesData);
+        allSales = [];
+      }
+
+      console.log(`Dashboard: Fetched ${allSales.length} sales from API`);
+
+      // Fetch customers and products data
+      const [customersResponse, productsResponse] = await Promise.all([
+        fetch(`${serverUrl}/customers?limit=0`),
+        fetch(`${serverUrl}/products?limit=0`),
+      ]);
+
       const customersData = await customersResponse.json();
       const productsData = await productsResponse.json();
 
@@ -59,15 +80,111 @@ export default function Dashboard() {
 
       // Process the data
       const processedStats = processDashboardData(
-        salesData.sales || [],
-        customersData.customers || [],
-        productsData || []
+        allSales,
+        Array.isArray(customersData) ? customersData : customersData.customers || customersData.data || [],
+        Array.isArray(productsData) ? productsData : productsData.products || productsData.data || []
       );
 
       setStats(processedStats);
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
-      // Set default stats if API fails
+      // Try alternative fetch method
+      await tryAlternativeFetch();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Alternative fetch method if the main one fails
+  const tryAlternativeFetch = async () => {
+    try {
+      console.log("Dashboard: Trying alternative fetch method...");
+      
+      // Try to fetch sales with different endpoints
+      const endpoints = [
+        `${serverUrl}/sales?limit=1000`,
+        `${serverUrl}/sales/all`,
+        `${serverUrl}/sales?status=completed`
+      ];
+      
+      let allSales = [];
+      
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (Array.isArray(data)) {
+              allSales = data;
+              break;
+            } else if (data.sales && Array.isArray(data.sales)) {
+              allSales = data.sales;
+              break;
+            } else if (data.data && Array.isArray(data.data)) {
+              allSales = data.data;
+              break;
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch from ${endpoint}:`, error);
+          continue;
+        }
+      }
+      
+      console.log(`Dashboard: Alternative fetch got ${allSales.length} sales`);
+      
+      if (allSales.length > 0) {
+        // Fetch customers and products
+        let allCustomers = [];
+        let allProducts = [];
+        
+        try {
+          const customersResponse = await fetch(`${serverUrl}/customers?limit=0`);
+          if (customersResponse.ok) {
+            const customersData = await customersResponse.json();
+            allCustomers = Array.isArray(customersData) ? customersData : 
+                          customersData.customers || customersData.data || [];
+          }
+        } catch (error) {
+          console.error("Error fetching customers:", error);
+        }
+        
+        try {
+          const productsResponse = await fetch(`${serverUrl}/products?limit=0`);
+          if (productsResponse.ok) {
+            const productsData = await productsResponse.json();
+            allProducts = Array.isArray(productsData) ? productsData : 
+                         productsData.products || productsData.data || [];
+          }
+        } catch (error) {
+          console.error("Error fetching products:", error);
+        }
+        
+        const processedStats = processDashboardData(allSales, allCustomers, allProducts);
+        setStats(processedStats);
+      } else {
+        // Set default stats if no data
+        setStats({
+          totalRevenue: 0,
+          totalSales: 0,
+          totalProducts: 0,
+          totalCustomers: 0,
+          recentSales: [],
+          lowStockProducts: [],
+          revenueGrowth: 0,
+          salesGrowth: 0,
+          customerGrowth: 0,
+        });
+      }
+    } catch (error) {
+      console.error("Dashboard: Alternative fetch also failed:", error);
+      // Set default stats if API fails completely
       setStats({
         totalRevenue: 0,
         totalSales: 0,
@@ -79,8 +196,6 @@ export default function Dashboard() {
         salesGrowth: 0,
         customerGrowth: 0,
       });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -91,38 +206,45 @@ export default function Dashboard() {
   ): DashboardStats => {
     // FILTER OUT VOIDED AND CORRECTED SALES - ONLY COUNT COMPLETED SALES
     const validSales = sales.filter(sale => 
-      sale.status === "completed" || 
-      sale.status === undefined || // Include sales without status (backward compatibility)
-      sale.status === "pending"    // Include pending sales if needed
+      sale.status !== 'voided' && 
+      sale.status !== 'cancelled' && 
+      sale.status !== 'refunded' &&
+      sale.status !== 'deleted'
     );
 
-    console.log(`Filtered sales: ${validSales.length} valid out of ${sales.length} total`);
+    console.log(`Dashboard: Filtered sales: ${validSales.length} valid out of ${sales.length} total`);
 
-    const totalRevenue = validSales.reduce(
+    // Filter out invalid sales (ensure they have required properties)
+    const cleanSales = validSales.filter(sale => 
+      sale && typeof sale.total === 'number'
+    );
+
+    console.log(`Dashboard: Clean sales for processing: ${cleanSales.length}`);
+
+    const totalRevenue = cleanSales.reduce(
       (sum, sale) => sum + (sale.total || 0),
       0
     );
-    const totalSales = validSales.length;
+    const totalSales = cleanSales.length;
     const totalProducts = products.length;
     const totalCustomers = customers.length;
 
     // Get recent VALID sales (last 5)
-    const recentSales = validSales
+    const recentSales = cleanSales
       .sort(
         (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          new Date(b.createdAt || b.date || b.saleDate).getTime() - 
+          new Date(a.createdAt || a.date || a.saleDate).getTime()
       )
       .slice(0, 5);
 
-    // Get low stock products (stock < 200)
+    // Get low stock products (stock < 100)
     const lowStockProducts = products
-      .filter((product) => (product.stock || 0) < 200)
+      .filter((product) => (product.stock || 0) < 100)
       .slice(0, 5);
 
-    // Mock growth percentages (in real app, compare with previous period)
-    const revenueGrowth = Math.floor(Math.random() * 30) + 5; // 5-35%
-    const salesGrowth = Math.floor(Math.random() * 25) + 10; // 10-35%
-    const customerGrowth = Math.floor(Math.random() * 20) + 5; // 5-25%
+    // Calculate actual growth trends based on recent data
+    const growthTrends = calculateGrowthTrends(cleanSales, customers);
 
     return {
       totalRevenue,
@@ -131,6 +253,78 @@ export default function Dashboard() {
       totalCustomers,
       recentSales,
       lowStockProducts,
+      revenueGrowth: growthTrends.revenueGrowth,
+      salesGrowth: growthTrends.salesGrowth,
+      customerGrowth: growthTrends.customerGrowth,
+    };
+  };
+
+  // Calculate actual growth trends instead of random numbers
+  const calculateGrowthTrends = (sales: any[], customers: any[]) => {
+    if (sales.length === 0) {
+      return {
+        revenueGrowth: 0,
+        salesGrowth: 0,
+        customerGrowth: 0,
+      };
+    }
+
+    // Calculate monthly trends
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
+    
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+    // Current month sales
+    const currentMonthSales = sales.filter(sale => {
+      try {
+        const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate);
+        return saleDate.getMonth() === currentMonth && saleDate.getFullYear() === currentYear;
+      } catch (error) {
+        return false;
+      }
+    });
+
+    // Previous month sales
+    const previousMonthSales = sales.filter(sale => {
+      try {
+        const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate);
+        return saleDate.getMonth() === lastMonth && saleDate.getFullYear() === lastMonthYear;
+      } catch (error) {
+        return false;
+      }
+    });
+
+    const currentMonthRevenue = currentMonthSales.reduce((sum, sale) => sum + (sale.total || 0), 0);
+    const previousMonthRevenue = previousMonthSales.reduce((sum, sale) => sum + (sale.total || 0), 0);
+
+    const revenueGrowth = previousMonthRevenue > 0 
+      ? Math.round(((currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue) * 100)
+      : currentMonthRevenue > 0 ? 100 : 0;
+
+    const salesGrowth = previousMonthSales.length > 0
+      ? Math.round(((currentMonthSales.length - previousMonthSales.length) / previousMonthSales.length) * 100)
+      : currentMonthSales.length > 0 ? 100 : 0;
+
+    // Customer growth (simple calculation)
+    const recentCustomers = customers.filter(customer => {
+      try {
+        const customerDate = new Date(customer.createdAt || customer.date);
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+        return customerDate > oneMonthAgo;
+      } catch (error) {
+        return false;
+      }
+    });
+
+    const customerGrowth = customers.length > 0
+      ? Math.round((recentCustomers.length / customers.length) * 100)
+      : 0;
+
+    return {
       revenueGrowth,
       salesGrowth,
       customerGrowth,
@@ -301,11 +495,11 @@ export default function Dashboard() {
                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                     <div>
                       <p className="text-sm font-medium text-gray-900">
-                        Vente #{sale.saleId?.slice(-6) || "N/A"}
+                        Vente #{sale.saleId?.slice(-6) || sale._id?.slice(-6) || "N/A"}
                       </p>
                       <p className="text-xs text-gray-500">
                         {sale.customer?.name || "Unknown"} •{" "}
-                        {formatDate(sale.createdAt)}
+                        {formatDate(sale.createdAt || sale.date || sale.saleDate)}
                       </p>
                     </div>
                   </div>

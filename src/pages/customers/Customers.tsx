@@ -29,13 +29,6 @@ interface Customer {
   updatedAt: string;
 }
 
-interface CustomersResponse {
-  customers: Customer[];
-  totalPages: number;
-  currentPage: number;
-  total: number;
-}
-
 const serverUrl = import.meta.env.VITE_API_URL;
 
 export default function Customers() {
@@ -45,8 +38,6 @@ export default function Customers() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -57,27 +48,85 @@ export default function Customers() {
 
   useEffect(() => {
     fetchCustomers();
-  }, [currentPage]);
+  }, []);
 
   const fetchCustomers = async () => {
     try {
       setLoading(true);
+      // Remove pagination - fetch ALL customers at once
       const response = await fetch(
-        `${serverUrl}/customers?page=${currentPage}&limit=10&timestamp=${Date.now()}`
+        `${serverUrl}/customers?limit=0&timestamp=${Date.now()}`
       );
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data: CustomersResponse = await response.json();
-      setCustomers(data.customers);
-      setTotalPages(data.totalPages);
+      const data = await response.json();
+      
+      // Handle different response formats
+      let allCustomers: Customer[] = [];
+      if (Array.isArray(data)) {
+        allCustomers = data;
+      } else if (data.customers && Array.isArray(data.customers)) {
+        allCustomers = data.customers;
+      } else if (data.data && Array.isArray(data.data)) {
+        allCustomers = data.data;
+      } else {
+        console.warn("Unexpected customers data structure:", data);
+        allCustomers = [];
+      }
+
+      console.log(`Fetched ${allCustomers.length} customers from API`);
+      setCustomers(allCustomers);
     } catch (error) {
       console.error("Error fetching customers:", error);
+      // Try alternative endpoints
+      await tryAlternativeFetch();
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  // Alternative fetch method if the main one fails
+  const tryAlternativeFetch = async () => {
+    try {
+      console.log("Customers: Trying alternative fetch method...");
+      
+      const endpoints = [
+        `${serverUrl}/customers?limit=1000`,
+        `${serverUrl}/customers/all`,
+      ];
+      
+      let allCustomers: Customer[] = [];
+      
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint);
+          if (response.ok) {
+            const data = await response.json();
+            if (Array.isArray(data)) {
+              allCustomers = data;
+              break;
+            } else if (data.customers && Array.isArray(data.customers)) {
+              allCustomers = data.customers;
+              break;
+            } else if (data.data && Array.isArray(data.data)) {
+              allCustomers = data.data;
+              break;
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch from ${endpoint}:`, error);
+          continue;
+        }
+      }
+      
+      console.log(`Customers: Alternative fetch got ${allCustomers.length} customers`);
+      setCustomers(allCustomers);
+    } catch (error) {
+      console.error("Customers: Alternative fetch also failed:", error);
     }
   };
 
@@ -438,29 +487,7 @@ export default function Customers() {
           )}
         </div>
 
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-            <div className="text-sm text-gray-700">
-              Page {currentPage} sur {totalPages}
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                Précédent
-              </button>
-              <button
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-              >
-                Suivant
-              </button>
-            </div>
-          </div>
-        )}
+        {/* REMOVED PAGINATION SECTION - No more page navigation */}
       </div>
 
       {showAddModal && (
