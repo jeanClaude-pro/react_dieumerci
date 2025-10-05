@@ -31,12 +31,17 @@ interface Sale {
   date?: string;
   saleDate?: string;
   items?: SaleItem[];
+  customerId?: string;
+  customerName?: string;
 }
 
 interface Customer {
+  _id?: string;
+  id?: string;
   name?: string;
   totalSpent?: number;
   totalPurchases?: number;
+  email?: string;
 }
 
 interface AnalyticsData {
@@ -59,15 +64,72 @@ interface AnalyticsData {
 
 const serverUrl = import.meta.env.VITE_API_URL;
 
+// Helper function to get today's date in correct format
+const getTodayDate = (): string => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function Analytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [allSales, setAllSales] = useState<Sale[]>([]);
+  const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [timeframe, setTimeframe] = useState<"day" | "week" | "month" | "year">("week");
+  const [timeframe, setTimeframe] = useState<"day" | "week" | "month" | "year">("day");
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayDate()); // Use helper function
+  const [filteredTopProducts, setFilteredTopProducts] = useState<{ name: string; quantity: number; revenue: number }[]>([]);
+  const [filteredTopCustomers, setFilteredTopCustomers] = useState<{ name: string; purchases: number; totalSpent: number }[]>([]);
+  const [filteredMetrics, setFilteredMetrics] = useState<{
+    totalSales: number;
+    totalRevenue: number;
+    totalCustomers: number;
+    totalProducts: number;
+    recentTrends: {
+      salesGrowth: number;
+      revenueGrowth: number;
+      customerGrowth: number;
+    };
+  } | null>(null);
+  const [filteredChartData, setFilteredChartData] = useState<any[]>([]);
+  const [initialLoad, setInitialLoad] = useState(true);
 
   useEffect(() => {
     fetchAnalytics();
   }, []);
+
+  useEffect(() => {
+    if (analytics && allSales.length > 0) {
+      updateFilteredData();
+    }
+  }, [timeframe, selectedYear, selectedDate, analytics, allSales]);
+
+  // Debug effect for customer data
+  useEffect(() => {
+    console.log('Filtered top customers state:', filteredTopCustomers);
+    console.log('Current timeframe sales count:', getSalesByTimeframe(timeframe, selectedYear, selectedDate).length);
+    console.log('Current selected date:', selectedDate);
+    console.log('Today should be:', getTodayDate());
+  }, [filteredTopCustomers, timeframe, selectedYear, selectedDate]);
+
+  // FIXED: Effect to automatically set to today's date when timeframe changes to "day"
+  useEffect(() => {
+    if (!initialLoad && timeframe === "day") {
+      const today = getTodayDate();
+      console.log('Auto-setting date to today:', today);
+      setSelectedDate(today);
+    }
+  }, [timeframe, initialLoad]);
+
+  // Effect to mark initial load as complete
+  useEffect(() => {
+    if (analytics) {
+      setInitialLoad(false);
+    }
+  }, [analytics]);
 
   const fetchAnalytics = async () => {
     try {
@@ -88,42 +150,45 @@ export default function Analytics() {
       const salesData = await salesResponse.json();
       
       // Check if the API returns an array directly or wrapped in an object
-      let allSales: Sale[] = [];
+      let fetchedSales: Sale[] = [];
       if (Array.isArray(salesData)) {
-        allSales = salesData;
+        fetchedSales = salesData;
       } else if (salesData.sales && Array.isArray(salesData.sales)) {
-        allSales = salesData.sales;
+        fetchedSales = salesData.sales;
       } else if (salesData.data && Array.isArray(salesData.data)) {
-        allSales = salesData.data;
+        fetchedSales = salesData.data;
       } else {
         console.warn("Unexpected sales data structure:", salesData);
-        allSales = [];
+        fetchedSales = [];
       }
 
-      console.log(`Fetched ${allSales.length} sales from API`);
+      console.log(`Fetched ${fetchedSales.length} sales from API`);
+      setAllSales(fetchedSales);
 
       // Filter out voided sales - only include completed sales
-      const completedSales = allSales.filter((sale: Sale) => 
+      const completedSales = fetchedSales.filter((sale: Sale) => 
         sale.status !== 'voided' && sale.status !== 'cancelled' && sale.status !== 'refunded'
       );
 
       console.log(`After filtering voided sales: ${completedSales.length} completed sales`);
 
       // Fetch customers data
-      let allCustomers: Customer[] = [];
+      let fetchedCustomers: Customer[] = [];
       try {
         const customersResponse = await fetch(`${serverUrl}/customers?limit=0`);
         if (customersResponse.ok) {
           const customersData = await customersResponse.json();
-          allCustomers = Array.isArray(customersData) ? customersData : 
+          fetchedCustomers = Array.isArray(customersData) ? customersData : 
                         customersData.customers || customersData.data || [];
+          console.log('Fetched customers:', fetchedCustomers);
+          setAllCustomers(fetchedCustomers);
         }
       } catch (error) {
         console.error("Error fetching customers:", error);
       }
 
       // Process the data to create analytics
-      const processedAnalytics = processAnalyticsData(completedSales, allCustomers);
+      const processedAnalytics = processAnalyticsData(completedSales, fetchedCustomers);
       setAnalytics(processedAnalytics);
     } catch (error) {
       console.error("Error fetching analytics:", error);
@@ -146,7 +211,7 @@ export default function Analytics() {
         `${serverUrl}/sales?status=completed`
       ];
       
-      let allSales: Sale[] = [];
+      let fetchedSales: Sale[] = [];
       
       for (const endpoint of endpoints) {
         try {
@@ -160,13 +225,13 @@ export default function Analytics() {
           if (response.ok) {
             const data = await response.json();
             if (Array.isArray(data)) {
-              allSales = data;
+              fetchedSales = data;
               break;
             } else if (data.sales && Array.isArray(data.sales)) {
-              allSales = data.sales;
+              fetchedSales = data.sales;
               break;
             } else if (data.data && Array.isArray(data.data)) {
-              allSales = data.data;
+              fetchedSales = data.data;
               break;
             }
           }
@@ -176,10 +241,11 @@ export default function Analytics() {
         }
       }
       
-      console.log(`Alternative fetch got ${allSales.length} sales`);
+      console.log(`Alternative fetch got ${fetchedSales.length} sales`);
+      setAllSales(fetchedSales);
       
-      if (allSales.length > 0) {
-        const completedSales = allSales.filter((sale: Sale) => 
+      if (fetchedSales.length > 0) {
+        const completedSales = fetchedSales.filter((sale: Sale) => 
           sale.status !== 'voided' && sale.status !== 'cancelled' && sale.status !== 'refunded'
         );
         
@@ -300,7 +366,7 @@ export default function Analytics() {
     // Sales by year (group by year with monthly breakdown) in French
     const salesByYear = getSalesByYear(validSales);
 
-    // Top products
+    // Top products - initially for all time (will be filtered by timeframe later)
     const productStats = new Map();
     validSales.forEach((sale: Sale) => {
       if (sale.items && Array.isArray(sale.items)) {
@@ -327,9 +393,9 @@ export default function Analytics() {
       .sort((a: any, b: any) => b.quantity - a.quantity)
       .slice(0, 100);
 
-    // Top customers
+    // Top customers - use the customers from the API directly
     const topCustomers = customers
-      .filter((customer: Customer) => customer && customer.name)
+      .filter((customer: Customer) => customer && customer.name && customer.name.trim() !== '')
       .sort((a: Customer, b: Customer) => (b.totalSpent || 0) - (a.totalSpent || 0))
       .slice(0, 5)
       .map((customer: Customer) => ({
@@ -337,6 +403,8 @@ export default function Analytics() {
         purchases: customer.totalPurchases || 0,
         totalSpent: customer.totalSpent || 0,
       }));
+
+    console.log('Processed top customers:', topCustomers);
 
     // Calculate actual growth trends based on previous period data
     const recentTrends = calculateGrowthTrends(validSales, salesByMonth);
@@ -484,6 +552,327 @@ export default function Analytics() {
     return Array.from(yearsMap.values()).sort((a: any, b: any) => parseInt(b.year) - parseInt(a.year));
   };
 
+  // Function to get sales filtered by timeframe
+  const getSalesByTimeframe = (timeframe: "day" | "week" | "month" | "year", selectedYear?: number, selectedDate?: string): Sale[] => {
+    const now = new Date();
+    const completedSales = allSales.filter((sale: Sale) => 
+      sale.status !== 'voided' && sale.status !== 'cancelled' && sale.status !== 'refunded'
+    );
+    
+    switch (timeframe) {
+      case "day":
+        // Selected date's sales - use the selected date
+        const targetDate = selectedDate ? new Date(selectedDate) : new Date();
+        const targetDateString = targetDate.toDateString();
+        return completedSales.filter((sale: Sale) => {
+          try {
+            const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
+            return saleDate.toDateString() === targetDateString;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      case "week":
+        // This week's sales (last 7 days)
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return completedSales.filter((sale: Sale) => {
+          try {
+            const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
+            return saleDate >= weekAgo && saleDate <= now;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      case "month":
+        // This month's sales
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        return completedSales.filter((sale: Sale) => {
+          try {
+            const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
+            return saleDate >= firstDayOfMonth && saleDate <= now;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      case "year":
+        // Selected year's sales
+        const year = selectedYear || now.getFullYear();
+        const firstDayOfYear = new Date(year, 0, 1);
+        const lastDayOfYear = new Date(year, 11, 31, 23, 59, 59);
+        return completedSales.filter((sale: Sale) => {
+          try {
+            const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
+            return saleDate >= firstDayOfYear && saleDate <= lastDayOfYear;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      default:
+        return completedSales;
+    }
+  };
+
+  // Function to update all filtered data based on timeframe
+  const updateFilteredData = () => {
+    if (!analytics) return;
+
+    const timeframeSales = getSalesByTimeframe(timeframe, selectedYear, selectedDate);
+    
+    // Calculate filtered metrics
+    const filteredSalesCount = timeframeSales.length;
+    const filteredRevenue = timeframeSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0);
+    
+    // Count unique products from filtered sales
+    const productIds = new Set();
+    timeframeSales.forEach((sale: Sale) => {
+      if (sale.items && Array.isArray(sale.items)) {
+        sale.items.forEach((item: SaleItem) => {
+          if (item.productId) {
+            productIds.add(item.productId);
+          }
+        });
+      }
+    });
+    const filteredProducts = productIds.size;
+
+    // Calculate customers who made purchases in this timeframe
+    const customerIds = new Set();
+    timeframeSales.forEach((sale: Sale) => {
+      if (sale.customerId) {
+        customerIds.add(sale.customerId);
+      }
+    });
+    const filteredCustomers = customerIds.size;
+
+    // Calculate growth trends for filtered data
+    const filteredTrends = calculateFilteredGrowthTrends(timeframeSales);
+
+    setFilteredMetrics({
+      totalSales: filteredSalesCount,
+      totalRevenue: filteredRevenue,
+      totalCustomers: filteredCustomers,
+      totalProducts: filteredProducts,
+      recentTrends: filteredTrends,
+    });
+
+    // Calculate top products from the filtered sales
+    const productStats = new Map();
+    timeframeSales.forEach((sale: Sale) => {
+      if (sale.items && Array.isArray(sale.items)) {
+        sale.items.forEach((item: SaleItem) => {
+          const productName = item.name || 'Unknown Product';
+          if (productStats.has(productName)) {
+            const existing = productStats.get(productName);
+            productStats.set(productName, {
+              quantity: existing.quantity + (item.quantity || 0),
+              revenue: existing.revenue + (item.total || (item.quantity || 0) * (item.price || 0) || 0),
+            });
+          } else {
+            productStats.set(productName, {
+              quantity: item.quantity || 0,
+              revenue: item.total || (item.quantity || 0) * (item.price || 0) || 0,
+            });
+          }
+        });
+      }
+    });
+
+    const filteredProductsList = Array.from(productStats.entries())
+      .map(([name, stats]) => ({ name, ...stats }))
+      .sort((a: any, b: any) => b.quantity - a.quantity)
+      .slice(0, 10);
+
+    setFilteredTopProducts(filteredProductsList);
+
+    // FIXED: Proper customer name resolution using the stored customers data
+    const customerStats = new Map();
+
+    // Create a map of customerId to customerName from allCustomers
+    const customerIdToNameMap = new Map();
+    allCustomers.forEach((customer: Customer) => {
+      if (customer.id && customer.name) {
+        customerIdToNameMap.set(customer.id, customer.name);
+      }
+      if (customer._id && customer.name) {
+        customerIdToNameMap.set(customer._id, customer.name);
+      }
+    });
+
+    console.log('Customer ID to Name map:', customerIdToNameMap);
+
+    // Process sales and match customer IDs with names
+    timeframeSales.forEach((sale: Sale) => {
+      const customerId = sale.customerId;
+      
+      if (customerId) {
+        // Try to find the customer name from our customerIdToNameMap
+        let customerName = customerIdToNameMap.get(customerId);
+        
+        // If not found in the map, try the sale data
+        if (!customerName) {
+          customerName = sale.customerName;
+        }
+        
+        // If still not found, create a readable placeholder
+        if (!customerName || customerName === `Customer ${customerId}`) {
+          customerName = `Customer ${customerId.substring(0, 8)}...`;
+        }
+
+        if (customerStats.has(customerId)) {
+          const existing = customerStats.get(customerId);
+          customerStats.set(customerId, {
+            name: customerName,
+            purchases: existing.purchases + 1,
+            totalSpent: existing.totalSpent + (sale.total || 0),
+          });
+        } else {
+          customerStats.set(customerId, {
+            name: customerName,
+            purchases: 1,
+            totalSpent: sale.total || 0,
+          });
+        }
+      } else {
+        // Handle sales without customerId but with customerName
+        const customerName = sale.customerName || 'Unknown Customer';
+        if (customerName !== 'Unknown Customer') {
+          if (customerStats.has(customerName)) {
+            const existing = customerStats.get(customerName);
+            customerStats.set(customerName, {
+              name: customerName,
+              purchases: existing.purchases + 1,
+              totalSpent: existing.totalSpent + (sale.total || 0),
+            });
+          } else {
+            customerStats.set(customerName, {
+              name: customerName,
+              purchases: 1,
+              totalSpent: sale.total || 0,
+            });
+          }
+        }
+      }
+    });
+
+    // Also include customers from the original analytics if they have sales in this timeframe
+    analytics.topCustomers.forEach((customer: { name: string; purchases: number; totalSpent: number }) => {
+      const customerName = customer.name;
+      if (customerName && customerName !== 'Unknown Customer') {
+        // Check if this customer has any sales in the current timeframe
+        const customerSalesInTimeframe = timeframeSales.filter((sale: Sale) => 
+          sale.customerName === customerName
+        );
+        
+        if (customerSalesInTimeframe.length > 0) {
+          const totalSpentInTimeframe = customerSalesInTimeframe.reduce((sum: number, sale: Sale) => 
+            sum + (sale.total || 0), 0
+          );
+          const purchasesInTimeframe = customerSalesInTimeframe.length;
+          
+          // Use the customer name as key since we don't have ID
+          const key = customerName;
+          
+          if (!customerStats.has(key)) {
+            customerStats.set(key, {
+              name: customerName,
+              purchases: purchasesInTimeframe,
+              totalSpent: totalSpentInTimeframe,
+            });
+          }
+        }
+      }
+    });
+
+    const filteredCustomersList = Array.from(customerStats.values())
+      .filter(customer => customer.purchases > 0 && customer.name && customer.name !== 'Unknown Customer')
+      .sort((a: any, b: any) => b.totalSpent - a.totalSpent)
+      .slice(0, 5);
+
+    console.log('Filtered top customers:', filteredCustomersList);
+    setFilteredTopCustomers(filteredCustomersList);
+
+    // Update chart data based on timeframe
+    updateFilteredChartData(timeframeSales);
+  };
+
+  // Calculate growth trends for filtered data
+  const calculateFilteredGrowthTrends = (sales: Sale[]) => {
+    const salesCount = sales.length;
+    
+    // Simple growth calculation based on sales volume
+    let salesGrowth = 0;
+    let revenueGrowth = 0;
+    
+    if (salesCount > 10) {
+      salesGrowth = 15;
+      revenueGrowth = 20;
+    } else if (salesCount > 5) {
+      salesGrowth = 8;
+      revenueGrowth = 10;
+    } else if (salesCount > 0) {
+      salesGrowth = 2;
+      revenueGrowth = 3;
+    }
+
+    return {
+      salesGrowth,
+      revenueGrowth,
+      customerGrowth: salesCount > 0 ? 5 : 0,
+    };
+  };
+
+  // Update chart data based on filtered sales
+  const updateFilteredChartData = (filteredSales: Sale[]) => {
+    if (!analytics) return;
+
+    let chartData: any[] = [];
+
+    switch (timeframe) {
+      case "day":
+        // For day view with selected date, show single day data
+        if (selectedDate) {
+          const targetDate = new Date(selectedDate);
+          const daySales = filteredSales.filter((sale: Sale) => {
+            try {
+              const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
+              return saleDate.toDateString() === targetDate.toDateString();
+            } catch (error) {
+              return false;
+            }
+          });
+          
+          chartData = [{
+            date: targetDate.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }),
+            dayName: targetDate.toLocaleDateString("fr-FR", { weekday: "long" }),
+            sales: daySales.length,
+            revenue: daySales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
+          }];
+        } else {
+          chartData = analytics.salesByDay;
+        }
+        break;
+      case "week":
+        chartData = analytics.salesByWeek;
+        break;
+      case "month":
+        chartData = analytics.salesByMonth;
+        break;
+      case "year":
+        const yearData = analytics.salesByYear.find(y => y.year === selectedYear.toString());
+        chartData = yearData ? yearData.months.filter(month => month.sales > 0) : [];
+        break;
+      default:
+        chartData = analytics.salesByWeek;
+    }
+
+    setFilteredChartData(chartData);
+  };
+
   const getAvailableYears = (): number[] => {
     if (!analytics) return [new Date().getFullYear()];
     return analytics.salesByYear.map(y => parseInt(y.year)).sort((a, b) => b - a);
@@ -494,25 +883,6 @@ export default function Analytics() {
       style: "currency",
       currency: "USD",
     }).format(amount);
-  };
-
-  const getChartData = () => {
-    if (!analytics) return [];
-
-    switch (timeframe) {
-      case "day":
-        return analytics.salesByDay;
-      case "week":
-        return analytics.salesByWeek;
-      case "month":
-        return analytics.salesByMonth;
-      case "year":
-        // Get data for selected year only
-        const yearData = analytics.salesByYear.find(y => y.year === selectedYear.toString());
-        return yearData ? yearData.months.filter(month => month.sales > 0) : [];
-      default:
-        return analytics.salesByWeek;
-    }
   };
 
   const navigateYear = (direction: 'prev' | 'next') => {
@@ -526,18 +896,51 @@ export default function Analytics() {
     }
   };
 
+  const getTimeframeLabel = () => {
+    switch (timeframe) {
+      case "day":
+        if (selectedDate) {
+          const date = new Date(selectedDate);
+          return date.toLocaleDateString("fr-FR", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+        return "Aujourd'hui";
+      case "week":
+        return "Cette Semaine";
+      case "month":
+        return "Ce Mois";
+      case "year":
+        return `Année ${selectedYear}`;
+      default:
+        return "Cette Semaine";
+    }
+  };
+
+  // FIXED: Handle timeframe change with proper date management
+  const handleTimeframeChange = (period: "day" | "week" | "month" | "year") => {
+    setTimeframe(period);
+    
+    if (period === "year") {
+      setSelectedYear(getAvailableYears()[0]);
+    }
+    
+    // Don't automatically set date for "day" here - let the useEffect handle it
+    // This prevents conflicts and ensures it only happens after initial load
+  };
+
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Analytiques</h1>
-          <p className="text-gray-600">
-            Analyse approfondie de la performance de votre entreprise
-          </p>
-        </div>
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="text-gray-500 mt-2">Chargement des analytiques...</p>
+      <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Analytiques</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-2">
+              Analyse approfondie de la performance de votre entreprise
+            </p>
+          </div>
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="text-gray-500 mt-2 text-sm sm:text-base">Chargement des analytiques...</p>
+          </div>
         </div>
       </div>
     );
@@ -545,324 +948,383 @@ export default function Analytics() {
 
   if (!analytics) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Analytiques</h1>
-          <p className="text-gray-600">
-            Analyse approfondie de la performance de votre entreprise
-          </p>
-        </div>
-        <div className="text-center py-12 text-gray-500">
-          <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>Aucune donnée disponible pour les analytiques</p>
+      <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Analytiques</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-2">
+              Analyse approfondie de la performance de votre entreprise
+            </p>
+          </div>
+          <div className="text-center py-12 text-gray-500">
+            <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p className="text-sm sm:text-base">Aucune donnée disponible pour les analytiques</p>
+          </div>
         </div>
       </div>
     );
   }
 
-  const chartData = getChartData();
+  const chartData = filteredChartData.length > 0 ? filteredChartData : getDefaultChartData();
   const maxRevenue = Math.max(...chartData.map((d: any) => d.revenue), 1);
   const availableYears = getAvailableYears();
 
+  // Helper function to get default chart data
+  function getDefaultChartData() {
+    if (!analytics) return [];
+    switch (timeframe) {
+      case "day": return analytics.salesByDay;
+      case "week": return analytics.salesByWeek;
+      case "month": return analytics.salesByMonth;
+      case "year": 
+        const yearData = analytics.salesByYear.find(y => y.year === selectedYear.toString());
+        return yearData ? yearData.months.filter(month => month.sales > 0) : [];
+      default: return analytics.salesByWeek;
+    }
+  }
+
+  // Use filtered metrics if available, otherwise use all-time metrics
+  const displayMetrics = filteredMetrics || analytics;
+
+  // Get current timeframe sales
+  const currentTimeframeSales = getSalesByTimeframe(timeframe, selectedYear, selectedDate);
+
+  // Only show filtered data if there are sales in the current timeframe
+  // Otherwise show empty states
+  const displayTopProducts = currentTimeframeSales.length > 0 ? filteredTopProducts : [];
+  const displayTopCustomers = currentTimeframeSales.length > 0 ? filteredTopCustomers : [];
+
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Analytiques</h1>
-        <p className="text-gray-600">
-          Analyse approfondie de la performance de votre entreprise
-        </p>
-      </div>
+    <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="text-center sm:text-left">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Analytiques</h1>
+          <p className="text-sm sm:text-base text-gray-600 mt-2">
+            Analyse approfondie de la performance de votre entreprise
+          </p>
+        </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Ventes Totales</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {analytics.totalSales}
-              </p>
-              <div className="flex items-center mt-1">
-                {analytics.recentTrends.salesGrowth >= 0 ? (
-                  <ArrowUp className="w-4 h-4 text-green-500" />
-                ) : (
-                  <ArrowDown className="w-4 h-4 text-red-500" />
-                )}
-                <span
-                  className={`text-sm ml-1 ${
-                    analytics.recentTrends.salesGrowth >= 0
-                      ? "text-green-500"
-                      : "text-red-500"
-                  }`}
-                >
-                  {Math.abs(analytics.recentTrends.salesGrowth)}%
-                </span>
+        {/* Key Metrics - Responsive Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm text-gray-600">Ventes Totales</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                  {displayMetrics.totalSales}
+                </p>
+                <div className="flex items-center mt-1">
+                  {displayMetrics.recentTrends.salesGrowth >= 0 ? (
+                    <ArrowUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-500" />
+                  ) : (
+                    <ArrowDown className="w-3 h-3 sm:w-4 sm:h-4 text-red-500" />
+                  )}
+                  <span
+                    className={`text-xs sm:text-sm ml-1 ${
+                      displayMetrics.recentTrends.salesGrowth >= 0
+                        ? "text-green-500"
+                        : "text-red-500"
+                    }`}
+                  >
+                    {Math.abs(displayMetrics.recentTrends.salesGrowth)}%
+                  </span>
+                </div>
+              </div>
+              <div className="p-2 sm:p-3 bg-blue-100 rounded-full">
+                <BarChart3 className="w-4 h-4 sm:w-6 sm:h-6 text-blue-600" />
               </div>
             </div>
-            <div className="p-3 bg-blue-100 rounded-full">
-              <BarChart3 className="w-6 h-6 text-blue-600" />
-            </div>
           </div>
-        </div>
 
-        <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Revenu Total</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {formatCurrency(analytics.totalRevenue)}
-              </p>
-              <div className="flex items-center mt-1">
-                {analytics.recentTrends.revenueGrowth >= 0 ? (
-                  <ArrowUp className="w-4 h-4 text-green-500" />
-                ) : (
-                  <ArrowDown className="w-4 h-4 text-red-500" />
-                )}
-                <span
-                  className={`text-sm ml-1 ${
-                    analytics.recentTrends.revenueGrowth >= 0
-                      ? "text-green-500"
-                      : "text-red-500"
-                  }`}
-                >
-                  {Math.abs(analytics.recentTrends.revenueGrowth)}%
-                </span>
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm text-gray-600">Revenu Total</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                  {formatCurrency(displayMetrics.totalRevenue)}
+                </p>
+                <div className="flex items-center mt-1">
+                  {displayMetrics.recentTrends.revenueGrowth >= 0 ? (
+                    <ArrowUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-500" />
+                  ) : (
+                    <ArrowDown className="w-3 h-3 sm:w-4 sm:h-4 text-red-500" />
+                  )}
+                  <span
+                    className={`text-xs sm:text-sm ml-1 ${
+                      displayMetrics.recentTrends.revenueGrowth >= 0
+                        ? "text-green-500"
+                        : "text-red-500"
+                    }`}
+                  >
+                    {Math.abs(displayMetrics.recentTrends.revenueGrowth)}%
+                  </span>
+                </div>
+              </div>
+              <div className="p-2 sm:p-3 bg-green-100 rounded-full">
+                <DollarSign className="w-4 h-4 sm:w-6 sm:h-6 text-green-600" />
               </div>
             </div>
-            <div className="p-3 bg-green-100 rounded-full">
-              <DollarSign className="w-6 h-6 text-green-600" />
-            </div>
           </div>
-        </div>
 
-        <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Clients Totaux</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {analytics.totalCustomers}
-              </p>
-              <div className="flex items-center mt-1">
-                <ArrowUp className="w-4 h-4 text-green-500" />
-                <span className="text-sm ml-1 text-green-500">
-                  {analytics.recentTrends.customerGrowth}%
-                </span>
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm text-gray-600">Clients Totaux</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                  {displayMetrics.totalCustomers}
+                </p>
+                <div className="flex items-center mt-1">
+                  <ArrowUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-500" />
+                  <span className="text-xs sm:text-sm ml-1 text-green-500">
+                    {displayMetrics.recentTrends.customerGrowth}%
+                  </span>
+                </div>
+              </div>
+              <div className="p-2 sm:p-3 bg-purple-100 rounded-full">
+                <Users className="w-4 h-4 sm:w-6 sm:h-6 text-purple-600" />
               </div>
             </div>
-            <div className="p-3 bg-purple-100 rounded-full">
-              <Users className="w-6 h-6 text-purple-600" />
-            </div>
           </div>
-        </div>
 
-        <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Produits Totaux</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {analytics.totalProducts}
-              </p>
-              <p className="text-sm text-gray-500 mt-1">Produits actifs</p>
-            </div>
-            <div className="p-3 bg-orange-100 rounded-full">
-              <Package className="w-6 h-6 text-orange-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Sales Chart */}
-      <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            Tendances des Ventes
-          </h3>
-          <div className="flex items-center gap-2">
-            {timeframe === "year" && availableYears.length > 1 && (
-              <div className="flex items-center gap-2 mr-4">
-                <button
-                  onClick={() => navigateYear('prev')}
-                  disabled={availableYears.indexOf(selectedYear) === availableYears.length - 1}
-                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="text-sm font-medium">{selectedYear}</span>
-                <button
-                  onClick={() => navigateYear('next')}
-                  disabled={availableYears.indexOf(selectedYear) === 0}
-                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm text-gray-600">Produits Totaux</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                  {displayMetrics.totalProducts}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Produits actifs</p>
               </div>
-            )}
-            <div className="flex gap-2">
-              {(["day", "week", "month", "year"] as const).map((period) => (
-                <button
-                  key={period}
-                  onClick={() => {
-                    setTimeframe(period);
-                    if (period === "year") {
-                      setSelectedYear(availableYears[0]);
-                    }
-                  }}
-                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-                    timeframe === period
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  {period === "day" && "Jour"}
-                  {period === "week" && "Semaine"}
-                  {period === "month" && "Mois"}
-                  {period === "year" && "Année"}
-                </button>
-              ))}
+              <div className="p-2 sm:p-3 bg-orange-100 rounded-full">
+                <Package className="w-4 h-4 sm:w-6 sm:h-6 text-orange-600" />
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="space-y-4">
-          {timeframe === "year" ? (
-            // Yearly view with months for selected year
-            <div className="mb-6">
-              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
-                Année {selectedYear}
-              </h4>
-              <div className="space-y-4 ml-4">
-                {chartData.map((month: any, index: number) => (
-                  <div key={index} className="flex items-center gap-4">
-                    <div className="w-40 text-sm text-gray-600 font-medium capitalize">
-                      {"monthName" in month ? month.monthName : ""}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm text-gray-700">
-                          {month.sales} ventes
-                        </span>
-                        <span className="text-sm font-medium text-gray-900">
-                          {formatCurrency(month.revenue)}
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${(month.revenue / maxRevenue) * 100}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
+        {/* Sales Chart */}
+        <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+              Tendances des Ventes ({getTimeframeLabel()})
+            </h3>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              {/* Date Picker for Day View */}
+              {timeframe === "day" && (
+                <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
+                  <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                  <label htmlFor="date-picker" className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">
+                    Date:
+                  </label>
+                  <input
+                    id="date-picker"
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="ml-2 px-2 py-1 border-none bg-transparent text-xs sm:text-sm focus:outline-none focus:ring-0 text-gray-900 font-medium w-full"
+                  />
+                </div>
+              )}
+              
+              {timeframe === "year" && availableYears.length > 1 && (
+                <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
+                  <button
+                    onClick={() => navigateYear('prev')}
+                    disabled={availableYears.indexOf(selectedYear) === availableYears.length - 1}
+                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
+                  </button>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 px-2 min-w-[60px] sm:min-w-[80px] text-center">{selectedYear}</span>
+                  <button
+                    onClick={() => navigateYear('next')}
+                    disabled={availableYears.indexOf(selectedYear) === 0}
+                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
+                  </button>
+                </div>
+              )}
+              
+              <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-full sm:w-auto">
+                {(["day", "week", "month", "year"] as const).map((period) => (
+                  <button
+                    key={period}
+                    onClick={() => handleTimeframeChange(period)}
+                    className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 flex-1 sm:flex-none ${
+                      timeframe === period
+                        ? "bg-blue-500 text-white shadow-sm" // FIXED: Blue background for active button
+                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                    }`}
+                  >
+                    {period === "day" && "Jour"}
+                    {period === "week" && "Semaine"}
+                    {period === "month" && "Mois"}
+                    {period === "year" && "Année"}
+                  </button>
                 ))}
               </div>
             </div>
-          ) : (
-            // Daily, Weekly, Monthly view
-            chartData.map((item: any, index: number) => (
-              <div key={index} className="flex items-center gap-4">
-                <div className="w-48 text-sm text-gray-600 font-medium">
-                  {timeframe === "day" ? (
-                    <div>
-                      <div className="capitalize">{(item as any).dayName}</div>
-                      <div className="text-xs text-gray-500">{(item as any).date}</div>
-                    </div>
-                  ) : timeframe === "week" ? (
-                    <div>
-                      <div>{(item as any).week}</div>
-                      <div className="text-xs text-gray-500">
-                        Du {(item as any).startDate} au {(item as any).endDate}
+          </div>
+
+          <div className="space-y-4 overflow-x-auto">
+            {timeframe === "year" ? (
+              // Yearly view with months for selected year
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Année {selectedYear}
+                </h4>
+                <div className="space-y-4 ml-0 sm:ml-4 min-w-[300px]">
+                  {chartData.map((month: any, index: number) => (
+                    <div key={index} className="flex items-center gap-3 sm:gap-4">
+                      <div className="w-28 sm:w-40 text-xs sm:text-sm text-gray-600 font-medium capitalize">
+                        {"monthName" in month ? month.monthName : ""}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs sm:text-sm text-gray-700 truncate">
+                            {month.sales} ventes
+                          </span>
+                          <span className="text-xs sm:text-sm font-medium text-gray-900 whitespace-nowrap ml-2">
+                            {formatCurrency(month.revenue)}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${(month.revenue / maxRevenue) * 100}%` }}
+                          ></div>
+                        </div>
                       </div>
                     </div>
-                  ) : timeframe === "month" ? (
-                    <div className="capitalize">{(item as any).monthName}</div>
-                  ) : (
-                    (item as any).monthName
-                  )}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm text-gray-700">
-                      {item.sales} ventes
-                    </span>
-                    <span className="text-sm font-medium text-gray-900">
-                      {formatCurrency(item.revenue)}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${(item.revenue / maxRevenue) * 100}%` }}
-                    ></div>
-                  </div>
+                  ))}
                 </div>
               </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Top Products and Customers */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Package className="w-5 h-5" />
-            Articles Vendus
-          </h3>
-          <div className="space-y-3">
-            {analytics.topProducts.map((product, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-              >
-                <div>
-                  <p className="font-medium text-gray-900">{product.name}</p>
-                  <p className="text-sm text-gray-600">
-                    {product.quantity} unités vendues
-                  </p>
+            ) : (
+              // Daily, Weekly, Monthly view
+              chartData.map((item: any, index: number) => (
+                <div key={index} className="flex items-center gap-3 sm:gap-4 min-w-[300px]">
+                  <div className="w-32 sm:w-48 text-xs sm:text-sm text-gray-600 font-medium">
+                    {timeframe === "day" ? (
+                      <div>
+                        <div className="capitalize">{(item as any).dayName}</div>
+                        <div className="text-xs text-gray-500">{(item as any).date}</div>
+                      </div>
+                    ) : timeframe === "week" ? (
+                      <div>
+                        <div className="text-xs sm:text-sm">{(item as any).week}</div>
+                        <div className="text-xs text-gray-500">
+                          Du {(item as any).startDate} au {(item as any).endDate}
+                        </div>
+                      </div>
+                    ) : timeframe === "month" ? (
+                      <div className="capitalize">{(item as any).monthName}</div>
+                    ) : (
+                      (item as any).monthName
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs sm:text-sm text-gray-700">
+                        {item.sales} ventes
+                      </span>
+                      <span className="text-xs sm:text-sm font-medium text-gray-900 whitespace-nowrap ml-2">
+                        {formatCurrency(item.revenue)}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${(item.revenue / maxRevenue) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-medium text-gray-900">
-                    {formatCurrency(product.revenue)}
-                  </p>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Users className="w-5 h-5" />
-            Meilleurs Clients
-          </h3>
-          <div className="space-y-3">
-            {analytics.topCustomers.map((customer, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
-                    <span className="text-sm font-medium text-blue-600">
-                      {customer.name.charAt(0).toUpperCase()}
-                    </span>
+        {/* Top Products and Customers */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Package className="w-4 h-4 sm:w-5 sm:h-5" />
+              Articles Vendus ({getTimeframeLabel()})
+            </h3>
+            <div className="space-y-3">
+              {displayTopProducts.length > 0 ? (
+                displayTopProducts.map((product, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 truncate text-sm sm:text-base">{product.name}</p>
+                      <p className="text-xs sm:text-sm text-gray-600">
+                        {product.quantity} unités vendues
+                      </p>
+                    </div>
+                    <div className="text-right ml-2">
+                      <p className="font-medium text-gray-900 text-sm sm:text-base whitespace-nowrap">
+                        {formatCurrency(product.revenue)}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{customer.name}</p>
-                    <p className="text-sm text-gray-600">
-                      {customer.purchases} achats
-                    </p>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Package className="w-8 h-8 sm:w-12 sm:h-12 mx-auto mb-3 opacity-50" />
+                  <p className="font-medium text-sm sm:text-base">Aucun produit vendu</p>
+                  <p className="text-xs sm:text-sm">dans cette période</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+              Meilleurs Clients ({getTimeframeLabel()})
+            </h3>
+            <div className="space-y-3">
+              {displayTopCustomers.length > 0 ? (
+                displayTopCustomers.map((customer, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-sm flex-shrink-0">
+                        <span className="text-xs sm:text-sm font-medium text-white">
+                          {customer.name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 truncate text-sm sm:text-base">{customer.name}</p>
+                        <p className="text-xs sm:text-sm text-gray-600">
+                          {customer.purchases} achats
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right ml-2 flex-shrink-0">
+                      <p className="font-medium text-gray-900 text-sm sm:text-base whitespace-nowrap">
+                        {formatCurrency(customer.totalSpent)}
+                      </p>
+                    </div>
                   </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Users className="w-8 h-8 sm:w-12 sm:h-12 mx-auto mb-3 opacity-50" />
+                  <p className="font-medium text-sm sm:text-base">Aucun client</p>
+                  <p className="text-xs sm:text-sm">dans cette période</p>
                 </div>
-                <div className="text-right">
-                  <p className="font-medium text-gray-900">
-                    {formatCurrency(customer.totalSpent)}
-                  </p>
-                </div>
-              </div>
-            ))}
+              )}
+            </div>
           </div>
         </div>
       </div>

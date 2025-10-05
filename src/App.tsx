@@ -18,6 +18,7 @@ import Customers from "./pages/customers/Customers";
 import LoginPage from "./pages/login/page";
 import NewSale from "./pages/NewSale";
 import Reservation from "./pages/Reservation";
+import ReservationHistory from "./pages/ReservationHistory"
 import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider } from "./context/AuthProvider";
 
@@ -60,6 +61,14 @@ export default function App() {
                   element={
                     <RequireAuth>
                       <Reservation />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/reservationhistory"
+                  element={
+                    <RequireAuth>
+                      <ReservationHistory />
                     </RequireAuth>
                   }
                 />

@@ -97,7 +97,7 @@ const sidebarSections: SidebarSection[] = [
         id: "reservation-history", 
         label: "Historique de reservation", 
         icon: History, 
-        path: "/reservation-history",
+        path: "/reservationhistory",
         roles: ["admin", "staff"] // Both admin and staff can access reservation history
       },
       { 
