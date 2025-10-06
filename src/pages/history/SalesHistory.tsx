@@ -14,6 +14,9 @@ import {
   Minus,
   RefreshCw,
   Printer,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import jsPDF from "jspdf";
 
@@ -54,8 +57,18 @@ interface Product {
   sku?: string;
 }
 
+// Helper function to get today's date in correct format
+const getTodayDate = (): string => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function SalesHistory() {
   const [sales, setSales] = useState<Sale[]>([]);
+  const [allSales, setAllSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -73,6 +86,12 @@ export default function SalesHistory() {
   const [error, setError] = useState<string | null>(null);
   const [loadingProducts, setLoadingProducts] = useState(false);
 
+  // Timeframe state
+  const [timeframe, setTimeframe] = useState<"day" | "week" | "month" | "year">("day");
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
+  const [initialLoad, setInitialLoad] = useState(true);
+
   useEffect(() => {
     fetchSales();
     fetchProducts();
@@ -86,6 +105,21 @@ export default function SalesHistory() {
       window.removeEventListener("salesUpdated", handleSalesUpdate);
     };
   }, []);
+
+  useEffect(() => {
+    if (allSales.length > 0) {
+      updateFilteredSales();
+    }
+  }, [timeframe, selectedYear, selectedDate, allSales]);
+
+  // FIXED: Effect to automatically set to today's date when timeframe changes to "day"
+  useEffect(() => {
+    if (!initialLoad && timeframe === "day") {
+      const today = getTodayDate();
+      console.log('Auto-setting date to today:', today);
+      setSelectedDate(today);
+    }
+  }, [timeframe, initialLoad]);
 
   const fetchSales = async () => {
     try {
@@ -102,26 +136,27 @@ export default function SalesHistory() {
         const data = await res.json();
         
         // Handle different response formats
-        let allSales: Sale[] = [];
+        let fetchedSales: Sale[] = [];
         if (Array.isArray(data)) {
-          allSales = data;
+          fetchedSales = data;
         } else if (data.sales && Array.isArray(data.sales)) {
-          allSales = data.sales;
+          fetchedSales = data.sales;
         } else if (data.data && Array.isArray(data.data)) {
-          allSales = data.data;
+          fetchedSales = data.data;
         } else {
           console.warn("Unexpected sales data structure:", data);
-          allSales = [];
+          fetchedSales = [];
         }
 
-        console.log(`Fetched ${allSales.length} sales from API`);
+        console.log(`Fetched ${fetchedSales.length} sales from API`);
         
         // Sort sales by date - newest first
-        const sortedSales = allSales.sort((a, b) => 
+        const sortedSales = fetchedSales.sort((a, b) => 
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
         
-        setSales(sortedSales);
+        setAllSales(sortedSales);
+        setSales(sortedSales); // Initially show all sales
       } else {
         console.error("Sales fetch failed:", res.status);
         // Try alternative endpoints
@@ -134,6 +169,7 @@ export default function SalesHistory() {
       await tryAlternativeFetch();
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   };
 
@@ -147,7 +183,7 @@ export default function SalesHistory() {
         `${import.meta.env.VITE_API_URL}/sales/all`,
       ];
       
-      let allSales: Sale[] = [];
+      let fetchedSales: Sale[] = [];
       
       for (const endpoint of endpoints) {
         try {
@@ -161,13 +197,13 @@ export default function SalesHistory() {
           if (response.ok) {
             const data = await response.json();
             if (Array.isArray(data)) {
-              allSales = data;
+              fetchedSales = data;
               break;
             } else if (data.sales && Array.isArray(data.sales)) {
-              allSales = data.sales;
+              fetchedSales = data.sales;
               break;
             } else if (data.data && Array.isArray(data.data)) {
-              allSales = data.data;
+              fetchedSales = data.data;
               break;
             }
           }
@@ -177,16 +213,143 @@ export default function SalesHistory() {
         }
       }
       
-      console.log(`SalesHistory: Alternative fetch got ${allSales.length} sales`);
+      console.log(`SalesHistory: Alternative fetch got ${fetchedSales.length} sales`);
       
       // Sort sales by date - newest first
-      const sortedSales = allSales.sort((a, b) => 
+      const sortedSales = fetchedSales.sort((a, b) => 
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
       
+      setAllSales(sortedSales);
       setSales(sortedSales);
     } catch (error) {
       console.error("SalesHistory: Alternative fetch also failed:", error);
+    }
+  };
+
+  // Function to get sales filtered by timeframe
+  const getSalesByTimeframe = (timeframe: "day" | "week" | "month" | "year", selectedYear?: number, selectedDate?: string): Sale[] => {
+    const now = new Date();
+    
+    switch (timeframe) {
+      case "day":
+        // Selected date's sales - use the selected date
+        const targetDate = selectedDate ? new Date(selectedDate) : new Date();
+        const targetDateString = targetDate.toDateString();
+        return allSales.filter((sale: Sale) => {
+          try {
+            const saleDate = new Date(sale.createdAt);
+            return saleDate.toDateString() === targetDateString;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      case "week":
+        // This week's sales (last 7 days)
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return allSales.filter((sale: Sale) => {
+          try {
+            const saleDate = new Date(sale.createdAt);
+            return saleDate >= weekAgo && saleDate <= now;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      case "month":
+        // This month's sales
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        return allSales.filter((sale: Sale) => {
+          try {
+            const saleDate = new Date(sale.createdAt);
+            return saleDate >= firstDayOfMonth && saleDate <= now;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      case "year":
+        // Selected year's sales
+        const year = selectedYear || now.getFullYear();
+        const firstDayOfYear = new Date(year, 0, 1);
+        const lastDayOfYear = new Date(year, 11, 31, 23, 59, 59);
+        return allSales.filter((sale: Sale) => {
+          try {
+            const saleDate = new Date(sale.createdAt);
+            return saleDate >= firstDayOfYear && saleDate <= lastDayOfYear;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      default:
+        return allSales;
+    }
+  };
+
+  // Function to update filtered sales based on timeframe
+  const updateFilteredSales = () => {
+    const timeframeSales = getSalesByTimeframe(timeframe, selectedYear, selectedDate);
+    
+    // Sort the filtered sales by date - newest first
+    const sortedSales = timeframeSales.sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    
+    setSales(sortedSales);
+  };
+
+  const getAvailableYears = (): number[] => {
+    const years = Array.from(new Set(allSales.map((sale: Sale) => {
+      try {
+        return new Date(sale.createdAt).getFullYear();
+      } catch (error) {
+        return new Date().getFullYear();
+      }
+    })));
+    
+    return years.sort((a, b) => b - a);
+  };
+
+  const navigateYear = (direction: 'prev' | 'next') => {
+    const years = getAvailableYears();
+    const currentIndex = years.indexOf(selectedYear);
+    
+    if (direction === 'prev' && currentIndex < years.length - 1) {
+      setSelectedYear(years[currentIndex + 1]);
+    } else if (direction === 'next' && currentIndex > 0) {
+      setSelectedYear(years[currentIndex - 1]);
+    }
+  };
+
+  const getTimeframeLabel = () => {
+    switch (timeframe) {
+      case "day":
+        if (selectedDate) {
+          const date = new Date(selectedDate);
+          return date.toLocaleDateString("fr-FR", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+        return "Aujourd'hui";
+      case "week":
+        return "Cette Semaine";
+      case "month":
+        return "Ce Mois";
+      case "year":
+        return `Année ${selectedYear}`;
+      default:
+        return "Cette Semaine";
+    }
+  };
+
+  // FIXED: Handle timeframe change with proper date management
+  const handleTimeframeChange = (period: "day" | "week" | "month" | "year") => {
+    setTimeframe(period);
+    
+    if (period === "year") {
+      const years = getAvailableYears();
+      setSelectedYear(years[0] || new Date().getFullYear());
     }
   };
 
@@ -956,6 +1119,74 @@ export default function SalesHistory() {
         </div>
       </div>
 
+      {/* Timeframe Filter Section */}
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
+            Filtre par période ({getTimeframeLabel()})
+          </h3>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            {/* Date Picker for Day View */}
+            {timeframe === "day" && (
+              <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
+                <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                <label htmlFor="date-picker" className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">
+                  Date:
+                </label>
+                <input
+                  id="date-picker"
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="ml-2 px-2 py-1 border-none bg-transparent text-xs sm:text-sm focus:outline-none focus:ring-0 text-gray-900 font-medium w-full"
+                />
+              </div>
+            )}
+            
+            {timeframe === "year" && getAvailableYears().length > 1 && (
+              <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
+                <button
+                  onClick={() => navigateYear('prev')}
+                  disabled={getAvailableYears().indexOf(selectedYear) === getAvailableYears().length - 1}
+                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
+                </button>
+                <span className="text-xs sm:text-sm font-medium text-gray-900 px-2 min-w-[60px] sm:min-w-[80px] text-center">{selectedYear}</span>
+                <button
+                  onClick={() => navigateYear('next')}
+                  disabled={getAvailableYears().indexOf(selectedYear) === 0}
+                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
+                </button>
+              </div>
+            )}
+            
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-full sm:w-auto">
+              {(["day", "week", "month", "year"] as const).map((period) => (
+                <button
+                  key={period}
+                  onClick={() => handleTimeframeChange(period)}
+                  className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 flex-1 sm:flex-none ${
+                    timeframe === period
+                      ? "bg-blue-500 text-white shadow-sm"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  }`}
+                >
+                  {period === "day" && "Jour"}
+                  {period === "week" && "Semaine"}
+                  {period === "month" && "Mois"}
+                  {period === "year" && "Année"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
       {message && (
         <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg border border-green-200">
           {message}
@@ -984,7 +1215,7 @@ export default function SalesHistory() {
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <FileText className="w-5 h-5" />
-            Sales Transactions ({sales.length})
+            Transactions de vente ({filteredSales.length})
           </h2>
         </div>
 
@@ -992,12 +1223,13 @@ export default function SalesHistory() {
           {loading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="text-gray-500 mt-2">Loading sales...</p>
+              <p className="text-gray-500 mt-2">Chargement des ventes...</p>
             </div>
           ) : filteredSales.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>No sales found</p>
+              <p>Aucune vente trouvée</p>
+              <p className="text-sm">pour la période sélectionnée</p>
             </div>
           ) : (
             <table className="min-w-full divide-y divide-gray-200">
@@ -1135,8 +1367,6 @@ export default function SalesHistory() {
             </table>
           )}
         </div>
-
-        {/* REMOVED PAGINATION SECTION - No more page navigation */}
       </div>
 
       {/* Sale Details Modal */}
@@ -1145,7 +1375,7 @@ export default function SalesHistory() {
           <div className="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">
-                Sale Details
+                Détails de la vente
               </h3>
               <button
                 onClick={() => setShowModal(false)}
@@ -1351,7 +1581,7 @@ export default function SalesHistory() {
                   onClick={() => setShowModal(false)}
                   className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  Close
+                  Fermer
                 </button>
               </div>
             </div>

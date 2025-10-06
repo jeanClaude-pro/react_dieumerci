@@ -116,6 +116,9 @@ export default function NewSale() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Check if user is admin
+  const isAdmin = currentUser?.role === "admin";
+
   useEffect(() => {
     let cancelled = false;
     async function loadProducts() {
@@ -174,6 +177,76 @@ export default function NewSale() {
   ) {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
   }
+
+  // Function to display stock information based on user role
+  const renderStockInfo = (product: Product) => {
+    if (isAdmin) {
+      // Admin sees exact stock numbers
+      return `(Stock: ${product.stock})`;
+    } else {
+      // Staff sees stock status instead of exact numbers
+      if (product.stock === 0) {
+        return "(En rupture)";
+      } else if (product.stock <= 5) { // You can adjust this threshold
+        return "(Stock faible)";
+      } else {
+        return "(En stock)";
+      }
+    }
+  };
+
+  // Function to display available stock message based on user role
+  const renderAvailableStockMessage = (product: Product, quantity: number) => {
+    if (isAdmin) {
+      // Admin sees exact numbers
+      return (
+        <p className="text-sm text-gray-600 mb-4">
+          Stock disponible: <strong>{product.stock}</strong>
+          {quantity > 0 && (
+            <span className="ml-4">
+              Stock restant après vente:{" "}
+              {product.stock - quantity >= 0
+                ? product.stock - quantity
+                : "❌ pas assez de stock!"}
+            </span>
+          )}
+        </p>
+      );
+    } else {
+      // Staff sees status messages
+      if (product.stock === 0) {
+        return (
+          <p className="text-sm text-red-600 mb-4">
+            <strong>❌ En rupture de stock</strong>
+          </p>
+        );
+      } else if (product.stock <= 5) {
+        return (
+          <p className="text-sm text-orange-600 mb-4">
+            <strong>⚠️ Stock faible</strong>
+          </p>
+        );
+      } else if (quantity > 0 && quantity > product.stock) {
+        return (
+          <p className="text-sm text-red-600 mb-4">
+            <strong>❌ Quantité demandée non disponible</strong>
+          </p>
+        );
+      } else if (quantity > 0) {
+        return (
+          <p className="text-sm text-green-600 mb-4">
+            <strong>✅ Stock suffisant</strong>
+          </p>
+        );
+      } else {
+        return (
+          <p className="text-sm text-green-600 mb-4">
+            <strong>✅ En stock</strong>
+          </p>
+        );
+      }
+    }
+  };
 
   function handleAddToCart() {
     if (!product || quantity <= 0 || unitPrice <= 0) return;
@@ -1043,8 +1116,7 @@ export default function NewSale() {
               </option>
               {products.map((p) => (
                 <option key={p._id} value={p._id}>
-                  {p.name}{" "}
-                  {typeof p.stock === "number" ? `(Stock: ${p.stock})` : ""}
+                  {p.name} {renderStockInfo(p)}
                 </option>
               ))}
             </select>
@@ -1080,19 +1152,7 @@ export default function NewSale() {
           </div>
         </div>
 
-        {product && typeof product.stock === "number" && (
-          <p className="text-sm text-gray-600 mb-4">
-            Stock disponible: <strong>{product.stock}</strong>
-            {quantity > 0 && (
-              <span className="ml-4">
-                Stock restant après vente:{" "}
-                {product.stock - quantity >= 0
-                  ? product.stock - quantity
-                  : "❌ pas assez de stock!"}
-              </span>
-            )}
-          </p>
-        )}
+        {product && renderAvailableStockMessage(product, quantity)}
 
         <button
           type="button"

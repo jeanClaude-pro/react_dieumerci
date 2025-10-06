@@ -9,6 +9,13 @@ import type { Product } from "../../types";
 import { units, serverUrl } from "../../utils/constants";
 import CategoriesDropdown from "../../components/CategoriesDropdown";
 
+interface User {
+  _id: string;
+  name: string;
+  email: string;
+  role: "admin" | "staff";
+}
+
 export default function Products() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +25,7 @@ export default function Products() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [formData, setFormData] = useState<Partial<Product>>({
     name: "",
     description: "",
@@ -30,6 +38,20 @@ export default function Products() {
     weight: 0,
     status: "active",
   });
+
+  // Get current user from localStorage
+  useEffect(() => {
+    const userData = localStorage.getItem("user");
+    if (userData) {
+      try {
+        setCurrentUser(JSON.parse(userData));
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+      }
+    }
+  }, []);
+
+  const isAdmin = currentUser?.role === "admin";
 
   // API Functions
   const fetchProducts = async () => {
@@ -175,6 +197,82 @@ export default function Products() {
     return matchesSearch && matchesCategory;
   });
 
+  // Function to display stock information based on user role
+  const renderStockInfo = (product: Product) => {
+    if (isAdmin) {
+      // Admin sees exact stock numbers
+      return (
+        <span
+          className={`text-sm ${
+            product.stock <= product.minStock
+              ? "text-red-600 font-medium"
+              : "text-gray-900"
+          }`}
+        >
+          {product.stock} {product.unit}
+        </span>
+      );
+    } else {
+      // Staff sees stock status instead of exact numbers
+      if (product.stock === 0) {
+        return (
+          <span className="text-sm text-red-600 font-medium">En rupture</span>
+        );
+      } else if (product.stock <= product.minStock) {
+        return (
+          <span className="text-sm text-orange-600 font-medium">Stock faible</span>
+        );
+      } else {
+        return (
+          <span className="text-sm text-green-600 font-medium">En stock</span>
+        );
+      }
+    }
+  };
+
+  // Function to display stock details in view modal based on user role
+  const renderStockDetails = (product: Product) => {
+    if (isAdmin) {
+      // Admin sees all stock details
+      return (
+        <>
+          <div className="flex justify-between">
+            <span className="text-gray-600">Stock Actuel:</span>
+            <span
+              className={`font-medium ${
+                product.stock <= product.minStock
+                  ? "text-red-600"
+                  : "text-gray-900"
+              }`}
+            >
+              {product.stock} {product.unit}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-600">Stock minimal:</span>
+            <span className="font-medium">
+              {product.minStock} {product.unit}
+            </span>
+          </div>
+        </>
+      );
+    } else {
+      // Staff sees only stock status
+      return (
+        <div className="flex justify-between">
+          <span className="text-gray-600">Statut du stock:</span>
+          {product.stock === 0 ? (
+            <span className="font-medium text-red-600">En rupture</span>
+          ) : product.stock <= product.minStock ? (
+            <span className="font-medium text-orange-600">Stock faible</span>
+          ) : (
+            <span className="font-medium text-green-600">En stock</span>
+          )}
+        </div>
+      );
+    }
+  };
+
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
@@ -182,6 +280,11 @@ export default function Products() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Articles</h1>
           <p className="text-gray-600">Gérez votre catalogue des Articles</p>
+          {!isAdmin && (
+            <p className="text-sm text-blue-600 mt-1">
+              Staff
+            </p>
+          )}
         </div>
         <button
           onClick={() => setShowAddModal(true)}
@@ -275,15 +378,7 @@ export default function Products() {
                       {product.category}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`text-sm ${
-                          product.stock <= product.minStock
-                            ? "text-red-600 font-medium"
-                            : "text-gray-900"
-                        }`}
-                      >
-                        {product.stock} {product.unit}
-                      </span>
+                      {renderStockInfo(product)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
@@ -304,18 +399,22 @@ export default function Products() {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => openEditModal(product)}
-                          className="text-green-600 hover:text-green-900 p-1 rounded"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => deleteProduct(product._id)}
-                          className="text-red-600 hover:text-red-900 p-1 rounded"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {isAdmin && (
+                          <>
+                            <button
+                              onClick={() => openEditModal(product)}
+                              className="text-green-600 hover:text-green-900 p-1 rounded"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => deleteProduct(product._id)}
+                              className="text-red-600 hover:text-red-900 p-1 rounded"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -326,8 +425,8 @@ export default function Products() {
         )}
       </div>
 
-      {/* Add/Edit Product Modal */}
-      {(showAddModal || showEditModal) && (
+      {/* Add/Edit Product Modal - Only for Admin */}
+      {(showAddModal || showEditModal) && isAdmin && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
@@ -527,7 +626,7 @@ export default function Products() {
                   type="submit"
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                 >
-                  {showEditModal ? "Mettre à jour l’Article" : "Ajouter l’Article"}
+                  {showEditModal ? "Mettre à jour l'Article" : "Ajouter l'Article"}
                 </button>
               </div>
             </form>
@@ -542,7 +641,7 @@ export default function Products() {
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900">
-                  Détails de l’Article
+                  Détails de l'Article
                 </h2>
                 <button
                   onClick={() => setShowViewModal(false)}
@@ -585,7 +684,7 @@ export default function Products() {
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-3">
                   <h4 className="font-semibold text-gray-900">
-                    Informations sur l’Article
+                    Informations sur l'Article
                   </h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
@@ -606,27 +705,7 @@ export default function Products() {
                 <div className="space-y-3">
                   <h4 className="font-semibold text-gray-900">Stock</h4>
                   <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Stock Actuel:</span>
-                      <span
-                        className={`font-medium ${
-                          selectedProduct.stock <= selectedProduct.minStock
-                            ? "text-red-600"
-                            : "text-gray-900"
-                        }`}
-                      >
-                        {selectedProduct.stock} {selectedProduct.unit}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Stock minimal:</span>
-                      <span className="font-medium">
-                        {selectedProduct.minStock} {selectedProduct.unit}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Stock Maximal:</span>
-                    </div>
+                    {renderStockDetails(selectedProduct)}
                   </div>
                 </div>
               </div>
@@ -647,18 +726,20 @@ export default function Products() {
                 </div>
               )}
 
-              <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
-                <button
-                  onClick={() => {
-                    setShowViewModal(false);
-                    openEditModal(selectedProduct);
-                  }}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
-                >
-                  <Edit className="w-4 h-4" />
-                  Modifier l’Article
-                </button>
-              </div>
+              {isAdmin && (
+                <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
+                  <button
+                    onClick={() => {
+                      setShowViewModal(false);
+                      openEditModal(selectedProduct);
+                    }}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <Edit className="w-4 h-4" />
+                    Modifier l'Article
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
