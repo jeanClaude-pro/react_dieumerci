@@ -391,7 +391,7 @@ export default function Analytics() {
     const topProducts = Array.from(productStats.entries())
       .map(([name, stats]) => ({ name, ...stats }))
       .sort((a: any, b: any) => b.quantity - a.quantity)
-      .slice(0, 100);
+      .slice(0, 100); // Fixed: Changed from 10 to 100
 
     // Top customers - use the customers from the API directly
     const topCustomers = customers
@@ -685,7 +685,7 @@ export default function Analytics() {
     const filteredProductsList = Array.from(productStats.entries())
       .map(([name, stats]) => ({ name, ...stats }))
       .sort((a: any, b: any) => b.quantity - a.quantity)
-      .slice(0, 10);
+      .slice(0, 100); // Fixed: Changed from 10 to 100
 
     setFilteredTopProducts(filteredProductsList);
 
@@ -1155,7 +1155,7 @@ export default function Analytics() {
                     onClick={() => handleTimeframeChange(period)}
                     className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 flex-1 sm:flex-none ${
                       timeframe === period
-                        ? "bg-blue-500 text-white shadow-sm" // FIXED: Blue background for active button
+                        ? "bg-blue-500 text-white shadow-sm"
                         : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                     }`}
                   >
@@ -1255,7 +1255,7 @@ export default function Analytics() {
               <Package className="w-4 h-4 sm:w-5 sm:h-5" />
               Articles Vendus ({getTimeframeLabel()})
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-96 overflow-y-auto">
               {displayTopProducts.length > 0 ? (
                 displayTopProducts.map((product, index) => (
                   <div
@@ -1263,7 +1263,9 @@ export default function Analytics() {
                     className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 truncate text-sm sm:text-base">{product.name}</p>
+                      <p className="font-medium text-gray-900 truncate text-sm sm:text-base">
+                        {index + 1}. {product.name}
+                      </p>
                       <p className="text-xs sm:text-sm text-gray-600">
                         {product.quantity} unités vendues
                       </p>
