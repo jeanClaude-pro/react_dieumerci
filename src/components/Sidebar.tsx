@@ -136,30 +136,31 @@ const sidebarSections: SidebarSection[] = [
         path: "/customers",
         roles: ["admin", "manager", "cashier_supervisor"] // Admin, Manager, and Cashier Supervisor can access customers
       },
-      { 
-        id: "users", 
-        label: "Utilisateurs", 
-        icon: Users, 
-        path: "/users",
-        roles: ["admin", "manager"] // Only Admin and Manager can manage users
-      },
-      { 
-        id: "expenses", 
-        label: "Dépenses", 
-        icon: Wallet, 
-        path: "/expenses",
-        roles: ["admin", "manager"] // Only Admin and Manager can manage expenses
-      },
     ],
   },
 ];
 
-// Function to check if current time is within restricted hours (8 PM to 7 AM)
-const isRestrictedTime = (): boolean => {
+// Function to check if current time is within allowed hours (8 AM to 8 PM)
+const isAllowedTime = (): boolean => {
   const now = new Date();
   const currentHour = now.getHours();
-  // Restricted from 8 PM (20) to 7 AM (7)
-  return currentHour >= 20 || currentHour < 7;
+  // Allowed from 8 AM (8) to 8 PM (20)
+  return currentHour >= 8 && currentHour < 20;
+};
+
+// Function to check if today is Sunday
+const isSunday = (): boolean => {
+  const now = new Date();
+  return now.getDay() === 0; // 0 is Sunday
+};
+
+// Function to check if user has restricted access (non-admin outside allowed hours or on Sunday)
+const hasRestrictedAccess = (userRole: string | undefined): boolean => {
+  // Admin users always have access
+  if (userRole === "admin") return false;
+  
+  // Non-admin users have restricted access outside 8 AM - 8 PM or on Sundays
+  return !isAllowedTime() || isSunday();
 };
 
 export default function Sidebar() {
@@ -177,8 +178,8 @@ export default function Sidebar() {
   const touchEndX = useRef(0);
 
   const isAuthed = Boolean(token && user);
-  const isStaff = user?.role === "staff";
-  const isRestricted = isStaff && isRestrictedTime();
+  const isNonAdmin = user?.role !== "admin";
+  const isRestricted = isNonAdmin && hasRestrictedAccess(user?.role);
 
   // Check if mobile device and set appropriate initial state
   useEffect(() => {
@@ -211,9 +212,9 @@ export default function Sidebar() {
     return () => clearInterval(timer);
   }, []);
 
-  // Check for restricted time and auto-logout staff
+  // Check for restricted time and auto-logout non-admin users
   useEffect(() => {
-    if (isAuthed && isStaff) {
+    if (isAuthed && isNonAdmin) {
       if (isRestricted) {
         // Show warning for 10 seconds before auto-logout
         setShowTimeWarning(true);
@@ -226,7 +227,7 @@ export default function Sidebar() {
         setShowTimeWarning(false);
       }
     }
-  }, [isAuthed, isStaff, isRestricted, currentTime]);
+  }, [isAuthed, isNonAdmin, isRestricted, currentTime]);
 
   // Close mobile sidebar when route changes
   useEffect(() => {
@@ -311,6 +312,25 @@ export default function Sidebar() {
     });
   };
 
+  // Format day for display
+  const formatDay = (date: Date): string => {
+    return date.toLocaleDateString('fr-FR', { 
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long'
+    });
+  };
+
+  // Get restriction message based on the restriction type
+  const getRestrictionMessage = (): string => {
+    if (isSunday()) {
+      return "L'accès est restreint le dimanche.";
+    } else if (!isAllowedTime()) {
+      return `L'accès est restreint pour les utilisateurs non-admin de ${formatTime(new Date(new Date().setHours(20, 0, 0)))} à ${formatTime(new Date(new Date().setHours(8, 0, 0)))}.`;
+    }
+    return "Accès restreint.";
+  };
+
   // Mobile overlay to close sidebar when clicking outside
   const MobileOverlay = () => (
     <motion.div
@@ -372,9 +392,9 @@ export default function Sidebar() {
                 className="bg-red-600 text-white p-6 rounded-lg max-w-sm mx-4 text-center"
               >
                 <Clock className="w-12 h-12 mx-auto mb-4" />
-                <h3 className="text-lg font-bold mb-2">Heure de fermeture</h3>
+                <h3 className="text-lg font-bold mb-2">Accès Restreint</h3>
                 <p className="mb-4">
-                  L'accès est restreint pour le personnel de {formatTime(new Date(new Date().setHours(20, 0, 0)))} à {formatTime(new Date(new Date().setHours(7, 0, 0)))}.
+                  {getRestrictionMessage()}
                 </p>
                 <p className="mb-4 font-semibold">
                   Déconnexion automatique dans 10 secondes...
@@ -434,7 +454,7 @@ export default function Sidebar() {
             )}
           </div>
 
-          {/* Time Display - Only show when expanded */}
+          {/* Time and Date Display - Only show when expanded */}
           <AnimatePresence mode="wait">
             {((!isCollapsed && !isMobile) || (isMobile && isMobileOpen)) && (
               <motion.div
@@ -448,9 +468,12 @@ export default function Sidebar() {
                   <Clock className="w-3 h-3" />
                   {formatTime(currentTime)}
                 </div>
-                {isStaff && isRestricted && (
+                <div className="text-xs text-gray-500 mt-1">
+                  {formatDay(currentTime)}
+                </div>
+                {isNonAdmin && isRestricted && (
                   <div className="text-xs text-red-400 mt-1">
-                    Accès restreint • Ouverture à 07:00
+                    {isSunday() ? "Dimanche - Accès restreint" : "Accès restreint • Ouverture à 08:00"}
                   </div>
                 )}
               </motion.div>
@@ -469,7 +492,7 @@ export default function Sidebar() {
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    isStaff && isRestricted ? 'bg-red-500' : 'bg-blue-500'
+                    isNonAdmin && isRestricted ? 'bg-red-500' : 'bg-blue-500'
                   }`}>
                     <User className="w-4 h-4 text-white" />
                   </div>
@@ -478,10 +501,10 @@ export default function Sidebar() {
                       {user?.username || "Utilisateur"}
                     </p>
                     <p className={`text-xs capitalize ${
-                      isStaff && isRestricted ? 'text-red-400' : 'text-blue-400'
+                      isNonAdmin && isRestricted ? 'text-red-400' : 'text-blue-400'
                     }`}>
                       {user?.role || "Non défini"}
-                      {isStaff && isRestricted && " • Accès restreint"}
+                      {isNonAdmin && isRestricted && " • Accès restreint"}
                     </p>
                   </div>
                 </div>
@@ -501,7 +524,7 @@ export default function Sidebar() {
               >
                 <div className="relative group">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    isStaff && isRestricted ? 'bg-red-500' : 'bg-blue-500'
+                    isNonAdmin && isRestricted ? 'bg-red-500' : 'bg-blue-500'
                   }`}>
                     <User className="w-4 h-4 text-white" />
                   </div>
@@ -513,15 +536,18 @@ export default function Sidebar() {
                         {user?.username || "Utilisateur"}
                       </div>
                       <div className={`capitalize text-xs ${
-                        isStaff && isRestricted ? 'text-red-400' : 'text-blue-400'
+                        isNonAdmin && isRestricted ? 'text-red-400' : 'text-blue-400'
                       }`}>
                         {user?.role || "Non défini"}
-                        {isStaff && isRestricted && (
+                        {isNonAdmin && isRestricted && (
                           <div className="text-red-300">Accès restreint</div>
                         )}
                       </div>
                       <div className="text-gray-300 text-xs mt-1">
                         {formatTime(currentTime)}
+                      </div>
+                      <div className="text-gray-400 text-xs">
+                        {formatDay(currentTime)}
                       </div>
                     </div>
                   </div>
@@ -595,7 +621,7 @@ export default function Sidebar() {
                       {accessibleItems.map((item) => {
                         const isActive = location.pathname === item.path;
                         const Icon = item.icon;
-                        const isItemDisabled = isStaff && isRestricted && !item.roles?.includes('admin');
+                        const isItemDisabled = isNonAdmin && isRestricted;
 
                         return (
                           <li key={item.id}>
@@ -678,32 +704,6 @@ export default function Sidebar() {
             </nav>
 
             {/* Footer (only when authenticated) */}
-            <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:bg-red-600 hover:text-white transition-colors group"
-              >
-                <LogOut className="w-5 h-5 text-gray-400 group-hover:text-white" />
-                <AnimatePresence mode="wait">
-                  {((!isCollapsed && !isMobile) || (isMobile && isMobileOpen)) && (
-                    <motion.span
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -10 }}
-                      transition={{ duration: 0.2 }}
-                      className="font-medium text-sm"
-                    >
-                      Se déconnecter
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-                {(isCollapsed && !isMobile) && (
-                  <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
-                    Logout
-                  </div>
-                )}
-              </button>
-
-
             <div className="p-4 border-t border-gray-800 space-y-2 flex-shrink-0">
               {/* Notifications - For admin, manager, and cashier_supervisor */}
               {["admin", "manager", "cashier_supervisor"].includes(user?.role || "") && (
@@ -722,7 +722,7 @@ export default function Sidebar() {
                         transition={{ duration: 0.2 }}
                         className="font-medium text-sm"
                       >
-                        
+                        Notifications
                       </motion.span>
                     )}
                   </AnimatePresence>
@@ -751,19 +751,43 @@ export default function Sidebar() {
                         transition={{ duration: 0.2 }}
                         className="font-medium text-sm"
                       >
-                        
+                        Paramètres
                       </motion.span>
                     )}
                   </AnimatePresence>
                   {(isCollapsed && !isMobile) && (
                     <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
-                      Settings
+                      Paramètres
                     </div>
                   )}
                 </Link>
               )}
 
-              
+              {/* Logout Button */}
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:bg-red-600 hover:text-white transition-colors group"
+              >
+                <LogOut className="w-5 h-5 text-gray-400 group-hover:text-white" />
+                <AnimatePresence mode="wait">
+                  {((!isCollapsed && !isMobile) || (isMobile && isMobileOpen)) && (
+                    <motion.span
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.2 }}
+                      className="font-medium text-sm"
+                    >
+                      Se déconnecter
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                {(isCollapsed && !isMobile) && (
+                  <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                    Se déconnecter
+                  </div>
+                )}
+              </button>
             </div>
           </>
         )}
