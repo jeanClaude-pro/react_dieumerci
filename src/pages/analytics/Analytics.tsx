@@ -13,6 +13,8 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  Receipt,
+  Calculator,
 } from "lucide-react";
 
 // Define interfaces for the data structures
@@ -44,11 +46,21 @@ interface Customer {
   email?: string;
 }
 
+interface Expense {
+  _id?: string;
+  amount: number;
+  status: string;
+  createdAt?: string;
+  date?: string;
+  validatedAt?: string;
+}
+
 interface AnalyticsData {
   totalSales: number;
   totalRevenue: number;
   totalCustomers: number;
   totalProducts: number;
+  totalValidatedExpenses: number;
   salesByDay: { date: string; dayName: string; sales: number; revenue: number }[];
   salesByWeek: { week: string; startDate: string; endDate: string; sales: number; revenue: number }[];
   salesByMonth: { month: string; monthName: string; sales: number; revenue: number }[];
@@ -77,10 +89,11 @@ export default function Analytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [allSales, setAllSales] = useState<Sale[]>([]);
   const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
+  const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeframe, setTimeframe] = useState<"day" | "week" | "month" | "year">("day");
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [selectedDate, setSelectedDate] = useState<string>(getTodayDate()); // Use helper function
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
   const [filteredTopProducts, setFilteredTopProducts] = useState<{ name: string; quantity: number; revenue: number }[]>([]);
   const [filteredTopCustomers, setFilteredTopCustomers] = useState<{ name: string; purchases: number; totalSpent: number }[]>([]);
   const [filteredMetrics, setFilteredMetrics] = useState<{
@@ -88,6 +101,8 @@ export default function Analytics() {
     totalRevenue: number;
     totalCustomers: number;
     totalProducts: number;
+    totalValidatedExpenses: number;
+    netRevenue: number;
     recentTrends: {
       salesGrowth: number;
       revenueGrowth: number;
@@ -105,21 +120,12 @@ export default function Analytics() {
     if (analytics && allSales.length > 0) {
       updateFilteredData();
     }
-  }, [timeframe, selectedYear, selectedDate, analytics, allSales]);
+  }, [timeframe, selectedYear, selectedDate, analytics, allSales, allExpenses]);
 
-  // Debug effect for customer data
-  useEffect(() => {
-    console.log('Filtered top customers state:', filteredTopCustomers);
-    console.log('Current timeframe sales count:', getSalesByTimeframe(timeframe, selectedYear, selectedDate).length);
-    console.log('Current selected date:', selectedDate);
-    console.log('Today should be:', getTodayDate());
-  }, [filteredTopCustomers, timeframe, selectedYear, selectedDate]);
-
-  // FIXED: Effect to automatically set to today's date when timeframe changes to "day"
+  // Effect to automatically set to today's date when timeframe changes to "day"
   useEffect(() => {
     if (!initialLoad && timeframe === "day") {
       const today = getTodayDate();
-      console.log('Auto-setting date to today:', today);
       setSelectedDate(today);
     }
   }, [timeframe, initialLoad]);
@@ -149,7 +155,6 @@ export default function Analytics() {
       
       const salesData = await salesResponse.json();
       
-      // Check if the API returns an array directly or wrapped in an object
       let fetchedSales: Sale[] = [];
       if (Array.isArray(salesData)) {
         fetchedSales = salesData;
@@ -158,19 +163,39 @@ export default function Analytics() {
       } else if (salesData.data && Array.isArray(salesData.data)) {
         fetchedSales = salesData.data;
       } else {
-        console.warn("Unexpected sales data structure:", salesData);
         fetchedSales = [];
       }
 
-      console.log(`Fetched ${fetchedSales.length} sales from API`);
       setAllSales(fetchedSales);
+
+      // Fetch ALL expenses data without pagination limits
+      const expensesResponse = await fetch(`${serverUrl}/expenses?limit=0`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+        },
+      });
+      
+      let fetchedExpenses: Expense[] = [];
+      if (expensesResponse.ok) {
+        const expensesData = await expensesResponse.json();
+        
+        if (Array.isArray(expensesData)) {
+          fetchedExpenses = expensesData;
+        } else if (expensesData.expenses && Array.isArray(expensesData.expenses)) {
+          fetchedExpenses = expensesData.expenses;
+        } else if (expensesData.data && Array.isArray(expensesData.data)) {
+          fetchedExpenses = expensesData.data;
+        } else if (expensesData.expenses && expensesData.expenses.length) {
+          fetchedExpenses = expensesData.expenses;
+        }
+      }
+      setAllExpenses(fetchedExpenses);
 
       // Filter out voided sales - only include completed sales
       const completedSales = fetchedSales.filter((sale: Sale) => 
         sale.status !== 'voided' && sale.status !== 'cancelled' && sale.status !== 'refunded'
       );
-
-      console.log(`After filtering voided sales: ${completedSales.length} completed sales`);
 
       // Fetch customers data
       let fetchedCustomers: Customer[] = [];
@@ -180,7 +205,6 @@ export default function Analytics() {
           const customersData = await customersResponse.json();
           fetchedCustomers = Array.isArray(customersData) ? customersData : 
                         customersData.customers || customersData.data || [];
-          console.log('Fetched customers:', fetchedCustomers);
           setAllCustomers(fetchedCustomers);
         }
       } catch (error) {
@@ -188,11 +212,10 @@ export default function Analytics() {
       }
 
       // Process the data to create analytics
-      const processedAnalytics = processAnalyticsData(completedSales, fetchedCustomers);
+      const processedAnalytics = processAnalyticsData(completedSales, fetchedCustomers, fetchedExpenses);
       setAnalytics(processedAnalytics);
     } catch (error) {
       console.error("Error fetching analytics:", error);
-      // Fallback: try alternative API endpoints
       await tryAlternativeFetch();
     } finally {
       setLoading(false);
@@ -202,9 +225,6 @@ export default function Analytics() {
   // Alternative fetch method if the main one fails
   const tryAlternativeFetch = async () => {
     try {
-      console.log("Trying alternative fetch method...");
-      
-      // Try to fetch sales with different endpoints
       const endpoints = [
         `${serverUrl}/sales?limit=1000`,
         `${serverUrl}/sales/all`,
@@ -212,6 +232,7 @@ export default function Analytics() {
       ];
       
       let fetchedSales: Sale[] = [];
+      let fetchedExpenses: Expense[] = [];
       
       for (const endpoint of endpoints) {
         try {
@@ -236,20 +257,36 @@ export default function Analytics() {
             }
           }
         } catch (error) {
-          console.warn(`Failed to fetch from ${endpoint}:`, error);
           continue;
         }
       }
       
-      console.log(`Alternative fetch got ${fetchedSales.length} sales`);
+      // Try to fetch expenses
+      try {
+        const expensesResponse = await fetch(`${serverUrl}/expenses?limit=1000`);
+        if (expensesResponse.ok) {
+          const expensesData = await expensesResponse.json();
+          if (Array.isArray(expensesData)) {
+            fetchedExpenses = expensesData;
+          } else if (expensesData.expenses && Array.isArray(expensesData.expenses)) {
+            fetchedExpenses = expensesData.expenses;
+          } else if (expensesData.data && Array.isArray(expensesData.data)) {
+            fetchedExpenses = expensesData.data;
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching expenses:", error);
+      }
+      
       setAllSales(fetchedSales);
+      setAllExpenses(fetchedExpenses);
       
       if (fetchedSales.length > 0) {
         const completedSales = fetchedSales.filter((sale: Sale) => 
           sale.status !== 'voided' && sale.status !== 'cancelled' && sale.status !== 'refunded'
         );
         
-        const processedAnalytics = processAnalyticsData(completedSales, []);
+        const processedAnalytics = processAnalyticsData(completedSales, [], fetchedExpenses);
         setAnalytics(processedAnalytics);
       }
     } catch (error) {
@@ -259,16 +296,13 @@ export default function Analytics() {
 
   const processAnalyticsData = (
     sales: Sale[],
-    customers: Customer[]
+    customers: Customer[],
+    expenses: Expense[]
   ): AnalyticsData => {
-    console.log(`Processing ${sales.length} sales and ${customers.length} customers`);
-
-    // Filter out any invalid sales (ensure they have required properties)
+    // Filter out any invalid sales
     const validSales = sales.filter((sale: Sale) => 
       sale && typeof sale.total === 'number' && sale.items && Array.isArray(sale.items)
     );
-
-    console.log(`Valid sales for processing: ${validSales.length}`);
 
     // Calculate totals using valid sales only
     const totalSales = validSales.length;
@@ -288,9 +322,11 @@ export default function Analytics() {
     });
     const totalProducts = productIds.size;
 
-    console.log(`Calculated: ${totalSales} sales, $${totalRevenue} revenue, ${totalProducts} products`);
+    // Calculate total validated expenses (ALL TIME - for initial display)
+    const validatedExpenses = expenses.filter((expense: Expense) => expense.status === 'validated');
+    const totalValidatedExpenses = validatedExpenses.reduce((sum: number, expense: Expense) => sum + expense.amount, 0);
 
-    // Sales by day (last 7 days) with day names in French
+    // Sales by day (last 7 days)
     const salesByDay = getLast7Days().map((date: Date) => {
       const daySales = validSales.filter(
         (sale: Sale) => {
@@ -313,7 +349,7 @@ export default function Analytics() {
       };
     });
 
-    // Sales by week (last 4 weeks) with start and end dates in French
+    // Sales by week (last 4 weeks)
     const salesByWeek = getLast4Weeks().map((week: { start: Date; end: Date }, index: number) => {
       const weekSales = validSales.filter((sale: Sale) => {
         try {
@@ -342,7 +378,7 @@ export default function Analytics() {
       };
     });
 
-    // Sales by month (last 6 months) with full month names in French
+    // Sales by month (last 6 months)
     const salesByMonth = getLast6Months().map((month: { month: number; year: number; shortName: string; fullName: string }) => {
       const monthSales = validSales.filter((sale: Sale) => {
         try {
@@ -363,10 +399,10 @@ export default function Analytics() {
       };
     });
 
-    // Sales by year (group by year with monthly breakdown) in French
+    // Sales by year
     const salesByYear = getSalesByYear(validSales);
 
-    // Top products - initially for all time (will be filtered by timeframe later)
+    // Top products (ALL TIME - will be filtered by timeframe later)
     const productStats = new Map();
     validSales.forEach((sale: Sale) => {
       if (sale.items && Array.isArray(sale.items)) {
@@ -391,9 +427,9 @@ export default function Analytics() {
     const topProducts = Array.from(productStats.entries())
       .map(([name, stats]) => ({ name, ...stats }))
       .sort((a: any, b: any) => b.quantity - a.quantity)
-      .slice(0, 100); // Fixed: Changed from 10 to 100
+      .slice(0, 100);
 
-    // Top customers - use the customers from the API directly
+    // Top customers (ALL TIME - will be filtered by timeframe later)
     const topCustomers = customers
       .filter((customer: Customer) => customer && customer.name && customer.name.trim() !== '')
       .sort((a: Customer, b: Customer) => (b.totalSpent || 0) - (a.totalSpent || 0))
@@ -404,9 +440,7 @@ export default function Analytics() {
         totalSpent: customer.totalSpent || 0,
       }));
 
-    console.log('Processed top customers:', topCustomers);
-
-    // Calculate actual growth trends based on previous period data
+    // Calculate growth trends
     const recentTrends = calculateGrowthTrends(validSales, salesByMonth);
 
     return {
@@ -414,6 +448,7 @@ export default function Analytics() {
       totalRevenue,
       totalCustomers,
       totalProducts,
+      totalValidatedExpenses,
       salesByDay,
       salesByWeek,
       salesByMonth,
@@ -424,7 +459,7 @@ export default function Analytics() {
     };
   };
 
-  // Calculate actual growth trends instead of random numbers
+  // Calculate growth trends
   const calculateGrowthTrends = (sales: Sale[], salesByMonth: any[]) => {
     if (salesByMonth.length < 2) {
       return {
@@ -445,7 +480,7 @@ export default function Analytics() {
       ? Math.round(((currentMonth.revenue - previousMonth.revenue) / previousMonth.revenue) * 100)
       : currentMonth.revenue > 0 ? 100 : 0;
 
-    // For customer growth, we'll use a simple calculation based on recent sales
+    // For customer growth, use a simple calculation based on recent sales
     const recentSales = sales.filter((sale: Sale) => {
       try {
         const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
@@ -457,7 +492,7 @@ export default function Analytics() {
       }
     });
 
-    const customerGrowth = recentSales.length > 10 ? 15 : 5; // Simple heuristic
+    const customerGrowth = recentSales.length > 10 ? 15 : 5;
 
     return {
       salesGrowth,
@@ -552,6 +587,66 @@ export default function Analytics() {
     return Array.from(yearsMap.values()).sort((a: any, b: any) => parseInt(b.year) - parseInt(a.year));
   };
 
+  // Function to get expenses filtered by timeframe
+  const getExpensesByTimeframe = (timeframe: "day" | "week" | "month" | "year", selectedYear?: number, selectedDate?: string): Expense[] => {
+    const now = new Date();
+    const validatedExpenses = allExpenses.filter((expense: Expense) => expense.status === 'validated');
+    
+    switch (timeframe) {
+      case "day":
+        const targetDate = selectedDate ? new Date(selectedDate) : new Date();
+        const targetDateString = targetDate.toDateString();
+        return validatedExpenses.filter((expense: Expense) => {
+          try {
+            const expenseDate = new Date(expense.createdAt || expense.date || expense.validatedAt || '');
+            return expenseDate.toDateString() === targetDateString;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      case "week":
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return validatedExpenses.filter((expense: Expense) => {
+          try {
+            const expenseDate = new Date(expense.createdAt || expense.date || expense.validatedAt || '');
+            return expenseDate >= weekAgo && expenseDate <= now;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      case "month":
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        return validatedExpenses.filter((expense: Expense) => {
+          try {
+            const expenseDate = new Date(expense.createdAt || expense.date || expense.validatedAt || '');
+            return expenseDate >= firstDayOfMonth && expenseDate <= lastDayOfMonth;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      case "year":
+        const year = selectedYear || now.getFullYear();
+        const firstDayOfYear = new Date(year, 0, 1);
+        const lastDayOfYear = new Date(year, 11, 31, 23, 59, 59);
+        return validatedExpenses.filter((expense: Expense) => {
+          try {
+            const expenseDate = new Date(expense.createdAt || expense.date || expense.validatedAt || '');
+            return expenseDate >= firstDayOfYear && expenseDate <= lastDayOfYear;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      default:
+        return validatedExpenses;
+    }
+  };
+
   // Function to get sales filtered by timeframe
   const getSalesByTimeframe = (timeframe: "day" | "week" | "month" | "year", selectedYear?: number, selectedDate?: string): Sale[] => {
     const now = new Date();
@@ -561,7 +656,6 @@ export default function Analytics() {
     
     switch (timeframe) {
       case "day":
-        // Selected date's sales - use the selected date
         const targetDate = selectedDate ? new Date(selectedDate) : new Date();
         const targetDateString = targetDate.toDateString();
         return completedSales.filter((sale: Sale) => {
@@ -574,7 +668,6 @@ export default function Analytics() {
         });
 
       case "week":
-        // This week's sales (last 7 days)
         const weekAgo = new Date();
         weekAgo.setDate(weekAgo.getDate() - 7);
         return completedSales.filter((sale: Sale) => {
@@ -587,19 +680,18 @@ export default function Analytics() {
         });
 
       case "month":
-        // This month's sales
         const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
         return completedSales.filter((sale: Sale) => {
           try {
             const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
-            return saleDate >= firstDayOfMonth && saleDate <= now;
+            return saleDate >= firstDayOfMonth && saleDate <= lastDayOfMonth;
           } catch (error) {
             return false;
           }
         });
 
       case "year":
-        // Selected year's sales
         const year = selectedYear || now.getFullYear();
         const firstDayOfYear = new Date(year, 0, 1);
         const lastDayOfYear = new Date(year, 11, 31, 23, 59, 59);
@@ -622,10 +714,13 @@ export default function Analytics() {
     if (!analytics) return;
 
     const timeframeSales = getSalesByTimeframe(timeframe, selectedYear, selectedDate);
+    const timeframeExpenses = getExpensesByTimeframe(timeframe, selectedYear, selectedDate);
     
     // Calculate filtered metrics
     const filteredSalesCount = timeframeSales.length;
     const filteredRevenue = timeframeSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0);
+    const filteredExpenses = timeframeExpenses.reduce((sum: number, expense: Expense) => sum + expense.amount, 0);
+    const netRevenue = filteredRevenue - filteredExpenses;
     
     // Count unique products from filtered sales
     const productIds = new Set();
@@ -657,6 +752,8 @@ export default function Analytics() {
       totalRevenue: filteredRevenue,
       totalCustomers: filteredCustomers,
       totalProducts: filteredProducts,
+      totalValidatedExpenses: filteredExpenses,
+      netRevenue: netRevenue,
       recentTrends: filteredTrends,
     });
 
@@ -685,11 +782,11 @@ export default function Analytics() {
     const filteredProductsList = Array.from(productStats.entries())
       .map(([name, stats]) => ({ name, ...stats }))
       .sort((a: any, b: any) => b.quantity - a.quantity)
-      .slice(0, 100); // Fixed: Changed from 10 to 100
+      .slice(0, 100);
 
     setFilteredTopProducts(filteredProductsList);
 
-    // FIXED: Proper customer name resolution using the stored customers data
+    // Customer name resolution using the stored customers data
     const customerStats = new Map();
 
     // Create a map of customerId to customerName from allCustomers
@@ -703,22 +800,17 @@ export default function Analytics() {
       }
     });
 
-    console.log('Customer ID to Name map:', customerIdToNameMap);
-
     // Process sales and match customer IDs with names
     timeframeSales.forEach((sale: Sale) => {
       const customerId = sale.customerId;
       
       if (customerId) {
-        // Try to find the customer name from our customerIdToNameMap
         let customerName = customerIdToNameMap.get(customerId);
         
-        // If not found in the map, try the sale data
         if (!customerName) {
           customerName = sale.customerName;
         }
         
-        // If still not found, create a readable placeholder
         if (!customerName || customerName === `Customer ${customerId}`) {
           customerName = `Customer ${customerId.substring(0, 8)}...`;
         }
@@ -738,7 +830,6 @@ export default function Analytics() {
           });
         }
       } else {
-        // Handle sales without customerId but with customerName
         const customerName = sale.customerName || 'Unknown Customer';
         if (customerName !== 'Unknown Customer') {
           if (customerStats.has(customerName)) {
@@ -763,7 +854,6 @@ export default function Analytics() {
     analytics.topCustomers.forEach((customer: { name: string; purchases: number; totalSpent: number }) => {
       const customerName = customer.name;
       if (customerName && customerName !== 'Unknown Customer') {
-        // Check if this customer has any sales in the current timeframe
         const customerSalesInTimeframe = timeframeSales.filter((sale: Sale) => 
           sale.customerName === customerName
         );
@@ -774,7 +864,6 @@ export default function Analytics() {
           );
           const purchasesInTimeframe = customerSalesInTimeframe.length;
           
-          // Use the customer name as key since we don't have ID
           const key = customerName;
           
           if (!customerStats.has(key)) {
@@ -793,7 +882,6 @@ export default function Analytics() {
       .sort((a: any, b: any) => b.totalSpent - a.totalSpent)
       .slice(0, 5);
 
-    console.log('Filtered top customers:', filteredCustomersList);
     setFilteredTopCustomers(filteredCustomersList);
 
     // Update chart data based on timeframe
@@ -804,7 +892,6 @@ export default function Analytics() {
   const calculateFilteredGrowthTrends = (sales: Sale[]) => {
     const salesCount = sales.length;
     
-    // Simple growth calculation based on sales volume
     let salesGrowth = 0;
     let revenueGrowth = 0;
     
@@ -834,7 +921,6 @@ export default function Analytics() {
 
     switch (timeframe) {
       case "day":
-        // For day view with selected date, show single day data
         if (selectedDate) {
           const targetDate = new Date(selectedDate);
           const daySales = filteredSales.filter((sale: Sale) => {
@@ -915,16 +1001,12 @@ export default function Analytics() {
     }
   };
 
-  // FIXED: Handle timeframe change with proper date management
   const handleTimeframeChange = (period: "day" | "week" | "month" | "year") => {
     setTimeframe(period);
     
     if (period === "year") {
       setSelectedYear(getAvailableYears()[0]);
     }
-    
-    // Don't automatically set date for "day" here - let the useEffect handle it
-    // This prevents conflicts and ensures it only happens after initial load
   };
 
   if (loading) {
@@ -969,7 +1051,6 @@ export default function Analytics() {
   const maxRevenue = Math.max(...chartData.map((d: any) => d.revenue), 1);
   const availableYears = getAvailableYears();
 
-  // Helper function to get default chart data
   function getDefaultChartData() {
     if (!analytics) return [];
     switch (timeframe) {
@@ -984,13 +1065,15 @@ export default function Analytics() {
   }
 
   // Use filtered metrics if available, otherwise use all-time metrics
-  const displayMetrics = filteredMetrics || analytics;
+  const displayMetrics = filteredMetrics || {
+    ...analytics,
+    netRevenue: analytics.totalRevenue - analytics.totalValidatedExpenses
+  };
 
   // Get current timeframe sales
   const currentTimeframeSales = getSalesByTimeframe(timeframe, selectedYear, selectedDate);
 
   // Only show filtered data if there are sales in the current timeframe
-  // Otherwise show empty states
   const displayTopProducts = currentTimeframeSales.length > 0 ? filteredTopProducts : [];
   const displayTopCustomers = currentTimeframeSales.length > 0 ? filteredTopCustomers : [];
 
@@ -1070,6 +1153,39 @@ export default function Analytics() {
           <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
+                <p className="text-xs sm:text-sm text-gray-600">Dépenses Validées</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                  {formatCurrency(displayMetrics.totalValidatedExpenses)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Total validé</p>
+              </div>
+              <div className="p-2 sm:p-3 bg-red-100 rounded-full">
+                <Receipt className="w-4 h-4 sm:w-6 sm:h-6 text-red-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm text-gray-600">Revenu Net</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                  {formatCurrency(displayMetrics.netRevenue)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Ventes - Dépenses</p>
+              </div>
+              <div className="p-2 sm:p-3 bg-purple-100 rounded-full">
+                <Calculator className="w-4 h-4 sm:w-6 sm:h-6 text-purple-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Additional Metrics */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-xs sm:text-sm text-gray-600">Clients Totaux</p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {displayMetrics.totalCustomers}
@@ -1081,8 +1197,8 @@ export default function Analytics() {
                   </span>
                 </div>
               </div>
-              <div className="p-2 sm:p-3 bg-purple-100 rounded-full">
-                <Users className="w-4 h-4 sm:w-6 sm:h-6 text-purple-600" />
+              <div className="p-2 sm:p-3 bg-orange-100 rounded-full">
+                <Users className="w-4 h-4 sm:w-6 sm:h-6 text-orange-600" />
               </div>
             </div>
           </div>
@@ -1096,8 +1212,8 @@ export default function Analytics() {
                 </p>
                 <p className="text-xs text-gray-500 mt-1">Produits actifs</p>
               </div>
-              <div className="p-2 sm:p-3 bg-orange-100 rounded-full">
-                <Package className="w-4 h-4 sm:w-6 sm:h-6 text-orange-600" />
+              <div className="p-2 sm:p-3 bg-indigo-100 rounded-full">
+                <Package className="w-4 h-4 sm:w-6 sm:h-6 text-indigo-600" />
               </div>
             </div>
           </div>

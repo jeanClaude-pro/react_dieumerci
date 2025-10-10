@@ -121,6 +121,20 @@ export default function SalesHistory() {
     }
   }, [timeframe, initialLoad]);
 
+  // Filter out expenses and voided sales - ONLY show completed sales
+  const filterValidSales = (sales: Sale[]): Sale[] => {
+    return sales.filter((sale: Sale) => {
+      // Filter out voided, cancelled, refunded sales and expenses
+      const invalidStatuses = ['voided', 'cancelled', 'refunded', 'expense', 'depense'];
+      const isValidStatus = !invalidStatuses.includes(sale.status?.toLowerCase());
+      
+      // Also check if it's a sale (has saleId and customer structure)
+      const isSaleStructure = sale.saleId && sale.customer && sale.items;
+      
+      return isValidStatus && isSaleStructure;
+    });
+  };
+
   const fetchSales = async () => {
     try {
       setLoading(true);
@@ -150,13 +164,17 @@ export default function SalesHistory() {
 
         console.log(`Fetched ${fetchedSales.length} sales from API`);
         
+        // Filter out expenses and invalid sales
+        const validSales = filterValidSales(fetchedSales);
+        console.log(`After filtering: ${validSales.length} valid sales`);
+        
         // Sort sales by date - newest first
-        const sortedSales = fetchedSales.sort((a, b) => 
+        const sortedSales = validSales.sort((a, b) => 
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
         
         setAllSales(sortedSales);
-        setSales(sortedSales); // Initially show all sales
+        setSales(sortedSales); // Initially show all valid sales
       } else {
         console.error("Sales fetch failed:", res.status);
         // Try alternative endpoints
@@ -215,8 +233,12 @@ export default function SalesHistory() {
       
       console.log(`SalesHistory: Alternative fetch got ${fetchedSales.length} sales`);
       
+      // Filter out expenses and invalid sales
+      const validSales = filterValidSales(fetchedSales);
+      console.log(`After filtering: ${validSales.length} valid sales`);
+      
       // Sort sales by date - newest first
-      const sortedSales = fetchedSales.sort((a, b) => 
+      const sortedSales = validSales.sort((a, b) => 
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
       

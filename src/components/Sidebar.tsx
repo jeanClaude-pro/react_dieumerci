@@ -22,6 +22,7 @@ import {
   Clock,
   Calendar,
   History,
+   Wallet,
   Menu,
   X,
 } from "lucide-react";
@@ -55,21 +56,28 @@ const sidebarSections: SidebarSection[] = [
         label: "Tableau de bord",
         icon: LayoutDashboard,
         path: "/dashboard",
-        roles: ["admin"] // Only admin can access dashboard
+        roles: ["admin"] // Admin
       },
       { 
         id: "pos", 
         label: "Point de Vente", 
         icon: ShoppingCart, 
         path: "/",
-        roles: ["admin", "staff"] // Both admin and staff can access POS
+        roles: ["admin", "manager", "cashier_supervisor", "staff"] // All roles can access POS
       },
       { 
         id: "reservation", 
         label: "Reservation", 
         icon: Calendar, 
         path: "/reservation",
-        roles: ["admin", "staff"] // Both admin and staff can access reservation
+        roles: ["admin", "manager", "cashier_supervisor", "staff"] // All roles can access reservation
+      },
+      { 
+        id: "sortie", 
+        label: "Sortie", 
+        icon: Wallet, 
+        path: "/sortie",
+        roles: ["admin", "cashier_supervisor"] // Admin and cashier_supervisor
       },
     ],
   },
@@ -81,7 +89,7 @@ const sidebarSections: SidebarSection[] = [
         label: "Articles", 
         icon: Package, 
         path: "/products",
-        roles: ["admin", "staff"] // both admin and can access products
+        roles: ["admin", "manager", "inventory_manager", "staff"] // All roles except cashier_supervisor can access products
       },
     ],
   },
@@ -93,21 +101,28 @@ const sidebarSections: SidebarSection[] = [
         label: "Historique de Vente", 
         icon: TrendingUp, 
         path: "/sales",
-        roles: ["admin", "staff"] // Both admin and staff can access sales history
+        roles: ["admin", "manager", "cashier_supervisor", "staff"] // All roles can access sales history
       },
       { 
         id: "reservation-history", 
         label: "Historique de reservation", 
         icon: History, 
         path: "/reservationhistory",
-        roles: ["admin", "staff"] // Both admin and staff can access reservation history
+        roles: ["admin", "manager", "cashier_supervisor", "staff"] // All roles can access reservation history
+      },
+      { 
+        id: "historicsortie", 
+        label: "Historique de Sortie", 
+        icon: Wallet, 
+        path: "/sortiehistory",
+        roles: ["admin","cashier_supervisor"] // Admin and cashier
       },
       { 
         id: "reports", 
         label: "Rapports", 
         icon: BarChart3, 
         path: "/reports",
-        roles: ["admin"] // Only admin can access reports
+        roles: ["admin", "cashier_supervisor"] // Admin and Cashier Supervisor can access reports
       },
     ],
   },
@@ -119,7 +134,21 @@ const sidebarSections: SidebarSection[] = [
         label: "Clients", 
         icon: Users, 
         path: "/customers",
-        roles: ["admin"] // Only admin can access customers
+        roles: ["admin", "manager", "cashier_supervisor"] // Admin, Manager, and Cashier Supervisor can access customers
+      },
+      { 
+        id: "users", 
+        label: "Utilisateurs", 
+        icon: Users, 
+        path: "/users",
+        roles: ["admin", "manager"] // Only Admin and Manager can manage users
+      },
+      { 
+        id: "expenses", 
+        label: "Dépenses", 
+        icon: Wallet, 
+        path: "/expenses",
+        roles: ["admin", "manager"] // Only Admin and Manager can manage expenses
       },
     ],
   },
@@ -676,8 +705,8 @@ export default function Sidebar() {
 
 
             <div className="p-4 border-t border-gray-800 space-y-2 flex-shrink-0">
-              {/* Notifications - Only for admin */}
-              {user?.role === "admin" && (
+              {/* Notifications - For admin, manager, and cashier_supervisor */}
+              {["admin", "manager", "cashier_supervisor"].includes(user?.role || "") && (
                 <Link
                   to="/notifications"
                   onClick={() => isMobile && setIsMobileOpen(false)}
@@ -705,8 +734,8 @@ export default function Sidebar() {
                 </Link>
               )}
 
-              {/* Settings - Only for admin */}
-              {user?.role === "admin" && (
+              {/* Settings - For admin and manager */}
+              {["admin", "manager"].includes(user?.role || "") && (
                 <Link
                   to="/settings"
                   onClick={() => isMobile && setIsMobileOpen(false)}

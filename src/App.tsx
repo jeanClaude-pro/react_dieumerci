@@ -18,9 +18,12 @@ import Customers from "./pages/customers/Customers";
 import LoginPage from "./pages/login/page";
 import NewSale from "./pages/NewSale";
 import Reservation from "./pages/Reservation";
-import ReservationHistory from "./pages/ReservationHistory"
+import ReservationHistory from "./pages/ReservationHistory";
+import Sortie from "./pages/Sortie";
+import SortieHistory  from "./pages/SortieHistory";
 import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider } from "./context/AuthProvider";
+
 
 export default function App() {
   const token = localStorage.getItem("token");
@@ -57,6 +60,14 @@ export default function App() {
                   }
                 />
                 <Route
+                  path="/sortie"
+                  element={
+                    <RequireAuth>
+                      <Sortie />
+                    </RequireAuth>
+                  }
+                />
+                <Route
                   path="/reservation"
                   element={
                     <RequireAuth>
@@ -69,6 +80,14 @@ export default function App() {
                   element={
                     <RequireAuth>
                       <ReservationHistory />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/sortiehistory"
+                  element={
+                    <RequireAuth>
+                      <SortieHistory />
                     </RequireAuth>
                   }
                 />
