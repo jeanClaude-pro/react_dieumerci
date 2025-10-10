@@ -63,14 +63,14 @@ const sidebarSections: SidebarSection[] = [
         label: "Point de Vente", 
         icon: ShoppingCart, 
         path: "/",
-        roles: ["admin", "manager", "cashier_supervisor", "staff", "inventory_manager"] // All roles can access POS
+        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"] // All roles can access POS
       },
       { 
         id: "reservation", 
         label: "Reservation", 
         icon: Calendar, 
         path: "/reservation",
-        roles: ["admin", "manager", "cashier_supervisor", "staff", "inventory_manager"] // All roles can access reservation
+        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"] // All roles can access reservation
       },
       { 
         id: "sortie", 
@@ -89,7 +89,7 @@ const sidebarSections: SidebarSection[] = [
         label: "Articles", 
         icon: Package, 
         path: "/products",
-        roles: ["admin", "manager", "inventory_manager", "staff"] // All roles except cashier_supervisor can access products
+        roles: ["admin", "manager", "inventory_manager"] // All roles except cashier_supervisor can access products
       },
     ],
   },
@@ -101,14 +101,14 @@ const sidebarSections: SidebarSection[] = [
         label: "Historique de Vente", 
         icon: TrendingUp, 
         path: "/sales",
-        roles: ["admin", "manager", "cashier_supervisor", "staff"] // All roles can access sales history
+        roles: ["admin", "manager", "cashier_supervisor"] // All roles can access sales history
       },
       { 
         id: "reservation-history", 
         label: "Historique de reservation", 
         icon: History, 
         path: "/reservationhistory",
-        roles: ["admin", "manager", "cashier_supervisor", "staff"] // All roles can access reservation history
+        roles: ["admin", "manager", "cashier_supervisor"] // All roles can access reservation history
       },
       { 
         id: "historicsortie", 
@@ -145,7 +145,7 @@ const isAllowedTime = (): boolean => {
   const now = new Date();
   const currentHour = now.getHours();
   // Allowed from 8 AM (8) to 8 PM (20)
-  return currentHour >= 1 && currentHour < 20;
+  return currentHour >= 7 && currentHour < 20;
 };
 
 // Function to check if today is Sunday
