@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Receipt,
   Calculator,
+  Shield,
 } from "lucide-react";
 
 // Define interfaces for the data structures
@@ -61,10 +62,34 @@ interface AnalyticsData {
   totalCustomers: number;
   totalProducts: number;
   totalValidatedExpenses: number;
-  salesByDay: { date: string; dayName: string; sales: number; revenue: number }[];
-  salesByWeek: { week: string; startDate: string; endDate: string; sales: number; revenue: number }[];
-  salesByMonth: { month: string; monthName: string; sales: number; revenue: number }[];
-  salesByYear: { year: string; months: { month: string; monthName: string; sales: number; revenue: number }[] }[];
+  salesByDay: {
+    date: string;
+    dayName: string;
+    sales: number;
+    revenue: number;
+  }[];
+  salesByWeek: {
+    week: string;
+    startDate: string;
+    endDate: string;
+    sales: number;
+    revenue: number;
+  }[];
+  salesByMonth: {
+    month: string;
+    monthName: string;
+    sales: number;
+    revenue: number;
+  }[];
+  salesByYear: {
+    year: string;
+    months: {
+      month: string;
+      monthName: string;
+      sales: number;
+      revenue: number;
+    }[];
+  }[];
   topProducts: { name: string; quantity: number; revenue: number }[];
   topCustomers: { name: string; purchases: number; totalSpent: number }[];
   recentTrends: {
@@ -80,9 +105,31 @@ const serverUrl = import.meta.env.VITE_API_URL;
 const getTodayDate = (): string => {
   const today = new Date();
   const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+};
+
+// Helper function to get user role from localStorage
+const getUserRole = (): string => {
+  if (typeof window === "undefined") return "user";
+
+  try {
+    const userData = localStorage.getItem("user");
+    if (userData) {
+      const user = JSON.parse(userData);
+      return user.role || "user";
+    }
+  } catch (error) {
+    console.error("Error parsing user data:", error);
+  }
+
+  return "user";
+};
+
+// Check if user is cashier_supervisor
+const isCashierSupervisor = (): boolean => {
+  return getUserRole() === "cashier_supervisor";
 };
 
 export default function Analytics() {
@@ -91,11 +138,19 @@ export default function Analytics() {
   const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
-  const [timeframe, setTimeframe] = useState<"day" | "week" | "month" | "year">("day");
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [timeframe, setTimeframe] = useState<"day" | "week" | "month" | "year">(
+    "day"
+  );
+  const [selectedYear, setSelectedYear] = useState<number>(
+    new Date().getFullYear()
+  );
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
-  const [filteredTopProducts, setFilteredTopProducts] = useState<{ name: string; quantity: number; revenue: number }[]>([]);
-  const [filteredTopCustomers, setFilteredTopCustomers] = useState<{ name: string; purchases: number; totalSpent: number }[]>([]);
+  const [filteredTopProducts, setFilteredTopProducts] = useState<
+    { name: string; quantity: number; revenue: number }[]
+  >([]);
+  const [filteredTopCustomers, setFilteredTopCustomers] = useState<
+    { name: string; purchases: number; totalSpent: number }[]
+  >([]);
   const [filteredMetrics, setFilteredMetrics] = useState<{
     totalSales: number;
     totalRevenue: number;
@@ -137,10 +192,324 @@ export default function Analytics() {
     }
   }, [analytics]);
 
+  // Effect to enforce day-only view for cashier_supervisor
+  useEffect(() => {
+    if (isCashierSupervisor() && timeframe !== "day") {
+      setTimeframe("day");
+      setSelectedDate(getTodayDate());
+    }
+  }, [timeframe]);
+
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
-      
+
+      // For cashier_supervisor, only fetch today's data
+      if (isCashierSupervisor()) {
+        await fetchTodayDataOnly();
+        return;
+      }
+
+      // For admin and other roles, fetch all data as before
+      await fetchAllData();
+    } catch (error) {
+      console.error("Error fetching analytics:", error);
+      await tryAlternativeFetch();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch only today's data for cashier_supervisor
+  const fetchTodayDataOnly = async () => {
+    try {
+      const today = getTodayDate();
+      const todayStart = new Date(today);
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(today);
+      todayEnd.setHours(23, 59, 59, 999);
+
+      // Fetch today's sales
+      const salesResponse = await fetch(`${serverUrl}/sales?limit=0`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+        },
+      });
+
+      if (!salesResponse.ok) {
+        throw new Error(`Failed to fetch sales: ${salesResponse.status}`);
+      }
+
+      const salesData = await salesResponse.json();
+      let fetchedSales: Sale[] = [];
+
+      if (Array.isArray(salesData)) {
+        fetchedSales = salesData;
+      } else if (salesData.sales && Array.isArray(salesData.sales)) {
+        fetchedSales = salesData.sales;
+      } else if (salesData.data && Array.isArray(salesData.data)) {
+        fetchedSales = salesData.data;
+      } else {
+        fetchedSales = [];
+      }
+
+      // Filter sales to only include today's completed sales
+      const todaySales = fetchedSales.filter((sale: Sale) => {
+        const isCompleted =
+          sale.status !== "voided" &&
+          sale.status !== "cancelled" &&
+          sale.status !== "refunded";
+        if (!isCompleted) return false;
+
+        try {
+          const saleDate = new Date(
+            sale.createdAt || sale.date || sale.saleDate || ""
+          );
+          return saleDate >= todayStart && saleDate <= todayEnd;
+        } catch (error) {
+          return false;
+        }
+      });
+
+      setAllSales(todaySales);
+
+      // Fetch today's expenses
+      const expensesResponse = await fetch(`${serverUrl}/expenses?limit=0`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+        },
+      });
+
+      let fetchedExpenses: Expense[] = [];
+      if (expensesResponse.ok) {
+        const expensesData = await expensesResponse.json();
+
+        if (Array.isArray(expensesData)) {
+          fetchedExpenses = expensesData;
+        } else if (
+          expensesData.expenses &&
+          Array.isArray(expensesData.expenses)
+        ) {
+          fetchedExpenses = expensesData.expenses;
+        } else if (expensesData.data && Array.isArray(expensesData.data)) {
+          fetchedExpenses = expensesData.data;
+        } else if (expensesData.expenses && expensesData.expenses.length) {
+          fetchedExpenses = expensesData.expenses;
+        }
+      }
+
+      // Filter expenses to only include today's validated expenses
+      const todayExpenses = fetchedExpenses.filter((expense: Expense) => {
+        if (expense.status !== "validated") return false;
+
+        try {
+          const expenseDate = new Date(
+            expense.createdAt || expense.date || expense.validatedAt || ""
+          );
+          return expenseDate >= todayStart && expenseDate <= todayEnd;
+        } catch (error) {
+          return false;
+        }
+      });
+
+      setAllExpenses(todayExpenses);
+
+      // Fetch customers (limited to those who made purchases today)
+      // Fetch customers (limited to those who made purchases today)
+      try {
+        const customersResponse = await fetch(`${serverUrl}/customers?limit=0`);
+        if (customersResponse.ok) {
+          const customersData = await customersResponse.json();
+          const fetchedCustomers: Customer[] = Array.isArray(customersData)
+            ? customersData
+            : customersData.customers || customersData.data || [];
+
+          // For cashier_supervisor, we'll filter customers based on today's sales
+          const customerIdsFromTodaySales = new Set(
+            todaySales.map((sale) => sale.customerId).filter(Boolean)
+          );
+          const filteredCustomers = fetchedCustomers.filter(
+            (customer: Customer) =>
+              customerIdsFromTodaySales.has(customer.id) ||
+              customerIdsFromTodaySales.has(customer._id)
+          );
+          setAllCustomers(filteredCustomers);
+        }
+      } catch (error) {
+        console.error("Error fetching customers:", error);
+      }
+
+      // Process only today's data
+      const processedAnalytics = processTodayDataOnly(
+        todaySales,
+        todayExpenses
+      );
+      setAnalytics(processedAnalytics);
+    } catch (error) {
+      console.error("Error fetching today's data:", error);
+      throw error;
+    }
+  };
+
+  // Process data for cashier_supervisor (today only)
+  const processTodayDataOnly = (
+    sales: Sale[],
+    expenses: Expense[]
+  ): AnalyticsData => {
+    const validSales = sales.filter(
+      (sale: Sale) =>
+        sale &&
+        typeof sale.total === "number" &&
+        sale.items &&
+        Array.isArray(sale.items)
+    );
+
+    // Calculate totals for today only
+    const totalSales = validSales.length;
+    const totalRevenue = validSales.reduce(
+      (sum: number, sale: Sale) => sum + sale.total,
+      0
+    );
+
+    // Count customers who made purchases today
+    const customerIds = new Set();
+    validSales.forEach((sale: Sale) => {
+      if (sale.customerId) {
+        customerIds.add(sale.customerId);
+      }
+    });
+    const totalCustomers = customerIds.size;
+
+    // Count unique products sold today
+    const productIds = new Set();
+    validSales.forEach((sale: Sale) => {
+      if (sale.items && Array.isArray(sale.items)) {
+        sale.items.forEach((item: SaleItem) => {
+          if (item.productId) {
+            productIds.add(item.productId);
+          }
+        });
+      }
+    });
+    const totalProducts = productIds.size;
+
+    // Calculate today's validated expenses
+    const totalValidatedExpenses = expenses.reduce(
+      (sum: number, expense: Expense) => sum + expense.amount,
+      0
+    );
+
+    // For cashier_supervisor, we only show today's data in charts
+    const today = new Date();
+    const salesByDay = [
+      {
+        date: today.toLocaleDateString("fr-FR", {
+          day: "numeric",
+          month: "short",
+        }),
+        dayName: today.toLocaleDateString("fr-FR", { weekday: "long" }),
+        sales: totalSales,
+        revenue: totalRevenue,
+      },
+    ];
+
+    // Empty arrays for other timeframes since cashier_supervisor can't access them
+    const emptyArray: any[] = [];
+
+    // Top products from today's sales
+    const productStats = new Map();
+    validSales.forEach((sale: Sale) => {
+      if (sale.items && Array.isArray(sale.items)) {
+        sale.items.forEach((item: SaleItem) => {
+          const productName = item.name || "Unknown Product";
+          if (productStats.has(productName)) {
+            const existing = productStats.get(productName);
+            productStats.set(productName, {
+              quantity: existing.quantity + (item.quantity || 0),
+              revenue:
+                existing.revenue +
+                (item.total || (item.quantity || 0) * (item.price || 0) || 0),
+            });
+          } else {
+            productStats.set(productName, {
+              quantity: item.quantity || 0,
+              revenue:
+                item.total || (item.quantity || 0) * (item.price || 0) || 0,
+            });
+          }
+        });
+      }
+    });
+
+    const topProducts = Array.from(productStats.entries())
+      .map(([name, stats]) => ({ name, ...stats }))
+      .sort((a: any, b: any) => b.quantity - a.quantity)
+      .slice(0, 100);
+
+    // Top customers from today's sales
+    const customerStats = new Map();
+    validSales.forEach((sale: Sale) => {
+      const customerId = sale.customerId;
+      const customerName =
+        sale.customerName ||
+        `Customer ${customerId?.substring(0, 8)}...` ||
+        "Unknown Customer";
+
+      const key = customerId || customerName;
+      if (customerStats.has(key)) {
+        const existing = customerStats.get(key);
+        customerStats.set(key, {
+          name: customerName,
+          purchases: existing.purchases + 1,
+          totalSpent: existing.totalSpent + sale.total,
+        });
+      } else {
+        customerStats.set(key, {
+          name: customerName,
+          purchases: 1,
+          totalSpent: sale.total,
+        });
+      }
+    });
+
+    const topCustomers = Array.from(customerStats.values())
+      .filter(
+        (customer) =>
+          customer.purchases > 0 &&
+          customer.name &&
+          customer.name !== "Unknown Customer"
+      )
+      .sort((a: any, b: any) => b.totalSpent - a.totalSpent)
+      .slice(0, 5);
+
+    // Simple growth trends for today (compared to yesterday if available, otherwise 0)
+    const recentTrends = {
+      salesGrowth: 0, // Would need yesterday's data to calculate properly
+      revenueGrowth: 0,
+      customerGrowth: 0,
+    };
+
+    return {
+      totalSales,
+      totalRevenue,
+      totalCustomers,
+      totalProducts,
+      totalValidatedExpenses,
+      salesByDay,
+      salesByWeek: emptyArray,
+      salesByMonth: emptyArray,
+      salesByYear: emptyArray,
+      topProducts,
+      topCustomers,
+      recentTrends,
+    };
+  };
+
+  // Original fetchAllData function (for admin and other roles)
+  const fetchAllData = async () => {
+    try {
       // Fetch ALL sales data without pagination limits
       const salesResponse = await fetch(`${serverUrl}/sales?limit=0`, {
         headers: {
@@ -148,13 +517,13 @@ export default function Analytics() {
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
       });
-      
+
       if (!salesResponse.ok) {
         throw new Error(`Failed to fetch sales: ${salesResponse.status}`);
       }
-      
+
       const salesData = await salesResponse.json();
-      
+
       let fetchedSales: Sale[] = [];
       if (Array.isArray(salesData)) {
         fetchedSales = salesData;
@@ -175,14 +544,17 @@ export default function Analytics() {
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
       });
-      
+
       let fetchedExpenses: Expense[] = [];
       if (expensesResponse.ok) {
         const expensesData = await expensesResponse.json();
-        
+
         if (Array.isArray(expensesData)) {
           fetchedExpenses = expensesData;
-        } else if (expensesData.expenses && Array.isArray(expensesData.expenses)) {
+        } else if (
+          expensesData.expenses &&
+          Array.isArray(expensesData.expenses)
+        ) {
           fetchedExpenses = expensesData.expenses;
         } else if (expensesData.data && Array.isArray(expensesData.data)) {
           fetchedExpenses = expensesData.data;
@@ -193,18 +565,21 @@ export default function Analytics() {
       setAllExpenses(fetchedExpenses);
 
       // Filter out voided sales - only include completed sales
-      const completedSales = fetchedSales.filter((sale: Sale) => 
-        sale.status !== 'voided' && sale.status !== 'cancelled' && sale.status !== 'refunded'
+      const completedSales = fetchedSales.filter(
+        (sale: Sale) =>
+          sale.status !== "voided" &&
+          sale.status !== "cancelled" &&
+          sale.status !== "refunded"
       );
 
       // Fetch customers data
-      let fetchedCustomers: Customer[] = [];
       try {
         const customersResponse = await fetch(`${serverUrl}/customers?limit=0`);
         if (customersResponse.ok) {
           const customersData = await customersResponse.json();
-          fetchedCustomers = Array.isArray(customersData) ? customersData : 
-                        customersData.customers || customersData.data || [];
+          const fetchedCustomers = Array.isArray(customersData)
+            ? customersData
+            : customersData.customers || customersData.data || [];
           setAllCustomers(fetchedCustomers);
         }
       } catch (error) {
@@ -212,103 +587,40 @@ export default function Analytics() {
       }
 
       // Process the data to create analytics
-      const processedAnalytics = processAnalyticsData(completedSales, fetchedCustomers, fetchedExpenses);
+      const processedAnalytics = processAnalyticsData(
+        completedSales,
+        fetchedExpenses
+      );
       setAnalytics(processedAnalytics);
     } catch (error) {
       console.error("Error fetching analytics:", error);
-      await tryAlternativeFetch();
-    } finally {
-      setLoading(false);
+      throw error;
     }
   };
 
-  // Alternative fetch method if the main one fails
-  const tryAlternativeFetch = async () => {
-    try {
-      const endpoints = [
-        `${serverUrl}/sales?limit=1000`,
-        `${serverUrl}/sales/all`,
-        `${serverUrl}/sales?status=completed`
-      ];
-      
-      let fetchedSales: Sale[] = [];
-      let fetchedExpenses: Expense[] = [];
-      
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(endpoint, {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-            },
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            if (Array.isArray(data)) {
-              fetchedSales = data;
-              break;
-            } else if (data.sales && Array.isArray(data.sales)) {
-              fetchedSales = data.sales;
-              break;
-            } else if (data.data && Array.isArray(data.data)) {
-              fetchedSales = data.data;
-              break;
-            }
-          }
-        } catch (error) {
-          continue;
-        }
-      }
-      
-      // Try to fetch expenses
-      try {
-        const expensesResponse = await fetch(`${serverUrl}/expenses?limit=1000`);
-        if (expensesResponse.ok) {
-          const expensesData = await expensesResponse.json();
-          if (Array.isArray(expensesData)) {
-            fetchedExpenses = expensesData;
-          } else if (expensesData.expenses && Array.isArray(expensesData.expenses)) {
-            fetchedExpenses = expensesData.expenses;
-          } else if (expensesData.data && Array.isArray(expensesData.data)) {
-            fetchedExpenses = expensesData.data;
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching expenses:", error);
-      }
-      
-      setAllSales(fetchedSales);
-      setAllExpenses(fetchedExpenses);
-      
-      if (fetchedSales.length > 0) {
-        const completedSales = fetchedSales.filter((sale: Sale) => 
-          sale.status !== 'voided' && sale.status !== 'cancelled' && sale.status !== 'refunded'
-        );
-        
-        const processedAnalytics = processAnalyticsData(completedSales, [], fetchedExpenses);
-        setAnalytics(processedAnalytics);
-      }
-    } catch (error) {
-      console.error("Alternative fetch also failed:", error);
-    }
-  };
-
+  // Rest of the original functions remain the same...
   const processAnalyticsData = (
     sales: Sale[],
-    customers: Customer[],
     expenses: Expense[]
   ): AnalyticsData => {
+    // [Keep the original processAnalyticsData function exactly as it was]
     // Filter out any invalid sales
-    const validSales = sales.filter((sale: Sale) => 
-      sale && typeof sale.total === 'number' && sale.items && Array.isArray(sale.items)
+    const validSales = sales.filter(
+      (sale: Sale) =>
+        sale &&
+        typeof sale.total === "number" &&
+        sale.items &&
+        Array.isArray(sale.items)
     );
 
     // Calculate totals using valid sales only
     const totalSales = validSales.length;
-    const totalRevenue = validSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0);
-    const totalCustomers = customers.length;
-    
+    const totalRevenue = validSales.reduce(
+      (sum: number, sale: Sale) => sum + sale.total,
+      0
+    );
+    const totalCustomers = allCustomers.length;
+
     // Count unique products from valid sales
     const productIds = new Set();
     validSales.forEach((sale: Sale) => {
@@ -323,21 +635,26 @@ export default function Analytics() {
     const totalProducts = productIds.size;
 
     // Calculate total validated expenses (ALL TIME - for initial display)
-    const validatedExpenses = expenses.filter((expense: Expense) => expense.status === 'validated');
-    const totalValidatedExpenses = validatedExpenses.reduce((sum: number, expense: Expense) => sum + expense.amount, 0);
+    const validatedExpenses = expenses.filter(
+      (expense: Expense) => expense.status === "validated"
+    );
+    const totalValidatedExpenses = validatedExpenses.reduce(
+      (sum: number, expense: Expense) => sum + expense.amount,
+      0
+    );
 
     // Sales by day (last 7 days)
     const salesByDay = getLast7Days().map((date: Date) => {
-      const daySales = validSales.filter(
-        (sale: Sale) => {
-          try {
-            const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
-            return saleDate.toDateString() === date.toDateString();
-          } catch (error) {
-            return false;
-          }
+      const daySales = validSales.filter((sale: Sale) => {
+        try {
+          const saleDate = new Date(
+            sale.createdAt || sale.date || sale.saleDate || ""
+          );
+          return saleDate.toDateString() === date.toDateString();
+        } catch (error) {
+          return false;
         }
-      );
+      });
       return {
         date: date.toLocaleDateString("fr-FR", {
           day: "numeric",
@@ -345,59 +662,81 @@ export default function Analytics() {
         }),
         dayName: date.toLocaleDateString("fr-FR", { weekday: "long" }),
         sales: daySales.length,
-        revenue: daySales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
+        revenue: daySales.reduce(
+          (sum: number, sale: Sale) => sum + sale.total,
+          0
+        ),
       };
     });
 
     // Sales by week (last 4 weeks)
-    const salesByWeek = getLast4Weeks().map((week: { start: Date; end: Date }, index: number) => {
-      const weekSales = validSales.filter((sale: Sale) => {
-        try {
-          const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
-          return saleDate >= week.start && saleDate <= week.end;
-        } catch (error) {
-          return false;
-        }
-      });
-      
-      const startDateStr = week.start.toLocaleDateString("fr-FR", {
-        day: "numeric",
-        month: "short"
-      });
-      const endDateStr = week.end.toLocaleDateString("fr-FR", {
-        day: "numeric",
-        month: "short"
-      });
-      
-      return {
-        week: `Semaine ${index + 1}`,
-        startDate: startDateStr,
-        endDate: endDateStr,
-        sales: weekSales.length,
-        revenue: weekSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
-      };
-    });
+    const salesByWeek = getLast4Weeks().map(
+      (week: { start: Date; end: Date }, index: number) => {
+        const weekSales = validSales.filter((sale: Sale) => {
+          try {
+            const saleDate = new Date(
+              sale.createdAt || sale.date || sale.saleDate || ""
+            );
+            return saleDate >= week.start && saleDate <= week.end;
+          } catch (error) {
+            return false;
+          }
+        });
+
+        const startDateStr = week.start.toLocaleDateString("fr-FR", {
+          day: "numeric",
+          month: "short",
+        });
+        const endDateStr = week.end.toLocaleDateString("fr-FR", {
+          day: "numeric",
+          month: "short",
+        });
+
+        return {
+          week: `Semaine ${index + 1}`,
+          startDate: startDateStr,
+          endDate: endDateStr,
+          sales: weekSales.length,
+          revenue: weekSales.reduce(
+            (sum: number, sale: Sale) => sum + sale.total,
+            0
+          ),
+        };
+      }
+    );
 
     // Sales by month (last 6 months)
-    const salesByMonth = getLast6Months().map((month: { month: number; year: number; shortName: string; fullName: string }) => {
-      const monthSales = validSales.filter((sale: Sale) => {
-        try {
-          const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
-          return (
-            saleDate.getMonth() === month.month &&
-            saleDate.getFullYear() === month.year
-          );
-        } catch (error) {
-          return false;
-        }
-      });
-      return {
-        month: month.shortName,
-        monthName: month.fullName,
-        sales: monthSales.length,
-        revenue: monthSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
-      };
-    });
+    const salesByMonth = getLast6Months().map(
+      (month: {
+        month: number;
+        year: number;
+        shortName: string;
+        fullName: string;
+      }) => {
+        const monthSales = validSales.filter((sale: Sale) => {
+          try {
+            const saleDate = new Date(
+              sale.createdAt || sale.date || sale.saleDate || ""
+            );
+            return (
+              saleDate.getMonth() === month.month &&
+              saleDate.getFullYear() === month.year
+            );
+          } catch (error) {
+            return false;
+          }
+        });
+        return {
+          month: month.shortName,
+          monthName: month.fullName,
+          sales: monthSales.length,
+          revenue: monthSales.reduce(
+            (sum: number, sale: Sale) => sum + sale.total,
+            0
+          ),
+        };
+      }
+    );
 
     // Sales by year
     const salesByYear = getSalesByYear(validSales);
@@ -407,17 +746,20 @@ export default function Analytics() {
     validSales.forEach((sale: Sale) => {
       if (sale.items && Array.isArray(sale.items)) {
         sale.items.forEach((item: SaleItem) => {
-          const productName = item.name || 'Unknown Product';
+          const productName = item.name || "Unknown Product";
           if (productStats.has(productName)) {
             const existing = productStats.get(productName);
             productStats.set(productName, {
               quantity: existing.quantity + (item.quantity || 0),
-              revenue: existing.revenue + (item.total || (item.quantity || 0) * (item.price || 0) || 0),
+              revenue:
+                existing.revenue +
+                (item.total || (item.quantity || 0) * (item.price || 0) || 0),
             });
           } else {
             productStats.set(productName, {
               quantity: item.quantity || 0,
-              revenue: item.total || (item.quantity || 0) * (item.price || 0) || 0,
+              revenue:
+                item.total || (item.quantity || 0) * (item.price || 0) || 0,
             });
           }
         });
@@ -430,12 +772,17 @@ export default function Analytics() {
       .slice(0, 100);
 
     // Top customers (ALL TIME - will be filtered by timeframe later)
-    const topCustomers = customers
-      .filter((customer: Customer) => customer && customer.name && customer.name.trim() !== '')
-      .sort((a: Customer, b: Customer) => (b.totalSpent || 0) - (a.totalSpent || 0))
+    const topCustomers = allCustomers
+      .filter(
+        (customer: Customer) =>
+          customer && customer.name && customer.name.trim() !== ""
+      )
+      .sort(
+        (a: Customer, b: Customer) => (b.totalSpent || 0) - (a.totalSpent || 0)
+      )
       .slice(0, 5)
       .map((customer: Customer) => ({
-        name: customer.name || 'Unknown Customer',
+        name: customer.name || "Unknown Customer",
         purchases: customer.totalPurchases || 0,
         totalSpent: customer.totalSpent || 0,
       }));
@@ -472,18 +819,33 @@ export default function Analytics() {
     const currentMonth = salesByMonth[salesByMonth.length - 1];
     const previousMonth = salesByMonth[salesByMonth.length - 2];
 
-    const salesGrowth = previousMonth.sales > 0 
-      ? Math.round(((currentMonth.sales - previousMonth.sales) / previousMonth.sales) * 100)
-      : currentMonth.sales > 0 ? 100 : 0;
+    const salesGrowth =
+      previousMonth.sales > 0
+        ? Math.round(
+            ((currentMonth.sales - previousMonth.sales) / previousMonth.sales) *
+              100
+          )
+        : currentMonth.sales > 0
+        ? 100
+        : 0;
 
-    const revenueGrowth = previousMonth.revenue > 0
-      ? Math.round(((currentMonth.revenue - previousMonth.revenue) / previousMonth.revenue) * 100)
-      : currentMonth.revenue > 0 ? 100 : 0;
+    const revenueGrowth =
+      previousMonth.revenue > 0
+        ? Math.round(
+            ((currentMonth.revenue - previousMonth.revenue) /
+              previousMonth.revenue) *
+              100
+          )
+        : currentMonth.revenue > 0
+        ? 100
+        : 0;
 
     // For customer growth, use a simple calculation based on recent sales
     const recentSales = sales.filter((sale: Sale) => {
       try {
-        const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
+        const saleDate = new Date(
+          sale.createdAt || sale.date || sale.saleDate || ""
+        );
         const oneMonthAgo = new Date();
         oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
         return saleDate > oneMonthAgo;
@@ -523,7 +885,12 @@ export default function Analytics() {
     return weeks;
   };
 
-  const getLast6Months = (): { month: number; year: number; shortName: string; fullName: string }[] => {
+  const getLast6Months = (): {
+    month: number;
+    year: number;
+    shortName: string;
+    fullName: string;
+  }[] => {
     const months = [];
     for (let i = 5; i >= 0; i--) {
       const date = new Date();
@@ -540,65 +907,85 @@ export default function Analytics() {
 
   const getSalesByYear = (sales: Sale[]) => {
     const yearsMap = new Map();
-    
+
     // Get all available years from sales data
-    const years = Array.from(new Set(sales.map((sale: Sale) => {
-      try {
-        return new Date(sale.createdAt || sale.date || sale.saleDate || '').getFullYear();
-      } catch (error) {
-        return new Date().getFullYear();
-      }
-    })));
-    
+    const years = Array.from(
+      new Set(
+        sales.map((sale: Sale) => {
+          try {
+            return new Date(
+              sale.createdAt || sale.date || sale.saleDate || ""
+            ).getFullYear();
+          } catch (error) {
+            return new Date().getFullYear();
+          }
+        })
+      )
+    );
+
     // Initialize all available years
-    years.forEach(year => {
+    years.forEach((year) => {
       yearsMap.set(year, {
         year: year.toString(),
         months: Array.from({ length: 12 }, (_, i) => ({
           month: i,
-          monthName: new Date(year, i).toLocaleDateString("fr-FR", { month: "long" }),
+          monthName: new Date(year, i).toLocaleDateString("fr-FR", {
+            month: "long",
+          }),
           sales: 0,
           revenue: 0,
-        }))
+        })),
       });
     });
-    
+
     // Populate with actual data
     sales.forEach((sale: Sale) => {
       try {
-        const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
+        const saleDate = new Date(
+          sale.createdAt || sale.date || sale.saleDate || ""
+        );
         const year = saleDate.getFullYear();
         const month = saleDate.getMonth();
-        
+
         if (yearsMap.has(year)) {
           const yearData = yearsMap.get(year);
           const monthData = yearData.months.find((m: any) => m.month === month);
-          
+
           if (monthData) {
             monthData.sales += 1;
             monthData.revenue += sale.total;
           }
         }
       } catch (error) {
-        console.warn('Invalid sale date format:', sale);
+        console.warn("Invalid sale date format:", sale);
       }
     });
-    
-    return Array.from(yearsMap.values()).sort((a: any, b: any) => parseInt(b.year) - parseInt(a.year));
+
+    return Array.from(yearsMap.values()).sort(
+      (a: any, b: any) => parseInt(b.year) - parseInt(a.year)
+    );
   };
 
   // Function to get expenses filtered by timeframe
-  const getExpensesByTimeframe = (timeframe: "day" | "week" | "month" | "year", selectedYear?: number, selectedDate?: string): Expense[] => {
+  const getExpensesByTimeframe = (
+    timeframe: "day" | "week" | "month" | "year",
+    selectedYear?: number,
+    selectedDate?: string
+  ): Expense[] => {
     const now = new Date();
-    const validatedExpenses = allExpenses.filter((expense: Expense) => expense.status === 'validated');
-    
+    const validatedExpenses = allExpenses.filter(
+      (expense: Expense) => expense.status === "validated"
+    );
+
     switch (timeframe) {
       case "day":
         const targetDate = selectedDate ? new Date(selectedDate) : new Date();
         const targetDateString = targetDate.toDateString();
         return validatedExpenses.filter((expense: Expense) => {
           try {
-            const expenseDate = new Date(expense.createdAt || expense.date || expense.validatedAt || '');
+            const expenseDate = new Date(
+              expense.createdAt || expense.date || expense.validatedAt || ""
+            );
             return expenseDate.toDateString() === targetDateString;
           } catch (error) {
             return false;
@@ -610,7 +997,9 @@ export default function Analytics() {
         weekAgo.setDate(weekAgo.getDate() - 7);
         return validatedExpenses.filter((expense: Expense) => {
           try {
-            const expenseDate = new Date(expense.createdAt || expense.date || expense.validatedAt || '');
+            const expenseDate = new Date(
+              expense.createdAt || expense.date || expense.validatedAt || ""
+            );
             return expenseDate >= weekAgo && expenseDate <= now;
           } catch (error) {
             return false;
@@ -619,11 +1008,22 @@ export default function Analytics() {
 
       case "month":
         const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        const lastDayOfMonth = new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0,
+          23,
+          59,
+          59
+        );
         return validatedExpenses.filter((expense: Expense) => {
           try {
-            const expenseDate = new Date(expense.createdAt || expense.date || expense.validatedAt || '');
-            return expenseDate >= firstDayOfMonth && expenseDate <= lastDayOfMonth;
+            const expenseDate = new Date(
+              expense.createdAt || expense.date || expense.validatedAt || ""
+            );
+            return (
+              expenseDate >= firstDayOfMonth && expenseDate <= lastDayOfMonth
+            );
           } catch (error) {
             return false;
           }
@@ -635,8 +1035,12 @@ export default function Analytics() {
         const lastDayOfYear = new Date(year, 11, 31, 23, 59, 59);
         return validatedExpenses.filter((expense: Expense) => {
           try {
-            const expenseDate = new Date(expense.createdAt || expense.date || expense.validatedAt || '');
-            return expenseDate >= firstDayOfYear && expenseDate <= lastDayOfYear;
+            const expenseDate = new Date(
+              expense.createdAt || expense.date || expense.validatedAt || ""
+            );
+            return (
+              expenseDate >= firstDayOfYear && expenseDate <= lastDayOfYear
+            );
           } catch (error) {
             return false;
           }
@@ -648,19 +1052,28 @@ export default function Analytics() {
   };
 
   // Function to get sales filtered by timeframe
-  const getSalesByTimeframe = (timeframe: "day" | "week" | "month" | "year", selectedYear?: number, selectedDate?: string): Sale[] => {
+  const getSalesByTimeframe = (
+    timeframe: "day" | "week" | "month" | "year",
+    selectedYear?: number,
+    selectedDate?: string
+  ): Sale[] => {
     const now = new Date();
-    const completedSales = allSales.filter((sale: Sale) => 
-      sale.status !== 'voided' && sale.status !== 'cancelled' && sale.status !== 'refunded'
+    const completedSales = allSales.filter(
+      (sale: Sale) =>
+        sale.status !== "voided" &&
+        sale.status !== "cancelled" &&
+        sale.status !== "refunded"
     );
-    
+
     switch (timeframe) {
       case "day":
         const targetDate = selectedDate ? new Date(selectedDate) : new Date();
         const targetDateString = targetDate.toDateString();
         return completedSales.filter((sale: Sale) => {
           try {
-            const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
+            const saleDate = new Date(
+              sale.createdAt || sale.date || sale.saleDate || ""
+            );
             return saleDate.toDateString() === targetDateString;
           } catch (error) {
             return false;
@@ -672,7 +1085,9 @@ export default function Analytics() {
         weekAgo.setDate(weekAgo.getDate() - 7);
         return completedSales.filter((sale: Sale) => {
           try {
-            const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
+            const saleDate = new Date(
+              sale.createdAt || sale.date || sale.saleDate || ""
+            );
             return saleDate >= weekAgo && saleDate <= now;
           } catch (error) {
             return false;
@@ -681,10 +1096,19 @@ export default function Analytics() {
 
       case "month":
         const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        const lastDayOfMonth = new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0,
+          23,
+          59,
+          59
+        );
         return completedSales.filter((sale: Sale) => {
           try {
-            const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
+            const saleDate = new Date(
+              sale.createdAt || sale.date || sale.saleDate || ""
+            );
             return saleDate >= firstDayOfMonth && saleDate <= lastDayOfMonth;
           } catch (error) {
             return false;
@@ -697,7 +1121,9 @@ export default function Analytics() {
         const lastDayOfYear = new Date(year, 11, 31, 23, 59, 59);
         return completedSales.filter((sale: Sale) => {
           try {
-            const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
+            const saleDate = new Date(
+              sale.createdAt || sale.date || sale.saleDate || ""
+            );
             return saleDate >= firstDayOfYear && saleDate <= lastDayOfYear;
           } catch (error) {
             return false;
@@ -713,15 +1139,29 @@ export default function Analytics() {
   const updateFilteredData = () => {
     if (!analytics) return;
 
-    const timeframeSales = getSalesByTimeframe(timeframe, selectedYear, selectedDate);
-    const timeframeExpenses = getExpensesByTimeframe(timeframe, selectedYear, selectedDate);
-    
+    const timeframeSales = getSalesByTimeframe(
+      timeframe,
+      selectedYear,
+      selectedDate
+    );
+    const timeframeExpenses = getExpensesByTimeframe(
+      timeframe,
+      selectedYear,
+      selectedDate
+    );
+
     // Calculate filtered metrics
     const filteredSalesCount = timeframeSales.length;
-    const filteredRevenue = timeframeSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0);
-    const filteredExpenses = timeframeExpenses.reduce((sum: number, expense: Expense) => sum + expense.amount, 0);
+    const filteredRevenue = timeframeSales.reduce(
+      (sum: number, sale: Sale) => sum + sale.total,
+      0
+    );
+    const filteredExpenses = timeframeExpenses.reduce(
+      (sum: number, expense: Expense) => sum + expense.amount,
+      0
+    );
     const netRevenue = filteredRevenue - filteredExpenses;
-    
+
     // Count unique products from filtered sales
     const productIds = new Set();
     timeframeSales.forEach((sale: Sale) => {
@@ -762,17 +1202,20 @@ export default function Analytics() {
     timeframeSales.forEach((sale: Sale) => {
       if (sale.items && Array.isArray(sale.items)) {
         sale.items.forEach((item: SaleItem) => {
-          const productName = item.name || 'Unknown Product';
+          const productName = item.name || "Unknown Product";
           if (productStats.has(productName)) {
             const existing = productStats.get(productName);
             productStats.set(productName, {
               quantity: existing.quantity + (item.quantity || 0),
-              revenue: existing.revenue + (item.total || (item.quantity || 0) * (item.price || 0) || 0),
+              revenue:
+                existing.revenue +
+                (item.total || (item.quantity || 0) * (item.price || 0) || 0),
             });
           } else {
             productStats.set(productName, {
               quantity: item.quantity || 0,
-              revenue: item.total || (item.quantity || 0) * (item.price || 0) || 0,
+              revenue:
+                item.total || (item.quantity || 0) * (item.price || 0) || 0,
             });
           }
         });
@@ -803,14 +1246,14 @@ export default function Analytics() {
     // Process sales and match customer IDs with names
     timeframeSales.forEach((sale: Sale) => {
       const customerId = sale.customerId;
-      
+
       if (customerId) {
         let customerName = customerIdToNameMap.get(customerId);
-        
+
         if (!customerName) {
           customerName = sale.customerName;
         }
-        
+
         if (!customerName || customerName === `Customer ${customerId}`) {
           customerName = `Customer ${customerId.substring(0, 8)}...`;
         }
@@ -830,8 +1273,8 @@ export default function Analytics() {
           });
         }
       } else {
-        const customerName = sale.customerName || 'Unknown Customer';
-        if (customerName !== 'Unknown Customer') {
+        const customerName = sale.customerName || "Unknown Customer";
+        if (customerName !== "Unknown Customer") {
           if (customerStats.has(customerName)) {
             const existing = customerStats.get(customerName);
             customerStats.set(customerName, {
@@ -851,34 +1294,42 @@ export default function Analytics() {
     });
 
     // Also include customers from the original analytics if they have sales in this timeframe
-    analytics.topCustomers.forEach((customer: { name: string; purchases: number; totalSpent: number }) => {
-      const customerName = customer.name;
-      if (customerName && customerName !== 'Unknown Customer') {
-        const customerSalesInTimeframe = timeframeSales.filter((sale: Sale) => 
-          sale.customerName === customerName
-        );
-        
-        if (customerSalesInTimeframe.length > 0) {
-          const totalSpentInTimeframe = customerSalesInTimeframe.reduce((sum: number, sale: Sale) => 
-            sum + (sale.total || 0), 0
+    analytics.topCustomers.forEach(
+      (customer: { name: string; purchases: number; totalSpent: number }) => {
+        const customerName = customer.name;
+        if (customerName && customerName !== "Unknown Customer") {
+          const customerSalesInTimeframe = timeframeSales.filter(
+            (sale: Sale) => sale.customerName === customerName
           );
-          const purchasesInTimeframe = customerSalesInTimeframe.length;
-          
-          const key = customerName;
-          
-          if (!customerStats.has(key)) {
-            customerStats.set(key, {
-              name: customerName,
-              purchases: purchasesInTimeframe,
-              totalSpent: totalSpentInTimeframe,
-            });
+
+          if (customerSalesInTimeframe.length > 0) {
+            const totalSpentInTimeframe = customerSalesInTimeframe.reduce(
+              (sum: number, sale: Sale) => sum + (sale.total || 0),
+              0
+            );
+            const purchasesInTimeframe = customerSalesInTimeframe.length;
+
+            const key = customerName;
+
+            if (!customerStats.has(key)) {
+              customerStats.set(key, {
+                name: customerName,
+                purchases: purchasesInTimeframe,
+                totalSpent: totalSpentInTimeframe,
+              });
+            }
           }
         }
       }
-    });
+    );
 
     const filteredCustomersList = Array.from(customerStats.values())
-      .filter(customer => customer.purchases > 0 && customer.name && customer.name !== 'Unknown Customer')
+      .filter(
+        (customer) =>
+          customer.purchases > 0 &&
+          customer.name &&
+          customer.name !== "Unknown Customer"
+      )
       .sort((a: any, b: any) => b.totalSpent - a.totalSpent)
       .slice(0, 5);
 
@@ -891,10 +1342,10 @@ export default function Analytics() {
   // Calculate growth trends for filtered data
   const calculateFilteredGrowthTrends = (sales: Sale[]) => {
     const salesCount = sales.length;
-    
+
     let salesGrowth = 0;
     let revenueGrowth = 0;
-    
+
     if (salesCount > 10) {
       salesGrowth = 15;
       revenueGrowth = 20;
@@ -925,19 +1376,31 @@ export default function Analytics() {
           const targetDate = new Date(selectedDate);
           const daySales = filteredSales.filter((sale: Sale) => {
             try {
-              const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || '');
+              const saleDate = new Date(
+                sale.createdAt || sale.date || sale.saleDate || ""
+              );
               return saleDate.toDateString() === targetDate.toDateString();
             } catch (error) {
               return false;
             }
           });
-          
-          chartData = [{
-            date: targetDate.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }),
-            dayName: targetDate.toLocaleDateString("fr-FR", { weekday: "long" }),
-            sales: daySales.length,
-            revenue: daySales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
-          }];
+
+          chartData = [
+            {
+              date: targetDate.toLocaleDateString("fr-FR", {
+                day: "numeric",
+                month: "short",
+              }),
+              dayName: targetDate.toLocaleDateString("fr-FR", {
+                weekday: "long",
+              }),
+              sales: daySales.length,
+              revenue: daySales.reduce(
+                (sum: number, sale: Sale) => sum + sale.total,
+                0
+              ),
+            },
+          ];
         } else {
           chartData = analytics.salesByDay;
         }
@@ -949,8 +1412,12 @@ export default function Analytics() {
         chartData = analytics.salesByMonth;
         break;
       case "year":
-        const yearData = analytics.salesByYear.find(y => y.year === selectedYear.toString());
-        chartData = yearData ? yearData.months.filter(month => month.sales > 0) : [];
+        const yearData = analytics.salesByYear.find(
+          (y) => y.year === selectedYear.toString()
+        );
+        chartData = yearData
+          ? yearData.months.filter((month) => month.sales > 0)
+          : [];
         break;
       default:
         chartData = analytics.salesByWeek;
@@ -961,7 +1428,9 @@ export default function Analytics() {
 
   const getAvailableYears = (): number[] => {
     if (!analytics) return [new Date().getFullYear()];
-    return analytics.salesByYear.map(y => parseInt(y.year)).sort((a, b) => b - a);
+    return analytics.salesByYear
+      .map((y) => parseInt(y.year))
+      .sort((a, b) => b - a);
   };
 
   const formatCurrency = (amount: number) => {
@@ -971,13 +1440,13 @@ export default function Analytics() {
     }).format(amount);
   };
 
-  const navigateYear = (direction: 'prev' | 'next') => {
+  const navigateYear = (direction: "prev" | "next") => {
     const years = getAvailableYears();
     const currentIndex = years.indexOf(selectedYear);
-    
-    if (direction === 'prev' && currentIndex < years.length - 1) {
+
+    if (direction === "prev" && currentIndex < years.length - 1) {
       setSelectedYear(years[currentIndex + 1]);
-    } else if (direction === 'next' && currentIndex > 0) {
+    } else if (direction === "next" && currentIndex > 0) {
       setSelectedYear(years[currentIndex - 1]);
     }
   };
@@ -987,7 +1456,12 @@ export default function Analytics() {
       case "day":
         if (selectedDate) {
           const date = new Date(selectedDate);
-          return date.toLocaleDateString("fr-FR", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+          return date.toLocaleDateString("fr-FR", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          });
         }
         return "Aujourd'hui";
       case "week":
@@ -1002,10 +1476,98 @@ export default function Analytics() {
   };
 
   const handleTimeframeChange = (period: "day" | "week" | "month" | "year") => {
+    // For cashier_supervisor, only allow "day" timeframe
+    if (isCashierSupervisor() && period !== "day") {
+      return;
+    }
+
     setTimeframe(period);
-    
+
     if (period === "year") {
       setSelectedYear(getAvailableYears()[0]);
+    }
+  };
+
+  // Alternative fetch method if the main one fails
+  const tryAlternativeFetch = async () => {
+    try {
+      const endpoints = [
+        `${serverUrl}/sales?limit=1000`,
+        `${serverUrl}/sales/all`,
+        `${serverUrl}/sales?status=completed`,
+      ];
+
+      let fetchedSales: Sale[] = [];
+      let fetchedExpenses: Expense[] = [];
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (Array.isArray(data)) {
+              fetchedSales = data;
+              break;
+            } else if (data.sales && Array.isArray(data.sales)) {
+              fetchedSales = data.sales;
+              break;
+            } else if (data.data && Array.isArray(data.data)) {
+              fetchedSales = data.data;
+              break;
+            }
+          }
+        } catch (error) {
+          continue;
+        }
+      }
+
+      // Try to fetch expenses
+      try {
+        const expensesResponse = await fetch(
+          `${serverUrl}/expenses?limit=1000`
+        );
+        if (expensesResponse.ok) {
+          const expensesData = await expensesResponse.json();
+          if (Array.isArray(expensesData)) {
+            fetchedExpenses = expensesData;
+          } else if (
+            expensesData.expenses &&
+            Array.isArray(expensesData.expenses)
+          ) {
+            fetchedExpenses = expensesData.expenses;
+          } else if (expensesData.data && Array.isArray(expensesData.data)) {
+            fetchedExpenses = expensesData.data;
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching expenses:", error);
+      }
+
+      setAllSales(fetchedSales);
+      setAllExpenses(fetchedExpenses);
+
+      if (fetchedSales.length > 0) {
+        const completedSales = fetchedSales.filter(
+          (sale: Sale) =>
+            sale.status !== "voided" &&
+            sale.status !== "cancelled" &&
+            sale.status !== "refunded"
+        );
+
+        const processedAnalytics = processAnalyticsData(
+          completedSales,
+          fetchedExpenses
+        );
+        setAnalytics(processedAnalytics);
+      }
+    } catch (error) {
+      console.error("Alternative fetch also failed:", error);
     }
   };
 
@@ -1014,14 +1576,18 @@ export default function Analytics() {
       <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
         <div className="max-w-7xl mx-auto space-y-6">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Analytiques</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              Analytiques
+            </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-2">
               Analyse approfondie de la performance de votre entreprise
             </p>
           </div>
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="text-gray-500 mt-2 text-sm sm:text-base">Chargement des analytiques...</p>
+            <p className="text-gray-500 mt-2 text-sm sm:text-base">
+              Chargement des analytiques...
+            </p>
           </div>
         </div>
       </div>
@@ -1033,59 +1599,92 @@ export default function Analytics() {
       <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
         <div className="max-w-7xl mx-auto space-y-6">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Analytiques</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              Analytiques
+            </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-2">
               Analyse approfondie de la performance de votre entreprise
             </p>
           </div>
           <div className="text-center py-12 text-gray-500">
             <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p className="text-sm sm:text-base">Aucune donnée disponible pour les analytiques</p>
+            <p className="text-sm sm:text-base">
+              Aucune donnée disponible pour les analytiques
+            </p>
           </div>
         </div>
       </div>
     );
   }
 
-  const chartData = filteredChartData.length > 0 ? filteredChartData : getDefaultChartData();
+  const chartData =
+    filteredChartData.length > 0 ? filteredChartData : getDefaultChartData();
   const maxRevenue = Math.max(...chartData.map((d: any) => d.revenue), 1);
   const availableYears = getAvailableYears();
 
   function getDefaultChartData() {
     if (!analytics) return [];
     switch (timeframe) {
-      case "day": return analytics.salesByDay;
-      case "week": return analytics.salesByWeek;
-      case "month": return analytics.salesByMonth;
-      case "year": 
-        const yearData = analytics.salesByYear.find(y => y.year === selectedYear.toString());
-        return yearData ? yearData.months.filter(month => month.sales > 0) : [];
-      default: return analytics.salesByWeek;
+      case "day":
+        return analytics.salesByDay;
+      case "week":
+        return analytics.salesByWeek;
+      case "month":
+        return analytics.salesByMonth;
+      case "year":
+        const yearData = analytics.salesByYear.find(
+          (y) => y.year === selectedYear.toString()
+        );
+        return yearData
+          ? yearData.months.filter((month) => month.sales > 0)
+          : [];
+      default:
+        return analytics.salesByWeek;
     }
   }
 
   // Use filtered metrics if available, otherwise use all-time metrics
   const displayMetrics = filteredMetrics || {
     ...analytics,
-    netRevenue: analytics.totalRevenue - analytics.totalValidatedExpenses
+    netRevenue: analytics.totalRevenue - analytics.totalValidatedExpenses,
   };
 
   // Get current timeframe sales
-  const currentTimeframeSales = getSalesByTimeframe(timeframe, selectedYear, selectedDate);
+  const currentTimeframeSales = getSalesByTimeframe(
+    timeframe,
+    selectedYear,
+    selectedDate
+  );
 
   // Only show filtered data if there are sales in the current timeframe
-  const displayTopProducts = currentTimeframeSales.length > 0 ? filteredTopProducts : [];
-  const displayTopCustomers = currentTimeframeSales.length > 0 ? filteredTopCustomers : [];
+  const displayTopProducts =
+    currentTimeframeSales.length > 0 ? filteredTopProducts : [];
+  const displayTopCustomers =
+    currentTimeframeSales.length > 0 ? filteredTopCustomers : [];
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center sm:text-left">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Analytiques</h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-2">
-            Analyse approfondie de la performance de votre entreprise
-          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+                Analytiques
+              </h1>
+              <p className="text-sm sm:text-base text-gray-600 mt-2">
+                Analyse approfondie de la performance de votre entreprise
+              </p>
+            </div>
+            {isCashierSupervisor() && (
+              <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-2 rounded-lg border border-blue-200">
+                <Shield className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  Mode Superviseur Caisse - Données du jour uniquement
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Key Metrics - Responsive Grid */}
@@ -1093,7 +1692,9 @@ export default function Analytics() {
           <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-gray-600">Ventes Totales</p>
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Ventes Totales
+                </p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {displayMetrics.totalSales}
                 </p>
@@ -1153,7 +1754,9 @@ export default function Analytics() {
           <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-gray-600">Dépenses Validées</p>
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Dépenses Validées
+                </p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {formatCurrency(displayMetrics.totalValidatedExpenses)}
                 </p>
@@ -1186,7 +1789,9 @@ export default function Analytics() {
           <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-gray-600">Clients Totaux</p>
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Clients Totaux
+                </p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {displayMetrics.totalCustomers}
                 </p>
@@ -1206,7 +1811,9 @@ export default function Analytics() {
           <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-gray-600">Produits Totaux</p>
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Produits Totaux
+                </p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {displayMetrics.totalProducts}
                 </p>
@@ -1231,7 +1838,10 @@ export default function Analytics() {
               {timeframe === "day" && (
                 <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
                   <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                  <label htmlFor="date-picker" className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">
+                  <label
+                    htmlFor="date-picker"
+                    className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap"
+                  >
                     Date:
                   </label>
                   <input
@@ -1240,22 +1850,29 @@ export default function Analytics() {
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
                     className="ml-2 px-2 py-1 border-none bg-transparent text-xs sm:text-sm focus:outline-none focus:ring-0 text-gray-900 font-medium w-full"
+                    // Disable date picker for cashier_supervisor (only today allowed)
+                    disabled={isCashierSupervisor()}
                   />
                 </div>
               )}
-              
+
               {timeframe === "year" && availableYears.length > 1 && (
                 <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
                   <button
-                    onClick={() => navigateYear('prev')}
-                    disabled={availableYears.indexOf(selectedYear) === availableYears.length - 1}
+                    onClick={() => navigateYear("prev")}
+                    disabled={
+                      availableYears.indexOf(selectedYear) ===
+                      availableYears.length - 1
+                    }
                     className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
                   </button>
-                  <span className="text-xs sm:text-sm font-medium text-gray-900 px-2 min-w-[60px] sm:min-w-[80px] text-center">{selectedYear}</span>
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 px-2 min-w-[60px] sm:min-w-[80px] text-center">
+                    {selectedYear}
+                  </span>
                   <button
-                    onClick={() => navigateYear('next')}
+                    onClick={() => navigateYear("next")}
                     disabled={availableYears.indexOf(selectedYear) === 0}
                     className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
@@ -1263,7 +1880,7 @@ export default function Analytics() {
                   </button>
                 </div>
               )}
-              
+
               <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-full sm:w-auto">
                 {(["day", "week", "month", "year"] as const).map((period) => (
                   <button
@@ -1272,8 +1889,11 @@ export default function Analytics() {
                     className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 flex-1 sm:flex-none ${
                       timeframe === period
                         ? "bg-blue-500 text-white shadow-sm"
+                        : isCashierSupervisor() && period !== "day"
+                        ? "text-gray-400 cursor-not-allowed opacity-50"
                         : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                     }`}
+                    disabled={isCashierSupervisor() && period !== "day"}
                   >
                     {period === "day" && "Jour"}
                     {period === "week" && "Semaine"}
@@ -1295,7 +1915,10 @@ export default function Analytics() {
                 </h4>
                 <div className="space-y-4 ml-0 sm:ml-4 min-w-[300px]">
                   {chartData.map((month: any, index: number) => (
-                    <div key={index} className="flex items-center gap-3 sm:gap-4">
+                    <div
+                      key={index}
+                      className="flex items-center gap-3 sm:gap-4"
+                    >
                       <div className="w-28 sm:w-40 text-xs sm:text-sm text-gray-600 font-medium capitalize">
                         {"monthName" in month ? month.monthName : ""}
                       </div>
@@ -1311,7 +1934,9 @@ export default function Analytics() {
                         <div className="w-full bg-gray-200 rounded-full h-2">
                           <div
                             className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${(month.revenue / maxRevenue) * 100}%` }}
+                            style={{
+                              width: `${(month.revenue / maxRevenue) * 100}%`,
+                            }}
                           ></div>
                         </div>
                       </div>
@@ -1322,22 +1947,34 @@ export default function Analytics() {
             ) : (
               // Daily, Weekly, Monthly view
               chartData.map((item: any, index: number) => (
-                <div key={index} className="flex items-center gap-3 sm:gap-4 min-w-[300px]">
+                <div
+                  key={index}
+                  className="flex items-center gap-3 sm:gap-4 min-w-[300px]"
+                >
                   <div className="w-32 sm:w-48 text-xs sm:text-sm text-gray-600 font-medium">
                     {timeframe === "day" ? (
                       <div>
-                        <div className="capitalize">{(item as any).dayName}</div>
-                        <div className="text-xs text-gray-500">{(item as any).date}</div>
+                        <div className="capitalize">
+                          {(item as any).dayName}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {(item as any).date}
+                        </div>
                       </div>
                     ) : timeframe === "week" ? (
                       <div>
-                        <div className="text-xs sm:text-sm">{(item as any).week}</div>
+                        <div className="text-xs sm:text-sm">
+                          {(item as any).week}
+                        </div>
                         <div className="text-xs text-gray-500">
-                          Du {(item as any).startDate} au {(item as any).endDate}
+                          Du {(item as any).startDate} au{" "}
+                          {(item as any).endDate}
                         </div>
                       </div>
                     ) : timeframe === "month" ? (
-                      <div className="capitalize">{(item as any).monthName}</div>
+                      <div className="capitalize">
+                        {(item as any).monthName}
+                      </div>
                     ) : (
                       (item as any).monthName
                     )}
@@ -1354,7 +1991,9 @@ export default function Analytics() {
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${(item.revenue / maxRevenue) * 100}%` }}
+                        style={{
+                          width: `${(item.revenue / maxRevenue) * 100}%`,
+                        }}
                       ></div>
                     </div>
                   </div>
@@ -1396,7 +2035,9 @@ export default function Analytics() {
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   <Package className="w-8 h-8 sm:w-12 sm:h-12 mx-auto mb-3 opacity-50" />
-                  <p className="font-medium text-sm sm:text-base">Aucun produit vendu</p>
+                  <p className="font-medium text-sm sm:text-base">
+                    Aucun produit vendu
+                  </p>
                   <p className="text-xs sm:text-sm">dans cette période</p>
                 </div>
               )}
@@ -1422,7 +2063,9 @@ export default function Analytics() {
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 truncate text-sm sm:text-base">{customer.name}</p>
+                        <p className="font-medium text-gray-900 truncate text-sm sm:text-base">
+                          {customer.name}
+                        </p>
                         <p className="text-xs sm:text-sm text-gray-600">
                           {customer.purchases} achats
                         </p>
@@ -1438,7 +2081,9 @@ export default function Analytics() {
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   <Users className="w-8 h-8 sm:w-12 sm:h-12 mx-auto mb-3 opacity-50" />
-                  <p className="font-medium text-sm sm:text-base">Aucun client</p>
+                  <p className="font-medium text-sm sm:text-base">
+                    Aucun client
+                  </p>
                   <p className="text-xs sm:text-sm">dans cette période</p>
                 </div>
               )}

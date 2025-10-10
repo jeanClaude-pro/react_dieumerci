@@ -63,21 +63,21 @@ const sidebarSections: SidebarSection[] = [
         label: "Point de Vente", 
         icon: ShoppingCart, 
         path: "/",
-        roles: ["admin", "manager", "cashier_supervisor", "staff"] // All roles can access POS
+        roles: ["admin", "manager", "cashier_supervisor", "staff", "inventory_manager"] // All roles can access POS
       },
       { 
         id: "reservation", 
         label: "Reservation", 
         icon: Calendar, 
         path: "/reservation",
-        roles: ["admin", "manager", "cashier_supervisor", "staff"] // All roles can access reservation
+        roles: ["admin", "manager", "cashier_supervisor", "staff", "inventory_manager"] // All roles can access reservation
       },
       { 
         id: "sortie", 
         label: "Sortie", 
         icon: Wallet, 
         path: "/sortie",
-        roles: ["admin", "cashier_supervisor"] // Admin and cashier_supervisor
+        roles: ["admin", "cashier_supervisor", "inventory_manager"] // Admin and cashier_supervisor
       },
     ],
   },
@@ -115,14 +115,14 @@ const sidebarSections: SidebarSection[] = [
         label: "Historique de Sortie", 
         icon: Wallet, 
         path: "/sortiehistory",
-        roles: ["admin","cashier_supervisor"] // Admin and cashier
+        roles: ["admin","cashier_supervisor", "inventory_manager"] // Admin and cashier
       },
       { 
         id: "reports", 
         label: "Rapports", 
         icon: BarChart3, 
         path: "/reports",
-        roles: ["admin"] // Admin and Cashier Supervisor can access reports
+        roles: ["admin","cashier_supervisor"] // Admin and Cashier Supervisor can access reports
       },
     ],
   },
@@ -145,7 +145,7 @@ const isAllowedTime = (): boolean => {
   const now = new Date();
   const currentHour = now.getHours();
   // Allowed from 8 AM (8) to 8 PM (20)
-  return currentHour >= 8 && currentHour < 20;
+  return currentHour >= 1 && currentHour < 20;
 };
 
 // Function to check if today is Sunday
@@ -473,7 +473,7 @@ export default function Sidebar() {
                 </div>
                 {isNonAdmin && isRestricted && (
                   <div className="text-xs text-red-400 mt-1">
-                    {isSunday() ? "Dimanche - Accès restreint" : "Accès restreint • Ouverture à 08:00"}
+                    {isSunday() ? "Dimanche - Accès restreint" : "Accès restreint • Ouverture à 07:00"}
                   </div>
                 )}
               </motion.div>
@@ -702,9 +702,34 @@ export default function Sidebar() {
                 );
               })}
             </nav>
-
+            
             {/* Footer (only when authenticated) */}
             <div className="p-4 border-t border-gray-800 space-y-2 flex-shrink-0">
+              {/* Logout Button */}
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:bg-red-600 hover:text-white transition-colors group"
+              >
+                <LogOut className="w-5 h-5 text-gray-400 group-hover:text-white" />
+                <AnimatePresence mode="wait">
+                  {((!isCollapsed && !isMobile) || (isMobile && isMobileOpen)) && (
+                    <motion.span
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.2 }}
+                      className="font-medium text-sm"
+                    >
+                      Se déconnecter
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                {(isCollapsed && !isMobile) && (
+                  <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                    Se déconnecter
+                  </div>
+                )}
+              </button>
               {/* Notifications - For admin, manager, and cashier_supervisor */}
               {["admin", "manager", "cashier_supervisor"].includes(user?.role || "") && (
                 <Link
@@ -763,31 +788,7 @@ export default function Sidebar() {
                 </Link>
               )}
 
-              {/* Logout Button */}
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:bg-red-600 hover:text-white transition-colors group"
-              >
-                <LogOut className="w-5 h-5 text-gray-400 group-hover:text-white" />
-                <AnimatePresence mode="wait">
-                  {((!isCollapsed && !isMobile) || (isMobile && isMobileOpen)) && (
-                    <motion.span
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -10 }}
-                      transition={{ duration: 0.2 }}
-                      className="font-medium text-sm"
-                    >
-                      Se déconnecter
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-                {(isCollapsed && !isMobile) && (
-                  <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
-                    Se déconnecter
-                  </div>
-                )}
-              </button>
+              
             </div>
           </>
         )}
