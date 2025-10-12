@@ -16,6 +16,7 @@ import {
   Receipt,
   Calculator,
   Shield,
+  FileText,
 } from "lucide-react";
 
 // Define interfaces for the data structures
@@ -56,12 +57,23 @@ interface Expense {
   validatedAt?: string;
 }
 
+interface Entry {
+  _id?: string;
+  amount: number;
+  status: string;
+  createdAt?: string;
+  date?: string;
+  source?: string;
+  category?: string;
+}
+
 interface AnalyticsData {
   totalSales: number;
   totalRevenue: number;
   totalCustomers: number;
   totalProducts: number;
   totalValidatedExpenses: number;
+  totalEntries: number;
   salesByDay: {
     date: string;
     dayName: string;
@@ -137,6 +149,7 @@ export default function Analytics() {
   const [allSales, setAllSales] = useState<Sale[]>([]);
   const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
+  const [allEntries, setAllEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeframe, setTimeframe] = useState<"day" | "week" | "month" | "year">(
     "day"
@@ -157,6 +170,7 @@ export default function Analytics() {
     totalCustomers: number;
     totalProducts: number;
     totalValidatedExpenses: number;
+    totalEntries: number;
     netRevenue: number;
     recentTrends: {
       salesGrowth: number;
@@ -175,7 +189,7 @@ export default function Analytics() {
     if (analytics && allSales.length > 0) {
       updateFilteredData();
     }
-  }, [timeframe, selectedYear, selectedDate, analytics, allSales, allExpenses]);
+  }, [timeframe, selectedYear, selectedDate, analytics, allSales, allExpenses, allEntries]);
 
   // Effect to automatically set to today's date when timeframe changes to "day"
   useEffect(() => {
@@ -316,7 +330,45 @@ export default function Analytics() {
 
       setAllExpenses(todayExpenses);
 
-      // Fetch customers (limited to those who made purchases today)
+      // Fetch today's entries
+      const entriesResponse = await fetch(`${serverUrl}/entries?limit=0`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+        },
+      });
+
+      let fetchedEntries: Entry[] = [];
+      if (entriesResponse.ok) {
+        const entriesData = await entriesResponse.json();
+
+        if (Array.isArray(entriesData)) {
+          fetchedEntries = entriesData;
+        } else if (entriesData.entries && Array.isArray(entriesData.entries)) {
+          fetchedEntries = entriesData.entries;
+        } else if (entriesData.data && Array.isArray(entriesData.data)) {
+          fetchedEntries = entriesData.data;
+        } else if (entriesData.entries && entriesData.entries.length) {
+          fetchedEntries = entriesData.entries;
+        }
+      }
+
+      // Filter entries to only include today's active entries
+      const todayEntries = fetchedEntries.filter((entry: Entry) => {
+        if (entry.status !== "active") return false;
+
+        try {
+          const entryDate = new Date(
+            entry.createdAt || entry.date || ""
+          );
+          return entryDate >= todayStart && entryDate <= todayEnd;
+        } catch (error) {
+          return false;
+        }
+      });
+
+      setAllEntries(todayEntries);
+
       // Fetch customers (limited to those who made purchases today)
       try {
         const customersResponse = await fetch(`${serverUrl}/customers?limit=0`);
@@ -344,7 +396,8 @@ export default function Analytics() {
       // Process only today's data
       const processedAnalytics = processTodayDataOnly(
         todaySales,
-        todayExpenses
+        todayExpenses,
+        todayEntries
       );
       setAnalytics(processedAnalytics);
     } catch (error) {
@@ -356,7 +409,8 @@ export default function Analytics() {
   // Process data for cashier_supervisor (today only)
   const processTodayDataOnly = (
     sales: Sale[],
-    expenses: Expense[]
+    expenses: Expense[],
+    entries: Entry[]
   ): AnalyticsData => {
     const validSales = sales.filter(
       (sale: Sale) =>
@@ -370,6 +424,12 @@ export default function Analytics() {
     const totalSales = validSales.length;
     const totalRevenue = validSales.reduce(
       (sum: number, sale: Sale) => sum + sale.total,
+      0
+    );
+
+    // Calculate today's entries
+    const totalEntries = entries.reduce(
+      (sum: number, entry: Entry) => sum + entry.amount,
       0
     );
 
@@ -497,6 +557,7 @@ export default function Analytics() {
       totalCustomers,
       totalProducts,
       totalValidatedExpenses,
+      totalEntries,
       salesByDay,
       salesByWeek: emptyArray,
       salesByMonth: emptyArray,
@@ -564,6 +625,30 @@ export default function Analytics() {
       }
       setAllExpenses(fetchedExpenses);
 
+      // Fetch ALL entries data without pagination limits
+      const entriesResponse = await fetch(`${serverUrl}/entries?limit=0`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+        },
+      });
+
+      let fetchedEntries: Entry[] = [];
+      if (entriesResponse.ok) {
+        const entriesData = await entriesResponse.json();
+
+        if (Array.isArray(entriesData)) {
+          fetchedEntries = entriesData;
+        } else if (entriesData.entries && Array.isArray(entriesData.entries)) {
+          fetchedEntries = entriesData.entries;
+        } else if (entriesData.data && Array.isArray(entriesData.data)) {
+          fetchedEntries = entriesData.data;
+        } else if (entriesData.entries && entriesData.entries.length) {
+          fetchedEntries = entriesData.entries;
+        }
+      }
+      setAllEntries(fetchedEntries);
+
       // Filter out voided sales - only include completed sales
       const completedSales = fetchedSales.filter(
         (sale: Sale) =>
@@ -589,7 +674,8 @@ export default function Analytics() {
       // Process the data to create analytics
       const processedAnalytics = processAnalyticsData(
         completedSales,
-        fetchedExpenses
+        fetchedExpenses,
+        fetchedEntries
       );
       setAnalytics(processedAnalytics);
     } catch (error) {
@@ -598,12 +684,11 @@ export default function Analytics() {
     }
   };
 
-  // Rest of the original functions remain the same...
   const processAnalyticsData = (
     sales: Sale[],
-    expenses: Expense[]
+    expenses: Expense[],
+    entries: Entry[]
   ): AnalyticsData => {
-    // [Keep the original processAnalyticsData function exactly as it was]
     // Filter out any invalid sales
     const validSales = sales.filter(
       (sale: Sale) =>
@@ -620,6 +705,15 @@ export default function Analytics() {
       0
     );
     const totalCustomers = allCustomers.length;
+
+    // Calculate total entries (ALL TIME - for initial display)
+    const activeEntries = entries.filter(
+      (entry: Entry) => entry.status === "active"
+    );
+    const totalEntries = activeEntries.reduce(
+      (sum: number, entry: Entry) => sum + entry.amount,
+      0
+    );
 
     // Count unique products from valid sales
     const productIds = new Set();
@@ -796,6 +890,7 @@ export default function Analytics() {
       totalCustomers,
       totalProducts,
       totalValidatedExpenses,
+      totalEntries,
       salesByDay,
       salesByWeek,
       salesByMonth,
@@ -1051,6 +1146,91 @@ export default function Analytics() {
     }
   };
 
+  // Function to get entries filtered by timeframe
+  const getEntriesByTimeframe = (
+    timeframe: "day" | "week" | "month" | "year",
+    selectedYear?: number,
+    selectedDate?: string
+  ): Entry[] => {
+    const now = new Date();
+    const activeEntries = allEntries.filter(
+      (entry: Entry) => entry.status === "active"
+    );
+
+    switch (timeframe) {
+      case "day":
+        const targetDate = selectedDate ? new Date(selectedDate) : new Date();
+        const targetDateString = targetDate.toDateString();
+        return activeEntries.filter((entry: Entry) => {
+          try {
+            const entryDate = new Date(
+              entry.createdAt || entry.date || ""
+            );
+            return entryDate.toDateString() === targetDateString;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      case "week":
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return activeEntries.filter((entry: Entry) => {
+          try {
+            const entryDate = new Date(
+              entry.createdAt || entry.date || ""
+            );
+            return entryDate >= weekAgo && entryDate <= now;
+          } catch (error) {
+            return false;
+          }
+        });
+
+      case "month":
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDayOfMonth = new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0,
+          23,
+          59,
+          59
+        );
+        return activeEntries.filter((entry: Entry) => {
+          try {
+            const entryDate = new Date(
+              entry.createdAt || entry.date || ""
+            );
+            return (
+              entryDate >= firstDayOfMonth && entryDate <= lastDayOfMonth
+            );
+          } catch (error) {
+            return false;
+          }
+        });
+
+      case "year":
+        const year = selectedYear || now.getFullYear();
+        const firstDayOfYear = new Date(year, 0, 1);
+        const lastDayOfYear = new Date(year, 11, 31, 23, 59, 59);
+        return activeEntries.filter((entry: Entry) => {
+          try {
+            const entryDate = new Date(
+              entry.createdAt || entry.date || ""
+            );
+            return (
+              entryDate >= firstDayOfYear && entryDate <= lastDayOfYear
+            );
+          } catch (error) {
+            return false;
+          }
+        });
+
+      default:
+        return activeEntries;
+    }
+  };
+
   // Function to get sales filtered by timeframe
   const getSalesByTimeframe = (
     timeframe: "day" | "week" | "month" | "year",
@@ -1149,6 +1329,11 @@ export default function Analytics() {
       selectedYear,
       selectedDate
     );
+    const timeframeEntries = getEntriesByTimeframe(
+      timeframe,
+      selectedYear,
+      selectedDate
+    );
 
     // Calculate filtered metrics
     const filteredSalesCount = timeframeSales.length;
@@ -1160,7 +1345,13 @@ export default function Analytics() {
       (sum: number, expense: Expense) => sum + expense.amount,
       0
     );
-    const netRevenue = filteredRevenue - filteredExpenses;
+    const filteredEntries = timeframeEntries.reduce(
+      (sum: number, entry: Entry) => sum + entry.amount,
+      0
+    );
+    
+    // NEW: Calculate net revenue as (sales + entries) - expenses
+    const netRevenue = (filteredRevenue + filteredEntries) - filteredExpenses;
 
     // Count unique products from filtered sales
     const productIds = new Set();
@@ -1193,6 +1384,7 @@ export default function Analytics() {
       totalCustomers: filteredCustomers,
       totalProducts: filteredProducts,
       totalValidatedExpenses: filteredExpenses,
+      totalEntries: filteredEntries,
       netRevenue: netRevenue,
       recentTrends: filteredTrends,
     });
@@ -1499,6 +1691,7 @@ export default function Analytics() {
 
       let fetchedSales: Sale[] = [];
       let fetchedExpenses: Expense[] = [];
+      let fetchedEntries: Entry[] = [];
 
       for (const endpoint of endpoints) {
         try {
@@ -1549,8 +1742,31 @@ export default function Analytics() {
         console.error("Error fetching expenses:", error);
       }
 
+      // Try to fetch entries
+      try {
+        const entriesResponse = await fetch(
+          `${serverUrl}/entries?limit=1000`
+        );
+        if (entriesResponse.ok) {
+          const entriesData = await entriesResponse.json();
+          if (Array.isArray(entriesData)) {
+            fetchedEntries = entriesData;
+          } else if (
+            entriesData.entries &&
+            Array.isArray(entriesData.entries)
+          ) {
+            fetchedEntries = entriesData.entries;
+          } else if (entriesData.data && Array.isArray(entriesData.data)) {
+            fetchedEntries = entriesData.data;
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching entries:", error);
+      }
+
       setAllSales(fetchedSales);
       setAllExpenses(fetchedExpenses);
+      setAllEntries(fetchedEntries);
 
       if (fetchedSales.length > 0) {
         const completedSales = fetchedSales.filter(
@@ -1562,7 +1778,8 @@ export default function Analytics() {
 
         const processedAnalytics = processAnalyticsData(
           completedSales,
-          fetchedExpenses
+          fetchedExpenses,
+          fetchedEntries
         );
         setAnalytics(processedAnalytics);
       }
@@ -1646,7 +1863,7 @@ export default function Analytics() {
   // Use filtered metrics if available, otherwise use all-time metrics
   const displayMetrics = filteredMetrics || {
     ...analytics,
-    netRevenue: analytics.totalRevenue - analytics.totalValidatedExpenses,
+    netRevenue: (analytics.totalRevenue + analytics.totalEntries) - analytics.totalValidatedExpenses,
   };
 
   // Get current timeframe sales
@@ -1755,6 +1972,23 @@ export default function Analytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs sm:text-sm text-gray-600">
+                  Entrées d'Argent
+                </p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                  {formatCurrency(displayMetrics.totalEntries)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Total reçu</p>
+              </div>
+              <div className="p-2 sm:p-3 bg-yellow-100 rounded-full">
+                <FileText className="w-4 h-4 sm:w-6 sm:h-6 text-yellow-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm text-gray-600">
                   Dépenses Validées
                 </p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
@@ -1767,7 +2001,10 @@ export default function Analytics() {
               </div>
             </div>
           </div>
+        </div>
 
+        {/* Additional Metrics */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
@@ -1775,17 +2012,14 @@ export default function Analytics() {
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {formatCurrency(displayMetrics.netRevenue)}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Ventes - Dépenses</p>
+                <p className="text-xs text-gray-500 mt-1">(Ventes + Entrées) - Dépenses</p>
               </div>
               <div className="p-2 sm:p-3 bg-purple-100 rounded-full">
                 <Calculator className="w-4 h-4 sm:w-6 sm:h-6 text-purple-600" />
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Additional Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4 sm:gap-6">
           <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
@@ -1826,6 +2060,7 @@ export default function Analytics() {
           </div>
         </div>
 
+        {/* Rest of the component remains exactly the same... */}
         {/* Sales Chart */}
         <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">

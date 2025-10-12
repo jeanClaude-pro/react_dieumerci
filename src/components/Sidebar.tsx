@@ -58,6 +58,13 @@ const sidebarSections: SidebarSection[] = [
         path: "/dashboard",
         roles: ["admin"] // Admin
       },
+      {
+        id: "taux",
+        label: "Taux d'echange",
+        icon: LayoutDashboard,
+        path: "/rate",
+        roles: ["admin"] // Admin
+      },
       { 
         id: "pos", 
         label: "Point de Vente", 
@@ -71,6 +78,13 @@ const sidebarSections: SidebarSection[] = [
         icon: Calendar, 
         path: "/reservation",
         roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"] // All roles can access reservation
+      },
+      { 
+        id: "entry", 
+        label: "Entrée de caisse", 
+        icon: Wallet, 
+        path: "/entry",
+        roles: ["admin", "cashier_supervisor", "inventory_manager"] // Admin and cashier_supervisor
       },
       { 
         id: "sortie", 
@@ -109,6 +123,13 @@ const sidebarSections: SidebarSection[] = [
         icon: History, 
         path: "/reservationhistory",
         roles: ["admin", "manager", "cashier_supervisor"] // All roles can access reservation history
+      },
+      { 
+        id: "entryhistory", 
+        label: "Historique d'Entrée", 
+        icon: Wallet, 
+        path: "/EntryHistory",
+        roles: ["admin", "cashier_supervisor", "inventory_manager"] // Admin and cashier_supervisor
       },
       { 
         id: "historicsortie", 

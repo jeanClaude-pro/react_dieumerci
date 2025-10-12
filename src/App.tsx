@@ -21,6 +21,9 @@ import Reservation from "./pages/Reservation";
 import ReservationHistory from "./pages/ReservationHistory";
 import Sortie from "./pages/Sortie";
 import SortieHistory  from "./pages/SortieHistory";
+import Rate from "./pages/Rate";
+import Entry from "./pages/Entry";
+import EntryHistory from "./pages/EntryHistory";
 import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider } from "./context/AuthProvider";
 
@@ -56,6 +59,38 @@ export default function App() {
                   element={
                     <RequireAuth>
                       <NewSale />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/new-sale"
+                  element={
+                    <RequireAuth>
+                      <NewSale />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/entry"
+                  element={
+                    <RequireAuth>
+                      <Entry />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/entryhistory"
+                  element={
+                    <RequireAuth>
+                      <EntryHistory />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/rate"
+                  element={
+                    <RequireAuth>
+                      <Rate />
                     </RequireAuth>
                   }
                 />

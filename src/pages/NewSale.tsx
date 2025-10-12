@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useAuth } from "../hooks/useAuth";
+import { DollarSign, RefreshCw, Calculator, Search } from "lucide-react";
 
 interface Product {
   _id: string;
@@ -16,6 +17,12 @@ interface CartItem {
   quantity: number;
   unitPrice: number;
   total: number;
+}
+
+interface ExchangeRate {
+  rate: number;
+  effectiveFrom: string;
+  lastUpdated: string;
 }
 
 const API_BASE = import.meta.env.VITE_API_URL;
@@ -98,7 +105,12 @@ export default function NewSale() {
   const [submitting, setSubmitting] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [receiptData, setReceiptData] = useState<any>(null);
+  const [exchangeRate, setExchangeRate] = useState<ExchangeRate | null>(null);
+  const [loadingRate, setLoadingRate] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
 
   // Get the current user from your auth context
   const { user: currentUser } = useAuth();
@@ -107,10 +119,12 @@ export default function NewSale() {
     productId: "",
     quantity: "",
     unitPrice: "",
+    priceInFC: "",
     customerName: "",
     customerPhone: "",
     customerEmail: "",
     paymentMethod: "cash" as UiPayment,
+    currencyMode: "usd" as "usd" | "fc" // New field for currency mode
   });
 
   const [message, setMessage] = useState<string | null>(null);
@@ -119,11 +133,64 @@ export default function NewSale() {
   // Check if user is admin
   const isAdmin = currentUser?.role === "admin";
 
+  // Close search results when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSearchResults(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Load exchange rate
+  const loadExchangeRate = async () => {
+    try {
+      setLoadingRate(true);
+      const response = await fetch(`${API_BASE}/exchange-rates/current`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setExchangeRate(data);
+      } else {
+        console.warn('Failed to load exchange rate');
+      }
+    } catch (error) {
+      console.error('Error loading exchange rate:', error);
+    } finally {
+      setLoadingRate(false);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
-    async function loadProducts() {
+    
+    async function loadInitialData() {
       setLoadingProducts(true);
       setError(null);
+      
+      try {
+        // Load products and exchange rate concurrently
+        await Promise.all([
+          loadProducts(),
+          loadExchangeRate()
+        ]);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || "Failed to load initial data");
+      } finally {
+        if (!cancelled) setLoadingProducts(false);
+      }
+    }
+
+    async function loadProducts() {
       try {
         const res = await fetch(`${API_BASE}/products`, {
           headers: {
@@ -147,11 +214,10 @@ export default function NewSale() {
         if (!cancelled) setProducts(list);
       } catch (e: any) {
         if (!cancelled) setError(e?.message || "Failed to load products");
-      } finally {
-        if (!cancelled) setLoadingProducts(false);
       }
     }
-    loadProducts();
+
+    loadInitialData();
     return () => {
       cancelled = true;
     };
@@ -161,6 +227,39 @@ export default function NewSale() {
     () => products.find((p) => p._id === form.productId),
     [products, form.productId]
   );
+
+  // Filter products based on search term
+  const filteredProducts = useMemo(() => {
+    if (!searchTerm.trim()) return products;
+    return products.filter(product =>
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.sku && product.sku.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  }, [products, searchTerm]);
+
+  // Calculate USD price when FC price changes
+  useEffect(() => {
+    if (form.currencyMode === "fc" && form.priceInFC && exchangeRate) {
+      const fcPrice = parseFloat(form.priceInFC) || 0;
+      const usdPrice = fcPrice / exchangeRate.rate;
+      setForm(prev => ({
+        ...prev,
+        unitPrice: usdPrice.toFixed(2)
+      }));
+    }
+  }, [form.priceInFC, form.currencyMode, exchangeRate]);
+
+  // Calculate FC price when USD price changes
+  useEffect(() => {
+    if (form.currencyMode === "usd" && form.unitPrice && exchangeRate) {
+      const usdPrice = parseFloat(form.unitPrice) || 0;
+      const fcPrice = usdPrice * exchangeRate.rate;
+      setForm(prev => ({
+        ...prev,
+        priceInFC: Math.round(fcPrice).toString()
+      }));
+    }
+  }, [form.unitPrice, form.currencyMode, exchangeRate]);
 
   const quantity = parseInt(form.quantity) || 0;
   const unitPrice = parseFloat(form.unitPrice) || 0;
@@ -177,6 +276,51 @@ export default function NewSale() {
   ) {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
   }
+
+  // Handle product selection from search
+  const handleProductSelect = (selectedProduct: Product) => {
+    setForm(prev => ({
+      ...prev,
+      productId: selectedProduct._id,
+      unitPrice: selectedProduct.price ? selectedProduct.price.toString() : "",
+      priceInFC: ""
+    }));
+    setSearchTerm(selectedProduct.name);
+    setShowSearchResults(false);
+  };
+
+  // Handle search input change
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    setShowSearchResults(true);
+    if (!e.target.value) {
+      setForm(prev => ({ ...prev, productId: "" }));
+    }
+  };
+
+  // Check if adding to cart would result in negative stock
+  const checkStockAfterAdd = (productId: string, quantityToAdd: number): boolean => {
+    const productToCheck = products.find(p => p._id === productId);
+    if (!productToCheck) return false;
+
+    // Calculate current stock minus what's already in cart
+    const currentCartQuantity = cart
+      .filter(item => item.productId === productId)
+      .reduce((sum, item) => sum + item.quantity, 0);
+    
+    const availableStock = productToCheck.stock - currentCartQuantity;
+    return availableStock >= quantityToAdd;
+  };
+
+  // Toggle between USD and FC input modes
+  const toggleCurrencyMode = () => {
+    setForm(prev => ({
+      ...prev,
+      currencyMode: prev.currencyMode === "usd" ? "fc" : "usd",
+      unitPrice: "",
+      priceInFC: ""
+    }));
+  };
 
   // Function to display stock information based on user role
   const renderStockInfo = (product: Product) => {
@@ -197,16 +341,29 @@ export default function NewSale() {
 
   // Function to display available stock message based on user role
   const renderAvailableStockMessage = (product: Product, quantity: number) => {
+    const canAddToCart = product && quantity > 0 && checkStockAfterAdd(product._id, quantity);
+    
     if (isAdmin) {
       // Admin sees exact numbers
+      const currentCartQuantity = cart
+        .filter(item => item.productId === product._id)
+        .reduce((sum, item) => sum + item.quantity, 0);
+      
+      const availableStock = product.stock - currentCartQuantity;
+      
       return (
         <p className="text-sm text-gray-600 mb-4">
           Stock disponible: <strong>{product.stock}</strong>
+          {currentCartQuantity > 0 && (
+            <span className="ml-2 text-blue-600">
+              (Déjà dans panier: {currentCartQuantity})
+            </span>
+          )}
           {quantity > 0 && (
-            <span className="ml-4">
+            <span className={`ml-4 ${canAddToCart ? 'text-green-600' : 'text-red-600'}`}>
               Stock restant après vente:{" "}
-              {product.stock - quantity >= 0
-                ? product.stock - quantity
+              {availableStock - quantity >= 0
+                ? availableStock - quantity
                 : "❌ pas assez de stock!"}
             </span>
           )}
@@ -226,7 +383,7 @@ export default function NewSale() {
             <strong>⚠️ Stock faible</strong>
           </p>
         );
-      } else if (quantity > 0 && quantity > product.stock) {
+      } else if (quantity > 0 && !canAddToCart) {
         return (
           <p className="text-sm text-red-600 mb-4">
             <strong>❌ Quantité demandée non disponible</strong>
@@ -249,7 +406,30 @@ export default function NewSale() {
   };
 
   function handleAddToCart() {
-    if (!product || quantity <= 0 || unitPrice <= 0) return;
+    // Comprehensive validation
+    if (!product) {
+      setError("Veuillez sélectionner un produit");
+      return;
+    }
+
+    if (quantity <= 0) {
+      setError("La quantité doit être supérieure à zéro");
+      return;
+    }
+
+    if (unitPrice <= 0) {
+      setError("Le prix unitaire doit être supérieur à zéro");
+      return;
+    }
+
+    // Check if adding this quantity would result in negative stock
+    if (!checkStockAfterAdd(product._id, quantity)) {
+      setError("Stock insuffisant pour ajouter cette quantité au panier");
+      return;
+    }
+
+    // Clear any previous errors
+    setError(null);
 
     // Check if product with same ID AND same price already exists in cart
     const existingItemIndex = cart.findIndex(
@@ -279,7 +459,8 @@ export default function NewSale() {
       ]);
     }
 
-    // Update local product stock
+    // Update local product stock (for display purposes only)
+    // The actual stock validation is done in checkStockAfterAdd
     setProducts((prevProducts) =>
       prevProducts.map((p) =>
         p._id === product._id ? { ...p, stock: p.stock - quantity } : p
@@ -291,7 +472,9 @@ export default function NewSale() {
       ...f,
       quantity: "",
       unitPrice: product.price ? product.price.toString() : "",
+      priceInFC: ""
     }));
+    setSearchTerm("");
   }
 
   function removeFromCart(index: number) {
@@ -1068,12 +1251,15 @@ export default function NewSale() {
         productId: "",
         quantity: "",
         unitPrice: "",
+        priceInFC: "",
         customerName: "",
         customerPhone: "",
         customerEmail: "",
         paymentMethod: form.paymentMethod,
+        currencyMode: "usd"
       });
       setCart([]);
+      setSearchTerm("");
 
       setMessage(
         "✅ Vente effectuée avec succès ! Impression du reçu et de la souche..."
@@ -1085,225 +1271,353 @@ export default function NewSale() {
     }
   }
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('fr-FR', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount);
+  };
+
+  const formatFc = (amount: number) => {
+    return new Intl.NumberFormat('fr-FR', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount) + ' FC';
+  };
+
+  // Check if the product can be added to cart (comprehensive validation)
+  const canAddToCart = product && quantity > 0 && unitPrice > 0 && checkStockAfterAdd(product._id, quantity);
+
   return (
     <div className="flex-1 p-6 overflow-auto">
-      <h2 className="text-2xl font-bold mb-6 mt-6 ml-6">Nouvelle Vente</h2>
-
-      {message && (
-        <div className="mb-4 p-3 bg-green-100 text-green-700 rounded">
-          {message}
-        </div>
-      )}
-      {error && (
-        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">{error}</div>
-      )}
-
-      <div className="bg-gray-100 shadow p-6 rounded-lg max-w-4xl mb-6">
-        <h3 className="text-lg font-semibold mb-4">Ajouter les articles</h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div>
-            <label className="block mb-1 font-medium">Articles</label>
-            <select
-              name="productId"
-              value={form.productId}
-              onChange={handleChange}
-              className="w-full p-2 border rounded"
-              disabled={loadingProducts || products.length === 0}
-            >
-              <option value="">
-                {loadingProducts ? "Loading..." : "Selectionner un article"}
-              </option>
-              {products.map((p) => (
-                <option key={p._id} value={p._id}>
-                  {p.name} {renderStockInfo(p)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block mb-1 font-medium">Nombre de pieces</label>
-            <input
-              type="number"
-              name="quantity"
-              value={form.quantity}
-              onChange={handleChange}
-              placeholder="Entrer le nombre de pieces"
-              className="w-full p-2 border rounded"
-              min={1}
-            />
-          </div>
-
-          <div>
-            <label className="block mb-1 font-medium">Prix unitaire</label>
-            <input
-              type="number"
-              step="0.01"
-              name="unitPrice"
-              value={form.unitPrice}
-              onChange={(e) => setForm({ ...form, unitPrice: e.target.value })}
-              placeholder={
-                product?.price ? `e.g. ${product.price}` : "Entrer le prix"
-              }
-              className="w-full p-2 border rounded"
-              min={0.01}
-            />
+      <div className="max-w-6xl mx-auto">
+        {/* Header with Exchange Rate */}
+        <div className="mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Nouvelle Vente</h2>
+              <p className="text-gray-600 mt-1">Créez une nouvelle vente avec gestion multi-devises</p>
+            </div>
+            
+            {/* Exchange Rate Display */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 min-w-[280px]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-blue-600" />
+                  <span className="font-semibold text-blue-900">Taux du jour:</span>
+                </div>
+                {loadingRate ? (
+                  <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
+                ) : exchangeRate ? (
+                  <div className="text-right">
+                    <div className="font-bold text-blue-800 text-lg">
+                      1 USD = {new Intl.NumberFormat('fr-FR').format(exchangeRate.rate)} FC
+                    </div>
+                    <div className="text-xs text-blue-600">
+                      Effectif depuis {new Date(exchangeRate.effectiveFrom).toLocaleDateString('fr-FR')}
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-red-600 text-sm">Taux non disponible</span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
-        {product && renderAvailableStockMessage(product, quantity)}
-
-        <button
-          type="button"
-          onClick={handleAddToCart}
-          disabled={!product || quantity <= 0 || unitPrice <= 0}
-          className={`px-4 py-2 rounded text-white mb-6 ${
-            product && quantity > 0 && unitPrice > 0
-              ? "bg-blue-600 hover:bg-blue-700"
-              : "bg-gray-400 cursor-not-allowed"
-          }`}
-        >
-          Ajouter au panier
-        </button>
-
-        {cart.length > 0 && (
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold mb-2">Articles du panier</h3>
-            <table className="w-full border-collapse border border-gray-300">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border border-gray-300 p-2 text-left">
-                    Articles
-                  </th>
-                  <th className="border border-gray-300 p-2">Pieces</th>
-                  <th className="border border-gray-300 p-2">Prix unitaire</th>
-                  <th className="border border-gray-300 p-2">Total</th>
-                  <th className="border border-gray-300 p-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cart.map((item, index) => (
-                  <tr key={index}>
-                    <td className="border border-gray-300 p-2">{item.name}</td>
-                    <td className="border border-gray-300 p-2 text-center">
-                      {item.quantity}
-                    </td>
-                    <td className="border border-gray-300 p-2 text-right">
-                      ${item.unitPrice.toFixed(2)}
-                    </td>
-                    <td className="border border-gray-300 p-2 text-right">
-                      ${item.total.toFixed(2)}
-                    </td>
-                    <td className="border border-gray-300 p-2 text-center">
-                      <button
-                        onClick={() => removeFromCart(index)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        Enlever
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-gray-50">
-                  <td
-                    colSpan={3}
-                    className="border border-gray-300 p-2 text-right font-semibold"
-                  >
-                    Total:
-                  </td>
-                  <td className="border border-gray-300 p-2 text-right font-semibold">
-                    ${cartTotal.toFixed(2)}
-                  </td>
-                  <td className="border border-gray-300 p-2"></td>
-                </tr>
-              </tfoot>
-            </table>
+        {message && (
+          <div className="mb-4 p-3 bg-green-100 text-green-700 rounded">
+            {message}
           </div>
         )}
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">{error}</div>
+        )}
 
-        <h3 className="text-lg font-semibold mb-4">Informations du client</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div>
-            <label className="block mb-1 font-medium">Nom du client</label>
-            <input
-              type="text"
-              name="customerName"
-              value={form.customerName}
-              onChange={handleChange}
-              placeholder="Entrer le nom du client"
-              className="w-full p-2 border rounded"
-              required
-            />
+        <div className="bg-white shadow-lg rounded-xl p-6 mb-6 border border-gray-200">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900">Ajouter les articles</h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="relative" ref={searchRef}>
+              <label className="block mb-2 font-medium text-gray-700">Articles</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  onFocus={() => setShowSearchResults(true)}
+                  placeholder="Rechercher un article..."
+                  className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={loadingProducts || products.length === 0}
+                />
+              </div>
+              
+              {/* Search Results Dropdown */}
+              {showSearchResults && filteredProducts.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+                  {filteredProducts.map((product) => (
+                    <div
+                      key={product._id}
+                      className="px-4 py-3 cursor-pointer hover:bg-blue-50 border-b border-gray-100 last:border-b-0"
+                      onClick={() => handleProductSelect(product)}
+                    >
+                      <div className="font-medium text-gray-900">{product.name}</div>
+                      <div className="text-sm text-gray-600 flex justify-between">
+                        <span>{product.sku && `SKU: ${product.sku}`}</span>
+                        <span className={product.stock === 0 ? "text-red-600" : product.stock <= 5 ? "text-orange-600" : "text-green-600"}>
+                          {renderStockInfo(product)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* No Results Message */}
+              {showSearchResults && searchTerm && filteredProducts.length === 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-4 text-center text-gray-500">
+                  Aucun article trouvé
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block mb-2 font-medium text-gray-700">Nombre de pièces</label>
+              <input
+                type="number"
+                name="quantity"
+                value={form.quantity}
+                onChange={handleChange}
+                placeholder="Entrer le nombre de pièces"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                min={1}
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block font-medium text-gray-700">Prix unitaire</label>
+                <button
+                  type="button"
+                  onClick={toggleCurrencyMode}
+                  className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                >
+                  <Calculator className="w-3 h-3" />
+                  {form.currencyMode === 'usd' ? 'USD → FC' : 'FC → USD'}
+                </button>
+              </div>
+              
+              {form.currencyMode === 'usd' ? (
+                <input
+                  type="number"
+                  step="0.01"
+                  name="unitPrice"
+                  value={form.unitPrice}
+                  onChange={(e) => setForm({ ...form, unitPrice: e.target.value })}
+                  placeholder={product?.price ? `ex: ${product.price}` : "Entrer le prix en USD"}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  min={0.01}
+                />
+              ) : (
+                <input
+                  type="number"
+                  name="priceInFC"
+                  value={form.priceInFC}
+                  onChange={(e) => setForm({ ...form, priceInFC: e.target.value })}
+                  placeholder="Entrer le prix en FC"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  min={1}
+                />
+              )}
+              
+              {/* Conversion Display */}
+              {form.unitPrice && form.currencyMode === 'usd' && exchangeRate && (
+                <p className="text-xs text-green-600 mt-1">
+                  ≈ {formatFc(parseFloat(form.unitPrice) * exchangeRate.rate)}
+                </p>
+              )}
+              {form.priceInFC && form.currencyMode === 'fc' && exchangeRate && (
+                <p className="text-xs text-green-600 mt-1">
+                  ≈ {formatCurrency(parseFloat(form.priceInFC) / exchangeRate.rate)}
+                </p>
+              )}
+            </div>
           </div>
 
-          <div>
-            <label className="block mb-1 font-medium">
-              Numero de telephone du client
-            </label>
-            <input
-              type="tel"
-              name="customerPhone"
-              value={form.customerPhone}
-              onChange={handleChange}
-              placeholder="Entrer le numero de telephone"
-              className="w-full p-2 border rounded"
-              required
-            />
-          </div>
+          {product && renderAvailableStockMessage(product, quantity)}
 
-          <div>
-            <label className="block mb-1 font-medium">
-              Email du client (pas obligatoire)
-            </label>
-            <input
-              type="email"
-              name="customerEmail"
-              value={form.customerEmail}
-              onChange={handleChange}
-              placeholder="Enter customer email"
-              className="w-full p-2 border rounded"
-            />
-          </div>
+          <button
+            type="button"
+            onClick={handleAddToCart}
+            disabled={!canAddToCart}
+            className={`px-6 py-3 rounded-lg font-medium flex items-center gap-2 ${
+              canAddToCart
+                ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                : "bg-gray-400 cursor-not-allowed text-white"
+            } transition-colors`}
+          >
+            <RefreshCw className="w-4 h-4" />
+            Ajouter au panier
+          </button>
 
-          <div>
-            <label className="block mb-1 font-medium">
-              Methode de payement
-            </label>
-            <select
-              name="paymentMethod"
-              value={form.paymentMethod}
-              onChange={handleChange}
-              className="w-full p-2 border rounded"
-              required
-            >
-              <option value="cash">Cash</option>
-              <option value="mpesa">M-Pesa ou Airtel Money(Transfert)</option>
-              <option value="bank">Transfert Bank</option>
-              <option value="card">Carte Visa</option>
-              <option value="other">Autres</option>
-            </select>
-          </div>
+          {cart.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900">Articles du panier</h3>
+              <div className="overflow-hidden rounded-lg border border-gray-200">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Articles</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Pièces</th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Prix unitaire</th>
+                      <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Total</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {cart.map((item, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm text-gray-900">{item.name}</td>
+                        <td className="px-4 py-3 text-sm text-center text-gray-600">{item.quantity}</td>
+                        <td className="px-4 py-3 text-sm text-right text-gray-900">
+                          {formatCurrency(item.unitPrice)}
+                          {exchangeRate && (
+                            <div className="text-xs text-gray-500">
+                              ≈ {formatFc(item.unitPrice * exchangeRate.rate)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right text-gray-900">
+                          {formatCurrency(item.total)}
+                          {exchangeRate && (
+                            <div className="text-xs text-gray-500">
+                              ≈ {formatFc(item.total * exchangeRate.rate)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => removeFromCart(index)}
+                            className="text-red-600 hover:text-red-800 text-sm font-medium"
+                          >
+                            Enlever
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50">
+                    <tr>
+                      <td colSpan={3} className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+                        Total:
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+                        {formatCurrency(cartTotal)}
+                        {exchangeRate && (
+                          <div className="text-xs text-gray-500">
+                            ≈ {formatFc(cartTotal * exchangeRate.rate)}
+                          </div>
+                        )}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
-        <button
-          type="submit"
-          onClick={handleSale}
-          disabled={!isFormValid || submitting}
-          className={`px-4 py-2 rounded text-white ${
-            isFormValid && !submitting
-              ? "bg-green-600 hover:bg-green-700"
-              : "bg-gray-400 cursor-not-allowed"
-          }`}
-        >
-          {submitting ? "En cours d'enregistrement..." : "Enregistrer la vente"}
-        </button>
-      </div>
+        <div className="bg-white shadow-lg rounded-xl p-6 border border-gray-200">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900">Informations du client</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <label className="block mb-2 font-medium text-gray-700">Nom du client *</label>
+              <input
+                type="text"
+                name="customerName"
+                value={form.customerName}
+                onChange={handleChange}
+                placeholder="Entrer le nom du client"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
 
-      {/* Hidden receipt container (keep as fallback) */}
-      <div ref={receiptRef} style={{ display: "none" }} />
+            <div>
+              <label className="block mb-2 font-medium text-gray-700">
+                Numéro de téléphone du client *
+              </label>
+              <input
+                type="tel"
+                name="customerPhone"
+                value={form.customerPhone}
+                onChange={handleChange}
+                placeholder="Entrer le numéro de téléphone"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block mb-2 font-medium text-gray-700">
+                Email du client (optionnel)
+              </label>
+              <input
+                type="email"
+                name="customerEmail"
+                value={form.customerEmail}
+                onChange={handleChange}
+                placeholder="Entrer l'email du client"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-2 font-medium text-gray-700">
+                Méthode de paiement
+              </label>
+              <select
+                name="paymentMethod"
+                value={form.paymentMethod}
+                onChange={handleChange}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              >
+                <option value="cash">Cash</option>
+                <option value="mpesa">M-Pesa ou Airtel Money (Transfert)</option>
+                <option value="bank">Transfert Bank</option>
+                <option value="card">Carte Visa</option>
+                <option value="other">Autres</option>
+              </select>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            onClick={handleSale}
+            disabled={!isFormValid || submitting}
+            className={`px-8 py-3 rounded-lg font-medium text-lg ${
+              isFormValid && !submitting
+                ? "bg-green-600 hover:bg-green-700 text-white shadow-sm"
+                : "bg-gray-400 cursor-not-allowed text-white"
+            } transition-colors`}
+          >
+            {submitting ? (
+              <span className="flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                En cours d'enregistrement...
+              </span>
+            ) : (
+              "Enregistrer la vente"
+            )}
+          </button>
+        </div>
+
+        {/* Hidden receipt container (keep as fallback) */}
+        <div ref={receiptRef} style={{ display: "none" }} />
+      </div>
     </div>
   );
 }

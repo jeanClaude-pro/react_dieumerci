@@ -17,6 +17,8 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  History,
+  Filter,
 } from "lucide-react";
 import jsPDF from "jspdf";
 
@@ -27,6 +29,14 @@ interface SaleItem {
   price: number;
   total: number;
   _id: string;
+}
+
+interface EditHistoryEntry {
+  editedBy: string;
+  editedAt: string;
+  changes: any;
+  reason: string;
+  _id?: string;
 }
 
 interface Sale {
@@ -47,6 +57,9 @@ interface Sale {
   salesPerson?: string;
   editedBy?: string;
   editedAt?: string;
+  editHistory?: EditHistoryEntry[];
+  // For edited sales comparison
+  originalSaleData?: any;
 }
 
 interface Product {
@@ -92,6 +105,12 @@ export default function SalesHistory() {
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
   const [initialLoad, setInitialLoad] = useState(true);
 
+  // NEW: Edited sales filter state
+  const [showEditedSales, setShowEditedSales] = useState(false);
+  const [editedSales, setEditedSales] = useState<Sale[]>([]);
+  const [selectedEditedSale, setSelectedEditedSale] = useState<Sale | null>(null);
+  const [showEditedDetailsModal, setShowEditedDetailsModal] = useState(false);
+
   useEffect(() => {
     fetchSales();
     fetchProducts();
@@ -109,8 +128,29 @@ export default function SalesHistory() {
   useEffect(() => {
     if (allSales.length > 0) {
       updateFilteredSales();
+      // NEW: Update edited sales when allSales changes
+      updateEditedSales();
     }
-  }, [timeframe, selectedYear, selectedDate, allSales]);
+  }, [timeframe, selectedYear, selectedDate, allSales, showEditedSales]);
+
+  // NEW: Function to filter and prepare edited sales
+  const updateEditedSales = () => {
+    const timeframeSales = getSalesByTimeframe(timeframe, selectedYear, selectedDate);
+    
+    // Filter sales that have editHistory or editedBy field
+    const edited = timeframeSales.filter(sale => 
+      (sale.editHistory && sale.editHistory.length > 0) || sale.editedBy
+    );
+
+    // Sort by edit date (newest first)
+    const sortedEditedSales = edited.sort((a, b) => {
+      const dateA = a.editedAt ? new Date(a.editedAt).getTime() : new Date(a.updatedAt).getTime();
+      const dateB = b.editedAt ? new Date(b.editedAt).getTime() : new Date(b.updatedAt).getTime();
+      return dateB - dateA;
+    });
+
+    setEditedSales(sortedEditedSales);
+  };
 
   // FIXED: Effect to automatically set to today's date when timeframe changes to "day"
   useEffect(() => {
@@ -423,14 +463,19 @@ export default function SalesHistory() {
     }
   };
 
-  const filteredSales = sales.filter(
-    (sale) =>
-      sale.saleId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sale.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sale.customer.phone.includes(searchTerm) ||
-      (sale.salesPerson &&
-        sale.salesPerson.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredSales = showEditedSales 
+    ? editedSales.filter(sale =>
+        sale.saleId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        sale.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        sale.customer.phone.includes(searchTerm) ||
+        (sale.salesPerson && sale.salesPerson.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
+    : sales.filter(sale =>
+        sale.saleId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        sale.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        sale.customer.phone.includes(searchTerm) ||
+        (sale.salesPerson && sale.salesPerson.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -447,6 +492,69 @@ export default function SalesHistory() {
       style: "currency",
       currency: "USD",
     }).format(amount);
+  };
+
+  // NEW: Function to view edited sale details
+  const viewEditedSaleDetails = (sale: Sale) => {
+    setSelectedEditedSale(sale);
+    setShowEditedDetailsModal(true);
+  };
+
+  // NEW: Function to render change comparison
+  const renderChangeComparison = (sale: Sale) => {
+    if (!sale.editHistory || sale.editHistory.length === 0) return null;
+
+    const latestEdit = sale.editHistory[sale.editHistory.length - 1];
+    const changes = latestEdit.changes;
+
+    return (
+      <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <h4 className="font-medium text-yellow-800 mb-2 flex items-center gap-2">
+          <History className="w-4 h-4" />
+          Dernière modification
+        </h4>
+        
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-yellow-700">Modifié par:</span>
+            <span className="font-medium">{latestEdit.editedBy || sale.editedBy || "Unknown"}</span>
+          </div>
+          
+          <div className="flex justify-between">
+            <span className="text-yellow-700">Date de modification:</span>
+            <span className="font-medium">{formatDate(latestEdit.editedAt || sale.editedAt || sale.updatedAt)}</span>
+          </div>
+          
+          <div className="flex justify-between">
+            <span className="text-yellow-700">Raison:</span>
+            <span className="font-medium text-right">{latestEdit.reason}</span>
+          </div>
+
+          {changes && Object.keys(changes).length > 0 && (
+            <div className="mt-3 pt-3 border-t border-yellow-200">
+              <h5 className="font-medium text-yellow-800 mb-2">Changements:</h5>
+              {Object.entries(changes).map(([field, changeData]: [string, any]) => (
+                <div key={field} className="mb-2 last:mb-0">
+                  <div className="font-medium text-yellow-700 capitalize">
+                    {field.replace(/([A-Z])/g, ' $1').toLowerCase()}:
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-red-50 p-2 rounded">
+                      <div className="text-red-600 font-medium">Avant:</div>
+                      <div className="truncate">{JSON.stringify(changeData.from)}</div>
+                    </div>
+                    <div className="bg-green-50 p-2 rounded">
+                      <div className="text-green-600 font-medium">Après:</div>
+                      <div className="truncate">{JSON.stringify(changeData.to)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   // Print function for ESC/POS receipt - opens print dialog
@@ -554,7 +662,7 @@ export default function SalesHistory() {
       }
       .total-row {
         display: flex;
-        justify-content: space-between;
+        justify-between;
         margin-bottom: 0.3mm;
         font-size: 13px;
         padding: 0 1mm;
@@ -1128,6 +1236,24 @@ export default function SalesHistory() {
           </p>
         </div>
         <div className="flex gap-3">
+          {/* NEW: Edited Sales Filter Button */}
+          <button
+            onClick={() => setShowEditedSales(!showEditedSales)}
+            className={`px-4 py-2 rounded-lg border transition-all duration-200 flex items-center gap-2 ${
+              showEditedSales
+                ? "bg-blue-500 text-white border-blue-500 shadow-sm"
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            {showEditedSales ? "Toutes les ventes" : "Ventes modifiées"}
+            {showEditedSales && (
+              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                {editedSales.length}
+              </span>
+            )}
+          </button>
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -1146,7 +1272,7 @@ export default function SalesHistory() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
-            Filtre par période ({getTimeframeLabel()})
+            {showEditedSales ? "Ventes modifiées" : "Toutes les ventes"} ({getTimeframeLabel()})
           </h3>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             {/* Date Picker for Day View */}
@@ -1237,7 +1363,7 @@ export default function SalesHistory() {
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <FileText className="w-5 h-5" />
-            Transactions de vente ({filteredSales.length})
+            {showEditedSales ? "Ventes modifiées" : "Transactions de vente"} ({filteredSales.length})
           </h2>
         </div>
 
@@ -1250,7 +1376,12 @@ export default function SalesHistory() {
           ) : filteredSales.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>Aucune vente trouvée</p>
+              <p>
+                {showEditedSales 
+                  ? "Aucune vente modifiée trouvée" 
+                  : "Aucune vente trouvée"
+                }
+              </p>
               <p className="text-sm">pour la période sélectionnée</p>
             </div>
           ) : (
@@ -1281,6 +1412,11 @@ export default function SalesHistory() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
                   </th>
+                  {showEditedSales && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Dernière modification
+                    </th>
+                  )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
@@ -1330,57 +1466,76 @@ export default function SalesHistory() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatDate(sale.createdAt)}
                     </td>
+                    {showEditedSales && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {sale.editedAt ? formatDate(sale.editedAt) : "N/A"}
+                      </td>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => viewSaleDetails(sale)}
-                          className="text-blue-600 hover:text-blue-900 p-1 rounded"
-                          title="Voir les détails de"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => openEditModal(sale)}
-                          disabled={
-                            sale.status === "Annulé" ||
-                            sale.status === "Rectifié"
-                          }
-                          className={`p-1 rounded ${
-                            sale.status === "Annulé" ||
-                            sale.status === "Rectifié"
-                              ? "text-gray-400 cursor-not-allowed"
-                              : "text-yellow-600 hover:text-yellow-900"
-                          }`}
-                          title="Edit Sale"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => generateReceiptPDF(sale)}
-                          className="text-green-600 hover:text-green-900 p-1 rounded"
-                          title="Download PDF Receipt"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => printESC_POSReceipt(sale)}
-                          className="text-purple-600 hover:text-purple-900 p-1 rounded"
-                          title="Print ESC/POS Receipt"
-                        >
-                          <Printer className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleVoidSale(sale)}
-                          disabled={sale.status === "voided"}
-                          className={`p-1 rounded ${
-                            sale.status === "voided"
-                              ? "text-gray-400 cursor-not-allowed"
-                              : "text-red-600 hover:text-red-900"
-                          }`}
-                          title="Void Sale"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {showEditedSales ? (
+                          <button
+                            onClick={() => viewEditedSaleDetails(sale)}
+                            className="text-blue-600 hover:text-blue-900 p-1 rounded"
+                            title="Voir les détails des modifications"
+                          >
+                            <History className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => viewSaleDetails(sale)}
+                            className="text-blue-600 hover:text-blue-900 p-1 rounded"
+                            title="Voir les détails de"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        )}
+                        {!showEditedSales && (
+                          <>
+                            <button
+                              onClick={() => openEditModal(sale)}
+                              disabled={
+                                sale.status === "Annulé" ||
+                                sale.status === "Rectifié"
+                              }
+                              className={`p-1 rounded ${
+                                sale.status === "Annulé" ||
+                                sale.status === "Rectifié"
+                                  ? "text-gray-400 cursor-not-allowed"
+                                  : "text-yellow-600 hover:text-yellow-900"
+                              }`}
+                              title="Edit Sale"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => generateReceiptPDF(sale)}
+                              className="text-green-600 hover:text-green-900 p-1 rounded"
+                              title="Download PDF Receipt"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => printESC_POSReceipt(sale)}
+                              className="text-purple-600 hover:text-purple-900 p-1 rounded"
+                              title="Print ESC/POS Receipt"
+                            >
+                              <Printer className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleVoidSale(sale)}
+                              disabled={sale.status === "voided"}
+                              className={`p-1 rounded ${
+                                sale.status === "voided"
+                                  ? "text-gray-400 cursor-not-allowed"
+                                  : "text-red-600 hover:text-red-900"
+                              }`}
+                              title="Void Sale"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1551,6 +1706,11 @@ export default function SalesHistory() {
                 </div>
               </div>
 
+              {/* Show edit history if available */}
+              {selectedSale.editHistory && selectedSale.editHistory.length > 0 && (
+                renderChangeComparison(selectedSale)
+              )}
+
               {/* Totals */}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex justify-between items-center mb-2">
@@ -1602,6 +1762,161 @@ export default function SalesHistory() {
                 <button
                   onClick={() => setShowModal(false)}
                   className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: Edited Sale Details Modal */}
+      {showEditedDetailsModal && selectedEditedSale && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Détails des modifications - {selectedEditedSale.saleId}
+              </h3>
+              <button
+                onClick={() => setShowEditedDetailsModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Current Sale Info */}
+              <div>
+                <h4 className="text-md font-medium text-gray-900 mb-3 bg-blue-50 p-3 rounded-lg">
+                  État actuel de la vente
+                </h4>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Client
+                    </label>
+                    <p className="text-sm text-gray-900">
+                      {selectedEditedSale.customer.name} ({selectedEditedSale.customer.phone})
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Total actuel
+                    </label>
+                    <p className="text-sm font-medium text-gray-900">
+                      {formatCurrency(selectedEditedSale.total)}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Méthode de paiement
+                    </label>
+                    <p className="text-sm text-gray-900 capitalize">
+                      {selectedEditedSale.paymentMethod}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Articles
+                    </label>
+                    <p className="text-sm text-gray-900">
+                      {selectedEditedSale.items.length} article(s)
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit History */}
+              <div>
+                <h4 className="text-md font-medium text-gray-900 mb-3">
+                  Historique des modifications
+                </h4>
+                <div className="space-y-4">
+                  {selectedEditedSale.editHistory && selectedEditedSale.editHistory.length > 0 ? (
+                    selectedEditedSale.editHistory.map((edit, index) => (
+                      <div key={edit._id || index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h5 className="font-medium text-gray-900">
+                              Modification #{selectedEditedSale.editHistory!.length - index}
+                            </h5>
+                            <p className="text-sm text-gray-600">
+                              {formatDate(edit.editedAt)}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-gray-900">
+                              Par: {edit.editedBy}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Raison: {edit.reason}
+                            </p>
+                          </div>
+                        </div>
+
+                        {edit.changes && Object.keys(edit.changes).length > 0 && (
+                          <div className="space-y-3">
+                            <h6 className="font-medium text-gray-700 text-sm">Changements détaillés:</h6>
+                            {Object.entries(edit.changes).map(([field, changeData]: [string, any]) => (
+                              <div key={field} className="border-l-4 border-blue-500 pl-3">
+                                <div className="font-medium text-gray-700 text-sm capitalize mb-2">
+                                  {field.replace(/([A-Z])/g, ' $1').toLowerCase()}:
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                  <div className="bg-red-50 p-3 rounded border border-red-200">
+                                    <div className="text-red-700 font-medium mb-1">Avant:</div>
+                                    <div className="text-red-600 break-words">
+                                      {typeof changeData.from === 'object' 
+                                        ? JSON.stringify(changeData.from, null, 2)
+                                        : String(changeData.from || 'N/A')
+                                      }
+                                    </div>
+                                  </div>
+                                  <div className="bg-green-50 p-3 rounded border border-green-200">
+                                    <div className="text-green-700 font-medium mb-1">Après:</div>
+                                    <div className="text-green-600 break-words">
+                                      {typeof changeData.to === 'object' 
+                                        ? JSON.stringify(changeData.to, null, 2)
+                                        : String(changeData.to || 'N/A')
+                                      }
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <History className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>Aucun détail de modification disponible</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => setShowEditedDetailsModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Fermer
                 </button>
