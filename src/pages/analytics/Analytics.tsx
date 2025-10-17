@@ -139,6 +139,16 @@ const getUserRole = (): string => {
   return "user";
 };
 
+// Check if user is admin
+const isAdmin = (): boolean => {
+  return getUserRole() === "admin";
+};
+
+// Check if user should see only today's data (non-admin)
+const shouldSeeOnlyTodayData = (): boolean => {
+  return !isAdmin();
+};
+
 // Check if user is cashier_supervisor
 const isCashierSupervisor = (): boolean => {
   return getUserRole() === "cashier_supervisor";
@@ -206,9 +216,9 @@ export default function Analytics() {
     }
   }, [analytics]);
 
-  // Effect to enforce day-only view for cashier_supervisor
+  // Effect to enforce day-only view for non-admin users
   useEffect(() => {
-    if (isCashierSupervisor() && timeframe !== "day") {
+    if (shouldSeeOnlyTodayData() && timeframe !== "day") {
       setTimeframe("day");
       setSelectedDate(getTodayDate());
     }
@@ -218,13 +228,13 @@ export default function Analytics() {
     try {
       setLoading(true);
 
-      // For cashier_supervisor, only fetch today's data
-      if (isCashierSupervisor()) {
+      // For non-admin users, only fetch today's data
+      if (shouldSeeOnlyTodayData()) {
         await fetchTodayDataOnly();
         return;
       }
 
-      // For admin and other roles, fetch all data as before
+      // For admin, fetch all data as before
       await fetchAllData();
     } catch (error) {
       console.error("Error fetching analytics:", error);
@@ -234,7 +244,7 @@ export default function Analytics() {
     }
   };
 
-  // Fetch only today's data for cashier_supervisor
+  // Fetch only today's data for non-admin users
   const fetchTodayDataOnly = async () => {
     try {
       const today = getTodayDate();
@@ -378,7 +388,7 @@ export default function Analytics() {
             ? customersData
             : customersData.customers || customersData.data || [];
 
-          // For cashier_supervisor, we'll filter customers based on today's sales
+          // For non-admin users, we'll filter customers based on today's sales
           const customerIdsFromTodaySales = new Set(
             todaySales.map((sale) => sale.customerId).filter(Boolean)
           );
@@ -406,7 +416,7 @@ export default function Analytics() {
     }
   };
 
-  // Process data for cashier_supervisor (today only)
+  // Process data for non-admin users (today only)
   const processTodayDataOnly = (
     sales: Sale[],
     expenses: Expense[],
@@ -461,7 +471,7 @@ export default function Analytics() {
       0
     );
 
-    // For cashier_supervisor, we only show today's data in charts
+    // For non-admin users, we only show today's data in charts
     const today = new Date();
     const salesByDay = [
       {
@@ -475,7 +485,7 @@ export default function Analytics() {
       },
     ];
 
-    // Empty arrays for other timeframes since cashier_supervisor can't access them
+    // Empty arrays for other timeframes since non-admin users can't access them
     const emptyArray: any[] = [];
 
     // Top products from today's sales
@@ -568,7 +578,7 @@ export default function Analytics() {
     };
   };
 
-  // Original fetchAllData function (for admin and other roles)
+  // Original fetchAllData function (for admin only)
   const fetchAllData = async () => {
     try {
       // Fetch ALL sales data without pagination limits
@@ -1350,7 +1360,7 @@ export default function Analytics() {
       0
     );
     
-    // NEW: Calculate net revenue as (sales + entries) - expenses
+    // Calculate net revenue as (sales + entries) - expenses
     const netRevenue = (filteredRevenue + filteredEntries) - filteredExpenses;
 
     // Count unique products from filtered sales
@@ -1668,8 +1678,8 @@ export default function Analytics() {
   };
 
   const handleTimeframeChange = (period: "day" | "week" | "month" | "year") => {
-    // For cashier_supervisor, only allow "day" timeframe
-    if (isCashierSupervisor() && period !== "day") {
+    // For non-admin users, only allow "day" timeframe
+    if (shouldSeeOnlyTodayData() && period !== "day") {
       return;
     }
 
@@ -1893,11 +1903,14 @@ export default function Analytics() {
                 Analyse approfondie de la performance de votre entreprise
               </p>
             </div>
-            {isCashierSupervisor() && (
+            {shouldSeeOnlyTodayData() && (
               <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-2 rounded-lg border border-blue-200">
                 <Shield className="w-4 h-4" />
                 <span className="text-sm font-medium">
-                  Mode Superviseur Caisse - Données du jour uniquement
+                  {isCashierSupervisor() 
+                    ? "Mode Superviseur Caisse - Données du jour uniquement"
+                    : "Vue limitée - Données du jour uniquement"
+                  }
                 </span>
               </div>
             )}
@@ -2060,7 +2073,6 @@ export default function Analytics() {
           </div>
         </div>
 
-        {/* Rest of the component remains exactly the same... */}
         {/* Sales Chart */}
         <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -2085,8 +2097,8 @@ export default function Analytics() {
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
                     className="ml-2 px-2 py-1 border-none bg-transparent text-xs sm:text-sm focus:outline-none focus:ring-0 text-gray-900 font-medium w-full"
-                    // Disable date picker for cashier_supervisor (only today allowed)
-                    disabled={isCashierSupervisor()}
+                    // Disable date picker for non-admin users (only today allowed)
+                    disabled={shouldSeeOnlyTodayData()}
                   />
                 </div>
               )}
@@ -2124,11 +2136,11 @@ export default function Analytics() {
                     className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 flex-1 sm:flex-none ${
                       timeframe === period
                         ? "bg-blue-500 text-white shadow-sm"
-                        : isCashierSupervisor() && period !== "day"
+                        : shouldSeeOnlyTodayData() && period !== "day"
                         ? "text-gray-400 cursor-not-allowed opacity-50"
                         : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                     }`}
-                    disabled={isCashierSupervisor() && period !== "day"}
+                    disabled={shouldSeeOnlyTodayData() && period !== "day"}
                   >
                     {period === "day" && "Jour"}
                     {period === "week" && "Semaine"}

@@ -1297,7 +1297,7 @@ export default function Reservation() {
         type: "reservation",
       };
 
-      // Use the same /sales endpoint as NewSale.tsx
+      // Use the sales endpoint to create the reservation (money recorded immediately)
       const res = await fetch(`${API_BASE}/sales`, {
         method: "POST",
         headers: {
@@ -1316,9 +1316,44 @@ export default function Reservation() {
         throw new Error(msg);
       }
 
-      // Get the reservation ID from the API response
-      const reservationId = data.saleId || data._id;
+      // Get the sale ID from the API response
+      const saleId = data._id;
+      const reservationId = data.saleId;
       
+      // Create reservation tracking record
+      try {
+        const trackRes = await fetch(`${API_BASE}/reservations/track`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeader(),
+          },
+          body: JSON.stringify({
+            saleReference: saleId,
+            saleId: reservationId,
+            customer: {
+              name: form.customerName,
+              phone: form.customerPhone,
+              email: form.customerEmail
+            },
+            items: cart,
+            total: cartTotal,
+            paymentMethod: uiToModelPayment(form.paymentMethod),
+            salesPerson: currentUser?.username || "unknown",
+            reservationDate: reservationDate,
+            reservationTime: reservationTime,
+            notes: form.notes
+          }),
+        });
+
+        if (!trackRes.ok) {
+          console.warn('Failed to create reservation tracking, but sale was created');
+        }
+      } catch (trackError) {
+        console.warn('Error creating reservation tracking:', trackError);
+        // Don't fail the whole reservation if tracking fails
+      }
+
       // Enhanced receipt data with actual reservation ID
       const newReceiptData = {
         shopName: "ETS. DIEU MERCI",
@@ -1339,8 +1374,8 @@ export default function Reservation() {
           hour: '2-digit',
           minute: '2-digit'
         }),
-        receiptNumber: reservationId, // Use actual reservation ID from API
-        stubNumber: reservationId, // Use actual reservation ID from API for stub as well
+        receiptNumber: reservationId,
+        stubNumber: reservationId,
         reservationDate: reservationDate,
         reservationTime: reservationTime,
         notes: form.notes,
