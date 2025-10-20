@@ -115,14 +115,14 @@ const sidebarSections: SidebarSection[] = [
         label: "Historique de Vente", 
         icon: TrendingUp, 
         path: "/sales",
-        roles: ["admin", "manager", "cashier_supervisor"] // All roles can access sales history
+        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"] // All roles can access sales history
       },
       { 
         id: "reservation-history", 
         label: "Historique de reservation", 
         icon: History, 
         path: "/reservationhistory",
-        roles: ["admin", "manager", "cashier_supervisor"] // All roles can access reservation history
+        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"] // All roles can access reservation history
       },
       { 
         id: "entryhistory", 
