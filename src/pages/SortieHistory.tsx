@@ -19,14 +19,14 @@ import {
 
 interface ExpenseItem {
   _id: string;
-  expenseId: string; // Changed from saleId to expenseId
+  expenseId: string;
   reason: string;
   recipientName: string;
   recipientPhone: string;
   amount: number;
   paymentMethod: string;
   status: string;
-  recordedBy: string; // Changed from salesPerson to recordedBy
+  recordedBy: string;
   createdAt: string;
   updatedAt: string;
   notes?: string;
@@ -93,7 +93,6 @@ export default function SortieHistory() {
   const fetchExpenses = async () => {
     try {
       setLoading(true);
-      // ✅ Changed from /sales/expenses/all to /expenses
       const res = await fetch(`${import.meta.env.VITE_API_URL}/expenses`, {
         headers: {
           "Content-Type": "application/json",
@@ -146,7 +145,7 @@ export default function SortieHistory() {
     }
   };
 
-  // Function to get expenses filtered by timeframe
+  // Function to get expenses filtered by timeframe - FIXED VERSION
   const getExpensesByTimeframe = (
     timeframe: "day" | "week" | "month" | "year",
     selectedYear?: number,
@@ -157,12 +156,20 @@ export default function SortieHistory() {
     switch (timeframe) {
       case "day":
         const targetDate = selectedDate ? new Date(selectedDate) : new Date();
-        const targetDateString = targetDate.toDateString();
+        
+        // Create start and end of the target day
+        const startOfDay = new Date(targetDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        
+        const endOfDay = new Date(targetDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
         return allExpenses.filter((expense: ExpenseItem) => {
           try {
             const expenseDate = new Date(expense.createdAt);
-            return expenseDate.toDateString() === targetDateString;
+            return expenseDate >= startOfDay && expenseDate <= endOfDay;
           } catch (error) {
+            console.error("Error parsing expense date:", expense.createdAt, error);
             return false;
           }
         });
@@ -170,22 +177,28 @@ export default function SortieHistory() {
       case "week":
         const weekAgo = new Date();
         weekAgo.setDate(weekAgo.getDate() - 7);
+        weekAgo.setHours(0, 0, 0, 0);
+        
         return allExpenses.filter((expense: ExpenseItem) => {
           try {
             const expenseDate = new Date(expense.createdAt);
             return expenseDate >= weekAgo && expenseDate <= now;
           } catch (error) {
+            console.error("Error parsing expense date:", expense.createdAt, error);
             return false;
           }
         });
 
       case "month":
         const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        firstDayOfMonth.setHours(0, 0, 0, 0);
+        
         return allExpenses.filter((expense: ExpenseItem) => {
           try {
             const expenseDate = new Date(expense.createdAt);
             return expenseDate >= firstDayOfMonth && expenseDate <= now;
           } catch (error) {
+            console.error("Error parsing expense date:", expense.createdAt, error);
             return false;
           }
         });
@@ -193,7 +206,10 @@ export default function SortieHistory() {
       case "year":
         const year = selectedYear || now.getFullYear();
         const firstDayOfYear = new Date(year, 0, 1);
-        const lastDayOfYear = new Date(year, 11, 31, 23, 59, 59);
+        firstDayOfYear.setHours(0, 0, 0, 0);
+        
+        const lastDayOfYear = new Date(year, 11, 31, 23, 59, 59, 999);
+        
         return allExpenses.filter((expense: ExpenseItem) => {
           try {
             const expenseDate = new Date(expense.createdAt);
@@ -201,6 +217,7 @@ export default function SortieHistory() {
               expenseDate >= firstDayOfYear && expenseDate <= lastDayOfYear
             );
           } catch (error) {
+            console.error("Error parsing expense date:", expense.createdAt, error);
             return false;
           }
         });
@@ -320,11 +337,11 @@ export default function SortieHistory() {
 
   const filteredExpenses = expenses.filter(
     (expense) =>
-      expense.expenseId.toLowerCase().includes(searchTerm.toLowerCase()) || // Changed from saleId to expenseId
+      expense.expenseId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       expense.reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
       expense.recipientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       expense.recipientPhone.includes(searchTerm) ||
-      expense.recordedBy.toLowerCase().includes(searchTerm.toLowerCase()) // Changed from salesPerson to recordedBy
+      expense.recordedBy.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const viewExpenseDetails = (expense: ExpenseItem) => {
@@ -353,7 +370,6 @@ export default function SortieHistory() {
 
     try {
       if (!isValid) {
-        // ✅ Changed from /sales/:id to /expenses/:id
         const response = await fetch(
           `${import.meta.env.VITE_API_URL}/expenses/${validatingExpense._id}`,
           {
@@ -379,7 +395,6 @@ export default function SortieHistory() {
           setError(errorData.error || "Failed to delete expense");
         }
       } else {
-        // ✅ Changed from /sales/:id/validate to /expenses/:id/validate
         const response = await fetch(
           `${import.meta.env.VITE_API_URL}/expenses/${
             validatingExpense._id
@@ -644,7 +659,7 @@ export default function SortieHistory() {
         <div class="shop-details">DATE: <strong>${formattedDate}</strong></div>
         <div class="shop-details">RECU #: <strong>${
           expense.expenseId
-        }</strong></div> <!-- Changed from saleId to expenseId -->
+        }</strong></div>
       </div>
       
       <div class="receipt-title">RECU DE SORTIE DE CAISSE</div>
@@ -691,7 +706,7 @@ export default function SortieHistory() {
         <div class="warning"><strong>Conserver cette souche</strong></div>
         <div class="warning">Reçu #: <strong>${
           expense.expenseId
-        }</strong></div> <!-- Changed from saleId to expenseId -->
+        }</strong></div>
         <div class="warning">Date: <strong>${formattedDate}</strong></div>
       </div>
       
@@ -947,8 +962,7 @@ export default function SortieHistory() {
                 {filteredExpenses.map((expense) => (
                   <tr key={expense._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {expense.expenseId}{" "}
-                      {/* Changed from saleId to expenseId */}
+                      {expense.expenseId}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {expense.reason}
@@ -1097,8 +1111,7 @@ export default function SortieHistory() {
                   </label>
                   <p className="text-sm text-gray-900">
                     {selectedExpense.expenseId}
-                  </p>{" "}
-                  {/* Changed from saleId to expenseId */}
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1141,8 +1154,7 @@ export default function SortieHistory() {
                     Enregistré par
                   </label>
                   <p className="text-sm text-gray-900">
-                    {selectedExpense.recordedBy}{" "}
-                    {/* Changed from salesPerson to recordedBy */}
+                    {selectedExpense.recordedBy}
                   </p>
                 </div>
               </div>
