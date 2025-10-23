@@ -84,14 +84,14 @@ const sidebarSections: SidebarSection[] = [
         label: "Entrée de caisse", 
         icon: Wallet, 
         path: "/entry",
-        roles: ["admin", "cashier_supervisor", "inventory_manager"] // Admin and cashier_supervisor
+        roles: ["admin", "cashier_supervisor", "inventory_manager", "manager"] // Admin and cashier_supervisor
       },
       { 
         id: "sortie", 
         label: "Sortie", 
         icon: Wallet, 
         path: "/sortie",
-        roles: ["admin", "cashier_supervisor", "inventory_manager"] // Admin and cashier_supervisor
+        roles: ["admin", "cashier_supervisor", "inventory_manager", "manager"] // Admin and cashier_supervisor
       },
     ],
   },
@@ -129,14 +129,14 @@ const sidebarSections: SidebarSection[] = [
         label: "Historique d'Entrée", 
         icon: Wallet, 
         path: "/EntryHistory",
-        roles: ["admin", "cashier_supervisor", "inventory_manager"] // Admin and cashier_supervisor
+        roles: ["admin", "cashier_supervisor", "inventory_manager", "manager"] // Admin and cashier_supervisor
       },
       { 
         id: "historicsortie", 
         label: "Historique de Sortie", 
         icon: Wallet, 
         path: "/sortiehistory",
-        roles: ["admin","cashier_supervisor", "inventory_manager"] // Admin and cashier
+        roles: ["admin","cashier_supervisor", "inventory_manager", "manager"] // Admin and cashier
       },
       { 
         id: "reports", 
