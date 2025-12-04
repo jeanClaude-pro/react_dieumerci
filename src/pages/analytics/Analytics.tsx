@@ -29,6 +29,7 @@ interface SaleItem {
 }
 
 interface Sale {
+  _id?: string;
   total: number;
   status?: string;
   createdAt?: string;
@@ -37,6 +38,7 @@ interface Sale {
   items?: SaleItem[];
   customerId?: string;
   customerName?: string;
+  type?: string;
 }
 
 interface Customer {
@@ -278,13 +280,16 @@ export default function Analytics() {
         fetchedSales = [];
       }
 
-      // Filter sales to only include today's completed sales
+      // ✅ FIXED: Filter sales to include both completed AND pending sales (reservations with money received)
       const todaySales = fetchedSales.filter((sale: Sale) => {
-        const isCompleted =
-          sale.status !== "voided" &&
-          sale.status !== "cancelled" &&
-          sale.status !== "refunded";
-        if (!isCompleted) return false;
+        const isValidSale = 
+          sale.status !== "voided" && 
+          sale.status !== "refunded" && 
+          sale.status !== "corrected" &&
+          sale.type !== "expense" &&
+          (sale.status === "completed" || sale.status === "pending");
+
+        if (!isValidSale) return false;
 
         try {
           const saleDate = new Date(
@@ -294,6 +299,16 @@ export default function Analytics() {
         } catch (error) {
           return false;
         }
+      });
+
+      console.log("📊 Today's valid sales:", {
+        totalFetched: fetchedSales.length,
+        validToday: todaySales.length,
+        byStatus: todaySales.reduce((acc, sale) => {
+          acc[sale.status || 'unknown'] = (acc[sale.status || 'unknown'] || 0) + 1;
+          return acc;
+        }, {} as any),
+        totalRevenue: todaySales.reduce((sum, sale) => sum + sale.total, 0)
       });
 
       setAllSales(todaySales);
@@ -422,13 +437,23 @@ export default function Analytics() {
     expenses: Expense[],
     entries: Entry[]
   ): AnalyticsData => {
-    const validSales = sales.filter(
-      (sale: Sale) =>
-        sale &&
-        typeof sale.total === "number" &&
-        sale.items &&
-        Array.isArray(sale.items)
+    // ✅ FIXED: Use the same filtering logic as fetchTodayDataOnly
+    const validSales = sales.filter((sale: Sale) => 
+      sale.status !== "voided" && 
+      sale.status !== "refunded" && 
+      sale.status !== "corrected" &&
+      sale.type !== "expense" &&
+      (sale.status === "completed" || sale.status === "pending")
     );
+
+    console.log("💰 Processing today's data:", {
+      totalSales: validSales.length,
+      totalRevenue: validSales.reduce((sum, sale) => sum + sale.total, 0),
+      byStatus: validSales.reduce((acc, sale) => {
+        acc[sale.status || 'unknown'] = (acc[sale.status || 'unknown'] || 0) + 1;
+        return acc;
+      }, {} as any)
+    });
 
     // Calculate totals for today only
     const totalSales = validSales.length;
@@ -606,7 +631,38 @@ export default function Analytics() {
         fetchedSales = [];
       }
 
+      console.log("📊 All sales fetched:", {
+        total: fetchedSales.length,
+        byStatus: fetchedSales.reduce((acc, sale) => {
+          acc[sale.status || 'unknown'] = (acc[sale.status || 'unknown'] || 0) + 1;
+          return acc;
+        }, {} as any),
+        byType: fetchedSales.reduce((acc, sale) => {
+          acc[sale.type || 'unknown'] = (acc[sale.type || 'unknown'] || 0) + 1;
+          return acc;
+        }, {} as any)
+      });
+
       setAllSales(fetchedSales);
+
+      // ✅ FIXED: Filter out voided/refunded/corrected sales and expenses - include both completed AND pending sales
+      const completedSales = fetchedSales.filter(
+        (sale: Sale) =>
+          sale.status !== "voided" &&
+          sale.status !== "refunded" &&
+          sale.status !== "corrected" &&
+          sale.type !== "expense" &&
+          (sale.status === "completed" || sale.status === "pending")
+      );
+
+      console.log("✅ Valid sales for analytics:", {
+        total: completedSales.length,
+        totalRevenue: completedSales.reduce((sum, sale) => sum + sale.total, 0),
+        byStatus: completedSales.reduce((acc, sale) => {
+          acc[sale.status || 'unknown'] = (acc[sale.status || 'unknown'] || 0) + 1;
+          return acc;
+        }, {} as any)
+      });
 
       // Fetch ALL expenses data without pagination limits
       const expensesResponse = await fetch(`${serverUrl}/expenses?limit=0`, {
@@ -659,14 +715,6 @@ export default function Analytics() {
       }
       setAllEntries(fetchedEntries);
 
-      // Filter out voided sales - only include completed sales
-      const completedSales = fetchedSales.filter(
-        (sale: Sale) =>
-          sale.status !== "voided" &&
-          sale.status !== "cancelled" &&
-          sale.status !== "refunded"
-      );
-
       // Fetch customers data
       try {
         const customersResponse = await fetch(`${serverUrl}/customers?limit=0`);
@@ -699,7 +747,7 @@ export default function Analytics() {
     expenses: Expense[],
     entries: Entry[]
   ): AnalyticsData => {
-    // Filter out any invalid sales
+    // Filter out any invalid sales (additional safety check)
     const validSales = sales.filter(
       (sale: Sale) =>
         sale &&
@@ -707,6 +755,15 @@ export default function Analytics() {
         sale.items &&
         Array.isArray(sale.items)
     );
+
+    console.log("🔍 Final valid sales for processing:", {
+      total: validSales.length,
+      totalRevenue: validSales.reduce((sum, sale) => sum + sale.total, 0),
+      byStatus: validSales.reduce((acc, sale) => {
+        acc[sale.status || 'unknown'] = (acc[sale.status || 'unknown'] || 0) + 1;
+        return acc;
+      }, {} as any)
+    });
 
     // Calculate totals using valid sales only
     const totalSales = validSales.length;
@@ -1248,11 +1305,15 @@ export default function Analytics() {
     selectedDate?: string
   ): Sale[] => {
     const now = new Date();
+    
+    // ✅ FIXED: Use the same filtering logic as everywhere else
     const completedSales = allSales.filter(
       (sale: Sale) =>
         sale.status !== "voided" &&
-        sale.status !== "cancelled" &&
-        sale.status !== "refunded"
+        sale.status !== "refunded" &&
+        sale.status !== "corrected" &&
+        sale.type !== "expense" &&
+        (sale.status === "completed" || sale.status === "pending")
     );
 
     switch (timeframe) {
@@ -1344,6 +1405,18 @@ export default function Analytics() {
       selectedYear,
       selectedDate
     );
+
+    console.log("🔄 Filtered data update:", {
+      timeframe,
+      selectedDate,
+      selectedYear,
+      salesCount: timeframeSales.length,
+      salesRevenue: timeframeSales.reduce((sum, sale) => sum + sale.total, 0),
+      byStatus: timeframeSales.reduce((acc, sale) => {
+        acc[sale.status || 'unknown'] = (acc[sale.status || 'unknown'] || 0) + 1;
+        return acc;
+      }, {} as any)
+    });
 
     // Calculate filtered metrics
     const filteredSalesCount = timeframeSales.length;
@@ -1779,11 +1852,14 @@ export default function Analytics() {
       setAllEntries(fetchedEntries);
 
       if (fetchedSales.length > 0) {
+        // ✅ FIXED: Use the same filtering logic
         const completedSales = fetchedSales.filter(
           (sale: Sale) =>
             sale.status !== "voided" &&
-            sale.status !== "cancelled" &&
-            sale.status !== "refunded"
+            sale.status !== "refunded" &&
+            sale.status !== "corrected" &&
+            sale.type !== "expense" &&
+            (sale.status === "completed" || sale.status === "pending")
         );
 
         const processedAnalytics = processAnalyticsData(
