@@ -143,7 +143,7 @@ const sidebarSections: SidebarSection[] = [
         label: "Rapports", 
         icon: BarChart3, 
         path: "/reports",
-        roles: ["admin","manager"] // Admin and Cashier Supervisor can access reports
+        roles: ["admin"] // Admin can access reports
       },
     ],
   },
