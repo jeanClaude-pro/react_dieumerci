@@ -70,6 +70,13 @@ interface Product {
   sku?: string;
 }
 
+interface Pagination {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  itemsPerPage: number;
+}
+
 // Helper function to get today's date in correct format
 const getTodayDate = (): string => {
   const today = new Date();
@@ -110,6 +117,14 @@ export default function SalesHistory() {
   const [editedSales, setEditedSales] = useState<Sale[]>([]);
   const [selectedEditedSale, setSelectedEditedSale] = useState<Sale | null>(null);
   const [showEditedDetailsModal, setShowEditedDetailsModal] = useState(false);
+
+  // Pagination state
+  const [pagination, setPagination] = useState<Pagination>({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    itemsPerPage: 50
+  });
 
   useEffect(() => {
     fetchSales();
@@ -175,11 +190,11 @@ export default function SalesHistory() {
     });
   };
 
-  const fetchSales = async () => {
+  const fetchSales = async (page = 1, limit = 50) => {
     try {
       setLoading(true);
-      // Remove pagination - fetch ALL sales at once
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/sales?limit=0`, {
+      // Use pagination parameters - DO NOT use limit=0
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/sales?page=${page}&limit=${limit}`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
@@ -189,41 +204,69 @@ export default function SalesHistory() {
       if (res.ok) {
         const data = await res.json();
         
-        // Handle different response formats
-        let fetchedSales: Sale[] = [];
-        if (Array.isArray(data)) {
-          fetchedSales = data;
-        } else if (data.sales && Array.isArray(data.sales)) {
-          fetchedSales = data.sales;
-        } else if (data.data && Array.isArray(data.data)) {
-          fetchedSales = data.data;
+        // Handle new paginated response format
+        if (data.success && data.data && Array.isArray(data.data)) {
+          const fetchedSales = data.data;
+          
+          console.log(`Fetched ${fetchedSales.length} sales from API (Page ${page})`);
+          
+          // Filter out expenses and invalid sales
+          const validSales = filterValidSales(fetchedSales);
+          console.log(`After filtering: ${validSales.length} valid sales`);
+          
+          // Update sales state
+          setSales(validSales);
+          
+          // Update pagination state
+          if (data.pagination) {
+            setPagination({
+              currentPage: data.pagination.currentPage || page,
+              totalPages: data.pagination.totalPages || 1,
+              totalItems: data.pagination.total || 0,
+              itemsPerPage: data.pagination.limit || limit
+            });
+          }
+          
+          // Also update allSales for timeframe filtering (fetch more for filtering)
+          if (page === 1) {
+            try {
+              const allRes = await fetch(`${import.meta.env.VITE_API_URL}/sales?page=1&limit=1000`, {
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+                },
+              });
+              
+              if (allRes.ok) {
+                const allData = await allRes.json();
+                if (allData.success && allData.data) {
+                  const allValidSales = filterValidSales(allData.data);
+                  setAllSales(allValidSales);
+                  console.log(`Loaded ${allValidSales.length} sales for timeframe filtering`);
+                } else if (Array.isArray(allData)) {
+                  // Fallback for old API format
+                  const allValidSales = filterValidSales(allData);
+                  setAllSales(allValidSales);
+                  console.log(`Loaded ${allValidSales.length} sales for timeframe filtering (old format)`);
+                }
+              }
+            } catch (allError) {
+              console.warn("Could not load all sales for filtering:", allError);
+              // Use current page data for filtering
+              setAllSales(validSales);
+            }
+          }
         } else {
           console.warn("Unexpected sales data structure:", data);
-          fetchedSales = [];
+          await tryAlternativeFetch();
         }
-
-        console.log(`Fetched ${fetchedSales.length} sales from API`);
-        
-        // Filter out expenses and invalid sales
-        const validSales = filterValidSales(fetchedSales);
-        console.log(`After filtering: ${validSales.length} valid sales`);
-        
-        // Sort sales by date - newest first
-        const sortedSales = validSales.sort((a, b) => 
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        
-        setAllSales(sortedSales);
-        setSales(sortedSales); // Initially show all valid sales
       } else {
         console.error("Sales fetch failed:", res.status);
-        // Try alternative endpoints
         await tryAlternativeFetch();
       }
     } catch (error) {
       console.error("Error loading sales:", error);
       setError("Failed to load sales");
-      // Try alternative endpoints
       await tryAlternativeFetch();
     } finally {
       setLoading(false);
@@ -236,12 +279,14 @@ export default function SalesHistory() {
     try {
       console.log("SalesHistory: Trying alternative fetch method...");
       
+      // Try with pagination first
       const endpoints = [
-        `${import.meta.env.VITE_API_URL}/sales?limit=1000`,
-        `${import.meta.env.VITE_API_URL}/sales/all`,
+        `${import.meta.env.VITE_API_URL}/sales?page=1&limit=50`,
+        `${import.meta.env.VITE_API_URL}/sales?limit=100`, // Fallback with reasonable limit
       ];
       
       let fetchedSales: Sale[] = [];
+      let paginationData = null;
       
       for (const endpoint of endpoints) {
         try {
@@ -254,14 +299,21 @@ export default function SalesHistory() {
           
           if (response.ok) {
             const data = await response.json();
-            if (Array.isArray(data)) {
+            
+            // Handle new format with data and pagination
+            if (data.data && Array.isArray(data.data)) {
+              fetchedSales = data.data;
+              if (data.pagination) {
+                paginationData = data.pagination;
+              }
+              break;
+            } 
+            // Handle old formats
+            else if (Array.isArray(data)) {
               fetchedSales = data;
               break;
             } else if (data.sales && Array.isArray(data.sales)) {
               fetchedSales = data.sales;
-              break;
-            } else if (data.data && Array.isArray(data.data)) {
-              fetchedSales = data.data;
               break;
             }
           }
@@ -277,13 +329,22 @@ export default function SalesHistory() {
       const validSales = filterValidSales(fetchedSales);
       console.log(`After filtering: ${validSales.length} valid sales`);
       
-      // Sort sales by date - newest first
-      const sortedSales = validSales.sort((a, b) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+      // Update sales state
+      setSales(validSales);
       
-      setAllSales(sortedSales);
-      setSales(sortedSales);
+      // Update pagination if available
+      if (paginationData) {
+        setPagination({
+          currentPage: paginationData.currentPage || 1,
+          totalPages: paginationData.totalPages || 1,
+          totalItems: paginationData.total || validSales.length,
+          itemsPerPage: paginationData.limit || 50
+        });
+      }
+      
+      // Also set allSales for timeframe filtering
+      setAllSales(validSales);
+      
     } catch (error) {
       console.error("SalesHistory: Alternative fetch also failed:", error);
     }
@@ -555,6 +616,13 @@ export default function SalesHistory() {
         </div>
       </div>
     );
+  };
+
+  // Pagination handler
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      fetchSales(newPage, pagination.itemsPerPage);
+    }
   };
 
   // Print function for ESC/POS receipt - opens print dialog
@@ -1151,7 +1219,7 @@ export default function SalesHistory() {
         setMessage("✅ Sale updated successfully");
 
         // Refresh the sales list immediately
-        await fetchSales();
+        await fetchSales(pagination.currentPage, pagination.itemsPerPage);
 
         // Also refresh customers to update their statistics
         setTimeout(() => {
@@ -1208,7 +1276,7 @@ export default function SalesHistory() {
 
       if (response.ok) {
         setMessage("✅ Sale voided successfully");
-        await fetchSales();
+        await fetchSales(pagination.currentPage, pagination.itemsPerPage);
         setShowModal(false);
       } else {
         const errorData = await response.json();
@@ -1385,163 +1453,224 @@ export default function SalesHistory() {
               <p className="text-sm">pour la période sélectionnée</p>
             </div>
           ) : (
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Identifiant de vente
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Client
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Agent
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Articles
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Payement
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Statut
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  {showEditedSales && (
+            <>
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Dernière modification
+                      Identifiant de vente
                     </th>
-                  )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredSales.map((sale) => (
-                  <tr key={sale._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {sale.saleId}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {sale.customer.name}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {sale.customer.phone}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {sale.salesPerson || "Non spécifié"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {sale.items.length} Article(s)
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {formatCurrency(sale.total)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        {sale.paymentMethod}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
-                          sale.status === "Complétée"
-                            ? "bg-green-100 text-green-800"
-                            : sale.status === "Annulé"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-yellow-100 text-yellow-800"
-                        }`}
-                      >
-                        {sale.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(sale.createdAt)}
-                    </td>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Client
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Agent
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Articles
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Total
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Payement
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Statut
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
                     {showEditedSales && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {sale.editedAt ? formatDate(sale.editedAt) : "N/A"}
-                      </td>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Dernière modification
+                      </th>
                     )}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex gap-2">
-                        {showEditedSales ? (
-                          <button
-                            onClick={() => viewEditedSaleDetails(sale)}
-                            className="text-blue-600 hover:text-blue-900 p-1 rounded"
-                            title="Voir les détails des modifications"
-                          >
-                            <History className="w-4 h-4" />
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => viewSaleDetails(sale)}
-                            className="text-blue-600 hover:text-blue-900 p-1 rounded"
-                            title="Voir les détails de"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        )}
-                        {!showEditedSales && (
-                          <>
-                            <button
-                              onClick={() => openEditModal(sale)}
-                              disabled={
-                                sale.status === "Annulé" ||
-                                sale.status === "Rectifié"
-                              }
-                              className={`p-1 rounded ${
-                                sale.status === "Annulé" ||
-                                sale.status === "Rectifié"
-                                  ? "text-gray-400 cursor-not-allowed"
-                                  : "text-yellow-600 hover:text-yellow-900"
-                              }`}
-                              title="Edit Sale"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => generateReceiptPDF(sale)}
-                              className="text-green-600 hover:text-green-900 p-1 rounded"
-                              title="Download PDF Receipt"
-                            >
-                              <Download className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => printESC_POSReceipt(sale)}
-                              className="text-purple-600 hover:text-purple-900 p-1 rounded"
-                              title="Print ESC/POS Receipt"
-                            >
-                              <Printer className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleVoidSale(sale)}
-                              disabled={sale.status === "voided"}
-                              className={`p-1 rounded ${
-                                sale.status === "voided"
-                                  ? "text-gray-400 cursor-not-allowed"
-                                  : "text-red-600 hover:text-red-900"
-                              }`}
-                              title="Void Sale"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredSales.map((sale) => (
+                    <tr key={sale._id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {sale.saleId}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {sale.customer.name}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {sale.customer.phone}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {sale.salesPerson || "Non spécifié"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {sale.items.length} Article(s)
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {formatCurrency(sale.total)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          {sale.paymentMethod}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
+                            sale.status === "Complétée"
+                              ? "bg-green-100 text-green-800"
+                              : sale.status === "Annulé"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-yellow-100 text-yellow-800"
+                          }`}
+                        >
+                          {sale.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(sale.createdAt)}
+                      </td>
+                      {showEditedSales && (
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {sale.editedAt ? formatDate(sale.editedAt) : "N/A"}
+                        </td>
+                      )}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex gap-2">
+                          {showEditedSales ? (
+                            <button
+                              onClick={() => viewEditedSaleDetails(sale)}
+                              className="text-blue-600 hover:text-blue-900 p-1 rounded"
+                              title="Voir les détails des modifications"
+                            >
+                              <History className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => viewSaleDetails(sale)}
+                              className="text-blue-600 hover:text-blue-900 p-1 rounded"
+                              title="Voir les détails de"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          )}
+                          {!showEditedSales && (
+                            <>
+                              <button
+                                onClick={() => openEditModal(sale)}
+                                disabled={
+                                  sale.status === "Annulé" ||
+                                  sale.status === "Rectifié"
+                                }
+                                className={`p-1 rounded ${
+                                  sale.status === "Annulé" ||
+                                  sale.status === "Rectifié"
+                                    ? "text-gray-400 cursor-not-allowed"
+                                    : "text-yellow-600 hover:text-yellow-900"
+                                }`}
+                                title="Edit Sale"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => generateReceiptPDF(sale)}
+                                className="text-green-600 hover:text-green-900 p-1 rounded"
+                                title="Download PDF Receipt"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => printESC_POSReceipt(sale)}
+                                className="text-purple-600 hover:text-purple-900 p-1 rounded"
+                                title="Print ESC/POS Receipt"
+                              >
+                                <Printer className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleVoidSale(sale)}
+                                disabled={sale.status === "voided"}
+                                className={`p-1 rounded ${
+                                  sale.status === "voided"
+                                    ? "text-gray-400 cursor-not-allowed"
+                                    : "text-red-600 hover:text-red-900"
+                                }`}
+                                title="Void Sale"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              
+              {/* Pagination Controls - Only show for non-edited sales view */}
+              {!showEditedSales && pagination.totalPages > 1 && (
+                <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
+                  <div className="text-sm text-gray-700">
+                    Page {pagination.currentPage} sur {pagination.totalPages}
+                    {pagination.totalItems > 0 && ` (${pagination.totalItems} ventes totales)`}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handlePageChange(pagination.currentPage - 1)}
+                      disabled={pagination.currentPage <= 1}
+                      className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                    >
+                      <ChevronLeft className="w-4 h-4" /> Précédent
+                    </button>
+                    <div className="flex items-center gap-1">
+                      {[...Array(Math.min(5, pagination.totalPages))].map((_, i) => {
+                        const pageNum = i + 1;
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => handlePageChange(pageNum)}
+                            className={`w-8 h-8 rounded ${
+                              pagination.currentPage === pageNum
+                                ? "bg-blue-600 text-white"
+                                : "border border-gray-300 hover:bg-gray-50"
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                      {pagination.totalPages > 5 && (
+                        <>
+                          <span className="px-2">...</span>
+                          <button
+                            onClick={() => handlePageChange(pagination.totalPages)}
+                            className={`w-8 h-8 rounded ${
+                              pagination.currentPage === pagination.totalPages
+                                ? "bg-blue-600 text-white"
+                                : "border border-gray-300 hover:bg-gray-50"
+                            }`}
+                          >
+                            {pagination.totalPages}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handlePageChange(pagination.currentPage + 1)}
+                      disabled={pagination.currentPage >= pagination.totalPages}
+                      className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                    >
+                      Suivant <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

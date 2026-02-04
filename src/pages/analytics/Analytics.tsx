@@ -156,6 +156,15 @@ const isCashierSupervisor = (): boolean => {
   return getUserRole() === "cashier_supervisor";
 };
 
+// Helper function to get headers
+const getHeaders = () => {
+  const token = localStorage.getItem("token");
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+
 export default function Analytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [allSales, setAllSales] = useState<Sale[]>([]);
@@ -257,10 +266,7 @@ export default function Analytics() {
 
       // Fetch today's sales
       const salesResponse = await fetch(`${serverUrl}/sales?limit=0`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
+        headers: getHeaders(),
       });
 
       if (!salesResponse.ok) {
@@ -315,10 +321,7 @@ export default function Analytics() {
 
       // Fetch today's expenses
       const expensesResponse = await fetch(`${serverUrl}/expenses?limit=0`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
+        headers: getHeaders(),
       });
 
       let fetchedExpenses: Expense[] = [];
@@ -357,10 +360,7 @@ export default function Analytics() {
 
       // Fetch today's entries
       const entriesResponse = await fetch(`${serverUrl}/entries?limit=0`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
+        headers: getHeaders(),
       });
 
       let fetchedEntries: Entry[] = [];
@@ -608,10 +608,7 @@ export default function Analytics() {
     try {
       // Fetch ALL sales data without pagination limits
       const salesResponse = await fetch(`${serverUrl}/sales?limit=0`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
+        headers: getHeaders(),
       });
 
       if (!salesResponse.ok) {
@@ -666,10 +663,7 @@ export default function Analytics() {
 
       // Fetch ALL expenses data without pagination limits
       const expensesResponse = await fetch(`${serverUrl}/expenses?limit=0`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
+        headers: getHeaders(),
       });
 
       let fetchedExpenses: Expense[] = [];
@@ -693,10 +687,7 @@ export default function Analytics() {
 
       // Fetch ALL entries data without pagination limits
       const entriesResponse = await fetch(`${serverUrl}/entries?limit=0`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
+        headers: getHeaders(),
       });
 
       let fetchedEntries: Entry[] = [];
@@ -1779,10 +1770,7 @@ export default function Analytics() {
       for (const endpoint of endpoints) {
         try {
           const response = await fetch(endpoint, {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-            },
+            headers: getHeaders(),
           });
 
           if (response.ok) {
@@ -1806,7 +1794,10 @@ export default function Analytics() {
       // Try to fetch expenses
       try {
         const expensesResponse = await fetch(
-          `${serverUrl}/expenses?limit=1000`
+          `${serverUrl}/expenses?limit=1000`,
+          {
+            headers: getHeaders(),
+          }
         );
         if (expensesResponse.ok) {
           const expensesData = await expensesResponse.json();
@@ -1828,7 +1819,10 @@ export default function Analytics() {
       // Try to fetch entries
       try {
         const entriesResponse = await fetch(
-          `${serverUrl}/entries?limit=1000`
+          `${serverUrl}/entries?limit=1000`,
+          {
+            headers: getHeaders(),
+          }
         );
         if (entriesResponse.ok) {
           const entriesData = await entriesResponse.json();
