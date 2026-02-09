@@ -15,10 +15,10 @@ import {
   RefreshCw,
   Printer,
   Calendar,
-  ChevronLeft,
-  ChevronRight,
   History,
   Filter,
+  ChevronDown,
+  Shield,
 } from "lucide-react";
 import jsPDF from "jspdf";
 
@@ -58,8 +58,7 @@ interface Sale {
   editedBy?: string;
   editedAt?: string;
   editHistory?: EditHistoryEntry[];
-  // For edited sales comparison
-  originalSaleData?: any;
+  type?: string;
 }
 
 interface Product {
@@ -70,11 +69,48 @@ interface Product {
   sku?: string;
 }
 
-interface Pagination {
-  currentPage: number;
-  totalPages: number;
-  totalItems: number;
-  itemsPerPage: number;
+// User interface for role checking
+interface User {
+  _id: string;
+  name: string;
+  email: string;
+  role: string;
+  permissions?: string[];
+}
+
+// Timeframe metadata interface
+interface TimeframeMetadata {
+  description: string;
+  start: string;
+  end: string;
+  query: {
+    from: string | null;
+    to: string | null;
+    date: string | null;
+    year: string | null;
+    month: string | null;
+  };
+}
+
+// Response interface for timeframe API
+interface SalesResponse {
+  success: boolean;
+  data: Sale[];
+  timeframe: TimeframeMetadata;
+  summary: {
+    totalRecords: number;
+    revenue: number;
+    expenses: number;
+    net: number;
+    salesCount: number;
+    expensesCount: number;
+  };
+  filtersApplied: {
+    customerPhone: string;
+    status: string;
+    type: string;
+  };
+  performanceNote: string | null;
 }
 
 // Helper function to get today's date in correct format
@@ -86,9 +122,21 @@ const getTodayDate = (): string => {
   return `${year}-${month}-${day}`;
 };
 
+// Helper function to get current month in YYYY-MM format
+const getCurrentMonth = (): string => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+};
+
+// Helper function to get current year
+const getCurrentYear = (): number => {
+  return new Date().getFullYear();
+};
+
 export default function SalesHistory() {
   const [sales, setSales] = useState<Sale[]>([]);
-  const [allSales, setAllSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -106,11 +154,26 @@ export default function SalesHistory() {
   const [error, setError] = useState<string | null>(null);
   const [loadingProducts, setLoadingProducts] = useState(false);
 
-  // Timeframe state
-  const [timeframe, setTimeframe] = useState<"day" | "week" | "month" | "year">("day");
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
-  const [initialLoad, setInitialLoad] = useState(true);
+  // User state for role checking
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Timeframe state - Updated to match backend query parameters
+  const [timeframeType, setTimeframeType] = useState<
+    "custom" | "day" | "month" | "year" | "today"
+  >("today");
+  
+  // Query parameters for timeframe
+  const [queryParams, setQueryParams] = useState({
+    from: "",
+    to: "",
+    date: getTodayDate(),
+    year: getCurrentYear().toString(),
+    month: getCurrentMonth().split('-')[1],
+    type: "",
+    status: "",
+    customerPhone: ""
+  });
 
   // NEW: Edited sales filter state
   const [showEditedSales, setShowEditedSales] = useState(false);
@@ -118,19 +181,23 @@ export default function SalesHistory() {
   const [selectedEditedSale, setSelectedEditedSale] = useState<Sale | null>(null);
   const [showEditedDetailsModal, setShowEditedDetailsModal] = useState(false);
 
-  // Pagination state
-  const [pagination, setPagination] = useState<Pagination>({
-    currentPage: 1,
-    totalPages: 1,
-    totalItems: 0,
-    itemsPerPage: 50
-  });
+  // Timeframe metadata
+  const [timeframeMetadata, setTimeframeMetadata] = useState<TimeframeMetadata | null>(null);
+  const [summaryStats, setSummaryStats] = useState<any>(null);
+  const [appliedFilters, setAppliedFilters] = useState<any>(null);
 
+  // UI state
+  const [showFilters, setShowFilters] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  // Fetch current user on component mount
   useEffect(() => {
+    fetchCurrentUser();
     fetchSales();
     fetchProducts();
     const handleSalesUpdate = () => {
-      // You can add logic here if needed to refresh customer data
+      // Refresh sales when triggered from other components
+      fetchSales();
     };
 
     window.addEventListener("salesUpdated", handleSalesUpdate);
@@ -140,41 +207,44 @@ export default function SalesHistory() {
     };
   }, []);
 
+  // Fetch sales when query params change
   useEffect(() => {
-    if (allSales.length > 0) {
-      updateFilteredSales();
-      // NEW: Update edited sales when allSales changes
-      updateEditedSales();
+    if (Object.keys(queryParams).length > 0) {
+      fetchSales();
     }
-  }, [timeframe, selectedYear, selectedDate, allSales, showEditedSales]);
+  }, [queryParams]);
 
-  // NEW: Function to filter and prepare edited sales
-  const updateEditedSales = () => {
-    const timeframeSales = getSalesByTimeframe(timeframe, selectedYear, selectedDate);
-    
-    // Filter sales that have editHistory or editedBy field
-    const edited = timeframeSales.filter(sale => 
-      (sale.editHistory && sale.editHistory.length > 0) || sale.editedBy
-    );
+  // Fetch current user from API or localStorage
+  const fetchCurrentUser = async () => {
+    try {
+      // Try to get user from localStorage first
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        const userData = JSON.parse(storedUser);
+        setCurrentUser(userData);
+        setIsAdmin(userData.role === "admin");
+      } else {
+        // Fallback to API call
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/me`, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          },
+        });
 
-    // Sort by edit date (newest first)
-    const sortedEditedSales = edited.sort((a, b) => {
-      const dateA = a.editedAt ? new Date(a.editedAt).getTime() : new Date(a.updatedAt).getTime();
-      const dateB = b.editedAt ? new Date(b.editedAt).getTime() : new Date(b.updatedAt).getTime();
-      return dateB - dateA;
-    });
-
-    setEditedSales(sortedEditedSales);
+        if (res.ok) {
+          const userData = await res.json();
+          setCurrentUser(userData);
+          setIsAdmin(userData.role === "admin");
+          localStorage.setItem("user", JSON.stringify(userData));
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      // Default to non-admin if can't fetch user
+      setIsAdmin(false);
+    }
   };
-
-  // FIXED: Effect to automatically set to today's date when timeframe changes to "day"
-  useEffect(() => {
-    if (!initialLoad && timeframe === "day") {
-      const today = getTodayDate();
-      console.log('Auto-setting date to today:', today);
-      setSelectedDate(today);
-    }
-  }, [timeframe, initialLoad]);
 
   // Filter out expenses and voided sales - ONLY show completed sales
   const filterValidSales = (sales: Sale[]): Sale[] => {
@@ -190,11 +260,50 @@ export default function SalesHistory() {
     });
   };
 
-  const fetchSales = async (page = 1, limit = 50) => {
+  // Build query string from queryParams
+  const buildQueryString = () => {
+    const params = new URLSearchParams();
+    
+    // Add timeframe parameters based on timeframeType
+    switch(timeframeType) {
+      case "custom":
+        if (queryParams.from) params.append("from", queryParams.from);
+        if (queryParams.to) params.append("to", queryParams.to);
+        break;
+      case "day":
+        if (queryParams.date) params.append("date", queryParams.date);
+        break;
+      case "month":
+        if (queryParams.year) params.append("year", queryParams.year);
+        if (queryParams.month) params.append("month", queryParams.month);
+        break;
+      case "year":
+        if (queryParams.year) params.append("year", queryParams.year);
+        break;
+      case "today":
+        // No parameters needed - backend defaults to today
+        break;
+    }
+    
+    // Add additional filters
+    if (queryParams.type) params.append("type", queryParams.type);
+    if (queryParams.status) params.append("status", queryParams.status);
+    if (queryParams.customerPhone) params.append("customerPhone", queryParams.customerPhone);
+    
+    return params.toString();
+  };
+
+  const fetchSales = async () => {
     try {
       setLoading(true);
-      // Use pagination parameters - DO NOT use limit=0
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/sales?page=${page}&limit=${limit}`, {
+      setError(null);
+      
+      const queryString = buildQueryString();
+      const url = `${import.meta.env.VITE_API_URL}/sales${queryString ? `?${queryString}` : ''}`;
+      
+      console.log("Fetching sales from:", url);
+      
+      const res = await fetch(url, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
@@ -202,13 +311,14 @@ export default function SalesHistory() {
       });
 
       if (res.ok) {
-        const data = await res.json();
+        const data: SalesResponse = await res.json();
         
-        // Handle new paginated response format
         if (data.success && data.data && Array.isArray(data.data)) {
           const fetchedSales = data.data;
           
-          console.log(`Fetched ${fetchedSales.length} sales from API (Page ${page})`);
+          console.log(`Fetched ${fetchedSales.length} sales from API`);
+          console.log("Timeframe metadata:", data.timeframe);
+          console.log("Summary stats:", data.summary);
           
           // Filter out expenses and invalid sales
           const validSales = filterValidSales(fetchedSales);
@@ -217,263 +327,124 @@ export default function SalesHistory() {
           // Update sales state
           setSales(validSales);
           
-          // Update pagination state
-          if (data.pagination) {
-            setPagination({
-              currentPage: data.pagination.currentPage || page,
-              totalPages: data.pagination.totalPages || 1,
-              totalItems: data.pagination.total || 0,
-              itemsPerPage: data.pagination.limit || limit
-            });
-          }
+          // Update metadata
+          setTimeframeMetadata(data.timeframe);
+          setSummaryStats(data.summary);
+          setAppliedFilters(data.filtersApplied);
           
-          // Also update allSales for timeframe filtering (fetch more for filtering)
-          if (page === 1) {
-            try {
-              const allRes = await fetch(`${import.meta.env.VITE_API_URL}/sales?page=1&limit=1000`, {
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-                },
-              });
-              
-              if (allRes.ok) {
-                const allData = await allRes.json();
-                if (allData.success && allData.data) {
-                  const allValidSales = filterValidSales(allData.data);
-                  setAllSales(allValidSales);
-                  console.log(`Loaded ${allValidSales.length} sales for timeframe filtering`);
-                } else if (Array.isArray(allData)) {
-                  // Fallback for old API format
-                  const allValidSales = filterValidSales(allData);
-                  setAllSales(allValidSales);
-                  console.log(`Loaded ${allValidSales.length} sales for timeframe filtering (old format)`);
-                }
-              }
-            } catch (allError) {
-              console.warn("Could not load all sales for filtering:", allError);
-              // Use current page data for filtering
-              setAllSales(validSales);
-            }
-          }
+          // Update edited sales
+          updateEditedSales(validSales);
         } else {
           console.warn("Unexpected sales data structure:", data);
-          await tryAlternativeFetch();
+          setError("Unexpected response format from server");
         }
       } else {
         console.error("Sales fetch failed:", res.status);
-        await tryAlternativeFetch();
+        const errorText = await res.text();
+        setError(`Failed to load sales: ${res.status} ${errorText}`);
       }
     } catch (error) {
       console.error("Error loading sales:", error);
-      setError("Failed to load sales");
-      await tryAlternativeFetch();
+      setError("Failed to load sales. Please check your connection.");
     } finally {
       setLoading(false);
-      setInitialLoad(false);
     }
   };
 
-  // Alternative fetch method if the main one fails
-  const tryAlternativeFetch = async () => {
-    try {
-      console.log("SalesHistory: Trying alternative fetch method...");
-      
-      // Try with pagination first
-      const endpoints = [
-        `${import.meta.env.VITE_API_URL}/sales?page=1&limit=50`,
-        `${import.meta.env.VITE_API_URL}/sales?limit=100`, // Fallback with reasonable limit
-      ];
-      
-      let fetchedSales: Sale[] = [];
-      let paginationData = null;
-      
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(endpoint, {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-            },
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            
-            // Handle new format with data and pagination
-            if (data.data && Array.isArray(data.data)) {
-              fetchedSales = data.data;
-              if (data.pagination) {
-                paginationData = data.pagination;
-              }
-              break;
-            } 
-            // Handle old formats
-            else if (Array.isArray(data)) {
-              fetchedSales = data;
-              break;
-            } else if (data.sales && Array.isArray(data.sales)) {
-              fetchedSales = data.sales;
-              break;
-            }
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch from ${endpoint}:`, error);
-          continue;
-        }
-      }
-      
-      console.log(`SalesHistory: Alternative fetch got ${fetchedSales.length} sales`);
-      
-      // Filter out expenses and invalid sales
-      const validSales = filterValidSales(fetchedSales);
-      console.log(`After filtering: ${validSales.length} valid sales`);
-      
-      // Update sales state
-      setSales(validSales);
-      
-      // Update pagination if available
-      if (paginationData) {
-        setPagination({
-          currentPage: paginationData.currentPage || 1,
-          totalPages: paginationData.totalPages || 1,
-          totalItems: paginationData.total || validSales.length,
-          itemsPerPage: paginationData.limit || 50
-        });
-      }
-      
-      // Also set allSales for timeframe filtering
-      setAllSales(validSales);
-      
-    } catch (error) {
-      console.error("SalesHistory: Alternative fetch also failed:", error);
-    }
-  };
-
-  // Function to get sales filtered by timeframe
-  const getSalesByTimeframe = (timeframe: "day" | "week" | "month" | "year", selectedYear?: number, selectedDate?: string): Sale[] => {
-    const now = new Date();
-    
-    switch (timeframe) {
-      case "day":
-        // Selected date's sales - use the selected date
-        const targetDate = selectedDate ? new Date(selectedDate) : new Date();
-        const targetDateString = targetDate.toDateString();
-        return allSales.filter((sale: Sale) => {
-          try {
-            const saleDate = new Date(sale.createdAt);
-            return saleDate.toDateString() === targetDateString;
-          } catch (error) {
-            return false;
-          }
-        });
-
-      case "week":
-        // This week's sales (last 7 days)
-        const weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        return allSales.filter((sale: Sale) => {
-          try {
-            const saleDate = new Date(sale.createdAt);
-            return saleDate >= weekAgo && saleDate <= now;
-          } catch (error) {
-            return false;
-          }
-        });
-
-      case "month":
-        // This month's sales
-        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        return allSales.filter((sale: Sale) => {
-          try {
-            const saleDate = new Date(sale.createdAt);
-            return saleDate >= firstDayOfMonth && saleDate <= now;
-          } catch (error) {
-            return false;
-          }
-        });
-
-      case "year":
-        // Selected year's sales
-        const year = selectedYear || now.getFullYear();
-        const firstDayOfYear = new Date(year, 0, 1);
-        const lastDayOfYear = new Date(year, 11, 31, 23, 59, 59);
-        return allSales.filter((sale: Sale) => {
-          try {
-            const saleDate = new Date(sale.createdAt);
-            return saleDate >= firstDayOfYear && saleDate <= lastDayOfYear;
-          } catch (error) {
-            return false;
-          }
-        });
-
-      default:
-        return allSales;
-    }
-  };
-
-  // Function to update filtered sales based on timeframe
-  const updateFilteredSales = () => {
-    const timeframeSales = getSalesByTimeframe(timeframe, selectedYear, selectedDate);
-    
-    // Sort the filtered sales by date - newest first
-    const sortedSales = timeframeSales.sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  // Update edited sales when sales change
+  const updateEditedSales = (salesList: Sale[]) => {
+    // Filter sales that have editHistory or editedBy field
+    const edited = salesList.filter(sale => 
+      (sale.editHistory && sale.editHistory.length > 0) || sale.editedBy
     );
-    
-    setSales(sortedSales);
+
+    // Sort by edit date (newest first)
+    const sortedEditedSales = edited.sort((a, b) => {
+      const dateA = a.editedAt ? new Date(a.editedAt).getTime() : new Date(a.updatedAt).getTime();
+      const dateB = b.editedAt ? new Date(b.editedAt).getTime() : new Date(b.updatedAt).getTime();
+      return dateB - dateA;
+    });
+
+    setEditedSales(sortedEditedSales);
   };
 
-  const getAvailableYears = (): number[] => {
-    const years = Array.from(new Set(allSales.map((sale: Sale) => {
-      try {
-        return new Date(sale.createdAt).getFullYear();
-      } catch (error) {
-        return new Date().getFullYear();
-      }
-    })));
+  // Handle timeframe type change
+  const handleTimeframeTypeChange = (type: "custom" | "day" | "month" | "year" | "today") => {
+    setTimeframeType(type);
     
-    return years.sort((a, b) => b - a);
-  };
-
-  const navigateYear = (direction: 'prev' | 'next') => {
-    const years = getAvailableYears();
-    const currentIndex = years.indexOf(selectedYear);
+    // Reset specific query params based on type
+    const newParams = { ...queryParams };
     
-    if (direction === 'prev' && currentIndex < years.length - 1) {
-      setSelectedYear(years[currentIndex + 1]);
-    } else if (direction === 'next' && currentIndex > 0) {
-      setSelectedYear(years[currentIndex - 1]);
-    }
-  };
-
-  const getTimeframeLabel = () => {
-    switch (timeframe) {
+    switch(type) {
+      case "today":
+        // Reset all specific date params
+        newParams.date = getTodayDate();
+        newParams.from = "";
+        newParams.to = "";
+        newParams.year = getCurrentYear().toString();
+        newParams.month = getCurrentMonth().split('-')[1];
+        break;
       case "day":
-        if (selectedDate) {
-          const date = new Date(selectedDate);
-          return date.toLocaleDateString("fr-FR", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        }
-        return "Aujourd'hui";
-      case "week":
-        return "Cette Semaine";
+        newParams.date = getTodayDate();
+        newParams.from = "";
+        newParams.to = "";
+        break;
       case "month":
-        return "Ce Mois";
+        newParams.year = getCurrentYear().toString();
+        newParams.month = getCurrentMonth().split('-')[1];
+        newParams.date = "";
+        newParams.from = "";
+        newParams.to = "";
+        break;
       case "year":
-        return `Année ${selectedYear}`;
-      default:
-        return "Cette Semaine";
+        newParams.year = getCurrentYear().toString();
+        newParams.month = "";
+        newParams.date = "";
+        newParams.from = "";
+        newParams.to = "";
+        break;
+      case "custom":
+        // Keep existing values or set defaults
+        if (!newParams.from) {
+          const today = new Date();
+          const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+          newParams.from = firstDay.toISOString().split('T')[0];
+        }
+        if (!newParams.to) {
+          newParams.to = new Date().toISOString().split('T')[0];
+        }
+        newParams.date = "";
+        newParams.year = "";
+        newParams.month = "";
+        break;
     }
+    
+    setQueryParams(newParams);
   };
 
-  // FIXED: Handle timeframe change with proper date management
-  const handleTimeframeChange = (period: "day" | "week" | "month" | "year") => {
-    setTimeframe(period);
-    
-    if (period === "year") {
-      const years = getAvailableYears();
-      setSelectedYear(years[0] || new Date().getFullYear());
-    }
+  // Handle query parameter changes
+  const handleQueryParamChange = (key: keyof typeof queryParams, value: string) => {
+    setQueryParams(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setQueryParams({
+      from: "",
+      to: "",
+      date: getTodayDate(),
+      year: getCurrentYear().toString(),
+      month: getCurrentMonth().split('-')[1],
+      type: "",
+      status: "",
+      customerPhone: ""
+    });
+    setTimeframeType("today");
+    setShowEditedSales(false);
+    setSearchTerm("");
   };
 
   const fetchProducts = async () => {
@@ -486,13 +457,8 @@ export default function SalesHistory() {
         },
       });
 
-      console.log("Products API Response Status:", res.status);
-
       if (res.ok) {
         const data = await res.json();
-        console.log("Products API Response Data:", data);
-
-        // Handle different response structures
         let productsArray: Product[] = [];
 
         if (Array.isArray(data)) {
@@ -500,25 +466,16 @@ export default function SalesHistory() {
         } else if (data && Array.isArray(data.products)) {
           productsArray = data.products;
         } else if (data && typeof data === "object") {
-          // If it's a single product object, wrap it in an array
           productsArray = [data];
         }
 
-        console.log("Processed products:", productsArray);
+        console.log("Processed products:", productsArray.length);
         setProducts(productsArray);
-
-        if (productsArray.length === 0) {
-          console.warn("No products found in response");
-        }
       } else {
         console.error("Products API Error:", res.status, res.statusText);
-        const errorText = await res.text();
-        console.error("Error response:", errorText);
-        setError(`Failed to load products: ${res.status} ${res.statusText}`);
       }
     } catch (error) {
       console.error("Error loading products:", error);
-      setError("Failed to load products. Please check your connection.");
     } finally {
       setLoadingProducts(false);
     }
@@ -553,6 +510,37 @@ export default function SalesHistory() {
       style: "currency",
       currency: "USD",
     }).format(amount);
+  };
+
+  // Get human-readable timeframe description
+  const getTimeframeDescription = () => {
+    if (timeframeMetadata) {
+      return timeframeMetadata.description;
+    }
+    
+    switch(timeframeType) {
+      case "today":
+        return "Today";
+      case "day":
+        return queryParams.date ? `Day: ${queryParams.date}` : "Today";
+      case "month":
+        return queryParams.year && queryParams.month 
+          ? `Month: ${queryParams.year}-${queryParams.month.padStart(2, '0')}`
+          : "This month";
+      case "year":
+        return queryParams.year ? `Year: ${queryParams.year}` : "This year";
+      case "custom":
+        if (queryParams.from && queryParams.to) {
+          return `Range: ${queryParams.from} to ${queryParams.to}`;
+        } else if (queryParams.from) {
+          return `From: ${queryParams.from}`;
+        } else if (queryParams.to) {
+          return `Until: ${queryParams.to}`;
+        }
+        return "Custom range";
+      default:
+        return "Today";
+    }
   };
 
   // NEW: Function to view edited sale details
@@ -618,10 +606,149 @@ export default function SalesHistory() {
     );
   };
 
-  // Pagination handler
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= pagination.totalPages) {
-      fetchSales(newPage, pagination.itemsPerPage);
+  // EXPORT FUNCTIONS
+
+  const exportDetailedSalesToCSV = () => {
+    try {
+      const dataToExport = showEditedSales ? editedSales : filteredSales;
+      
+      if (dataToExport.length === 0) {
+        setError("No data to export");
+        return;
+      }
+
+      // Create separate sheets for sales summary and items detail
+      const summaryHeaders = [
+        'Sale ID',
+        'Customer Name',
+        'Customer Phone',
+        'Customer Email',
+        'Sales Person',
+        'Items Count',
+        'Subtotal',
+        'Total',
+        'Payment Method',
+        'Status',
+        'Created Date',
+        'Last Modified',
+        'Edit Reason',
+        'Edited By'
+      ];
+
+      const itemHeaders = [
+        'Sale ID',
+        'Item Name',
+        'Product ID',
+        'Quantity',
+        'Unit Price',
+        'Item Total'
+      ];
+
+      const summaryRows = dataToExport.map(sale => {
+        const latestEdit = sale.editHistory && sale.editHistory.length > 0 
+          ? sale.editHistory[sale.editHistory.length - 1] 
+          : null;
+        
+        return [
+          `"${sale.saleId}"`,
+          `"${sale.customer.name}"`,
+          `"${sale.customer.phone}"`,
+          `"${sale.customer.email || ''}"`,
+          `"${sale.salesPerson || 'Not specified'}"`,
+          sale.items.length,
+          sale.subtotal.toFixed(2),
+          sale.total.toFixed(2),
+          `"${sale.paymentMethod}"`,
+          `"${sale.status}"`,
+          `"${formatDate(sale.createdAt)}"`,
+          sale.editedAt ? `"${formatDate(sale.editedAt)}"` : '',
+          latestEdit ? `"${latestEdit.reason}"` : '',
+          latestEdit ? `"${latestEdit.editedBy}"` : ''
+        ].join(',');
+      });
+
+      const itemRows = dataToExport.flatMap(sale => 
+        sale.items.map(item => [
+          `"${sale.saleId}"`,
+          `"${item.name}"`,
+          `"${item.productId}"`,
+          item.quantity,
+          item.price.toFixed(2),
+          item.total.toFixed(2)
+        ].join(','))
+      );
+
+      const summaryContent = [
+        '=== SALES SUMMARY ===',
+        summaryHeaders.join(','),
+        ...summaryRows,
+        '',
+        '=== ITEMS DETAIL ===',
+        itemHeaders.join(','),
+        ...itemRows
+      ].join('\n');
+
+      const blob = new Blob([summaryContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      const timeframeDesc = getTimeframeDescription().replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+      const exportType = showEditedSales ? 'edited_sales' : 'sales';
+      const fileName = `${exportType}_${timeframeDesc}_${new Date().toISOString().split('T')[0]}.csv`;
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', fileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setMessage(`✅ ${dataToExport.length} sales with ${itemRows.length} items exported successfully!`);
+      
+    } catch (error) {
+      console.error('Export error:', error);
+      setError('Failed to export sales data');
+    }
+  };
+
+  const exportToJSON = () => {
+    try {
+      const dataToExport = showEditedSales ? editedSales : filteredSales;
+      
+      if (dataToExport.length === 0) {
+        setError("No data to export");
+        return;
+      }
+
+      const exportData = {
+        exportDate: new Date().toISOString(),
+        timeframe: getTimeframeDescription(),
+        totalSales: dataToExport.length,
+        totalRevenue: dataToExport.reduce((sum, sale) => sum + sale.total, 0),
+        sales: dataToExport
+      };
+
+      const jsonContent = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonContent], { type: 'application/json' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      const timeframeDesc = getTimeframeDescription().replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+      const exportType = showEditedSales ? 'edited_sales' : 'sales';
+      const fileName = `${exportType}_${timeframeDesc}_${new Date().toISOString().split('T')[0]}.json`;
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', fileName);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setMessage(`✅ ${dataToExport.length} sales exported as JSON!`);
+      
+    } catch (error) {
+      console.error('JSON export error:', error);
+      setError('Failed to export JSON data');
     }
   };
 
@@ -1196,8 +1323,6 @@ export default function SalesHistory() {
         saleId: editingSale.saleId, // Keep the same sale ID
       };
 
-      console.log("Sending update data:", updateData); // Debug log
-
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/sales/${editingSale._id}`,
         {
@@ -1210,27 +1335,21 @@ export default function SalesHistory() {
         }
       );
 
-      console.log("Update response status:", response.status); // Debug log
-
       if (response.ok) {
-        const updatedSale = await response.json();
-        console.log("Updated sale:", updatedSale); // Debug log
-
+        await response.json();
         setMessage("✅ Sale updated successfully");
 
         // Refresh the sales list immediately
-        await fetchSales(pagination.currentPage, pagination.itemsPerPage);
+        await fetchSales();
 
         // Also refresh customers to update their statistics
         setTimeout(() => {
-          // This will trigger a refresh in the Customers component if it's mounted
           window.dispatchEvent(new Event("salesUpdated"));
         }, 1000);
 
         closeEditModal();
       } else {
         const errorData = await response.json();
-        console.error("Update error:", errorData); // Debug log
         setError(
           errorData.error ||
             `Failed to update sale: ${response.status} ${response.statusText}`
@@ -1276,7 +1395,7 @@ export default function SalesHistory() {
 
       if (response.ok) {
         setMessage("✅ Sale voided successfully");
-        await fetchSales(pagination.currentPage, pagination.itemsPerPage);
+        await fetchSales();
         setShowModal(false);
       } else {
         const errorData = await response.json();
@@ -1322,6 +1441,26 @@ export default function SalesHistory() {
             )}
           </button>
 
+          {/* Export Button */}
+          <button
+            onClick={exportDetailedSalesToCSV}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+            title="Export sales data to CSV"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </button>
+
+          {/* Export JSON Button */}
+          <button
+            onClick={exportToJSON}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
+            title="Export sales data to JSON"
+          >
+            <FileText className="w-4 h-4" />
+            Export JSON
+          </button>
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -1335,72 +1474,313 @@ export default function SalesHistory() {
         </div>
       </div>
 
+      {/* Summary Stats - ONLY VISIBLE TO ADMINS */}
+      {isAdmin && summaryStats && (
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold text-blue-900 flex items-center gap-2">
+              <Shield className="w-5 h-5" />
+              Summary Statistics (Admin View)
+            </h3>
+            {currentUser && (
+              <span className="text-sm text-blue-700 bg-blue-100 px-3 py-1 rounded-full">
+                Logged in as: {currentUser.name} ({currentUser.role})
+              </span>
+            )}
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total Records</p>
+                  <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords}</p>
+                </div>
+                <FileText className="w-8 h-8 text-blue-500" />
+              </div>
+            </div>
+            
+            <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Revenue</p>
+                  <p className="text-2xl font-bold text-green-600">{formatCurrency(summaryStats.revenue)}</p>
+                </div>
+                <Download className="w-8 h-8 text-green-500" />
+              </div>
+            </div>
+            
+            <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Expenses</p>
+                  <p className="text-2xl font-bold text-red-600">{formatCurrency(summaryStats.expenses)}</p>
+                </div>
+                <Minus className="w-8 h-8 text-red-500" />
+              </div>
+            </div>
+            
+            <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Net</p>
+                  <p className="text-2xl font-bold text-blue-600">{formatCurrency(summaryStats.net)}</p>
+                </div>
+                <Package className="w-8 h-8 text-blue-500" />
+              </div>
+            </div>
+          </div>
+          
+          {/* Additional stats row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total Sales</p>
+                  <p className="text-xl font-bold text-green-700">{summaryStats.salesCount}</p>
+                </div>
+                <FileText className="w-6 h-6 text-green-500" />
+              </div>
+            </div>
+            
+            <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total Expenses</p>
+                  <p className="text-xl font-bold text-red-700">{summaryStats.expensesCount}</p>
+                </div>
+                <Minus className="w-6 h-6 text-red-500" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Timeframe Filter Section */}
       <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
-            {showEditedSales ? "Ventes modifiées" : "Toutes les ventes"} ({getTimeframeLabel()})
+            {showEditedSales ? "Ventes modifiées" : "Toutes les ventes"} - {getTimeframeDescription()}
           </h3>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {/* Date Picker for Day View */}
-            {timeframe === "day" && (
-              <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
-                <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                <label htmlFor="date-picker" className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">
-                  Date:
-                </label>
-                <input
-                  id="date-picker"
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="ml-2 px-2 py-1 border-none bg-transparent text-xs sm:text-sm focus:outline-none focus:ring-0 text-gray-900 font-medium w-full"
-                />
-              </div>
-            )}
+          
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-2"
+            >
+              <Filter className="w-4 h-4" />
+              {showFilters ? "Hide Filters" : "Show Filters"}
+              <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+            </button>
             
-            {timeframe === "year" && getAvailableYears().length > 1 && (
-              <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
-                <button
-                  onClick={() => navigateYear('prev')}
-                  disabled={getAvailableYears().indexOf(selectedYear) === getAvailableYears().length - 1}
-                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
-                </button>
-                <span className="text-xs sm:text-sm font-medium text-gray-900 px-2 min-w-[60px] sm:min-w-[80px] text-center">{selectedYear}</span>
-                <button
-                  onClick={() => navigateYear('next')}
-                  disabled={getAvailableYears().indexOf(selectedYear) === 0}
-                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
-                </button>
-              </div>
-            )}
-            
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-full sm:w-auto">
-              {(["day", "week", "month", "year"] as const).map((period) => (
-                <button
-                  key={period}
-                  onClick={() => handleTimeframeChange(period)}
-                  className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 flex-1 sm:flex-none ${
-                    timeframe === period
-                      ? "bg-blue-500 text-white shadow-sm"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                  }`}
-                >
-                  {period === "day" && "Jour"}
-                  {period === "week" && "Semaine"}
-                  {period === "month" && "Mois"}
-                  {period === "year" && "Année"}
-                </button>
-              ))}
-            </div>
+            <button
+              onClick={clearAllFilters}
+              className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Clear Filters
+            </button>
           </div>
         </div>
 
+        {/* Timeframe Selection */}
+        {showFilters && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Timeframe Type
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {(["today", "day", "month", "year", "custom"] as const).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => handleTimeframeTypeChange(type)}
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                      timeframeType === type
+                        ? "bg-blue-500 text-white shadow-sm"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {type === "today" && "Today"}
+                    {type === "day" && "Specific Day"}
+                    {type === "month" && "Specific Month"}
+                    {type === "year" && "Specific Year"}
+                    {type === "custom" && "Custom Range"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Specific timeframe inputs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {timeframeType === "day" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={queryParams.date}
+                    onChange={(e) => handleQueryParamChange("date", e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+              )}
+
+              {timeframeType === "month" && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Year
+                    </label>
+                    <input
+                      type="number"
+                      value={queryParams.year}
+                      onChange={(e) => handleQueryParamChange("year", e.target.value)}
+                      min="2000"
+                      max="2100"
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Month
+                    </label>
+                    <select
+                      value={queryParams.month}
+                      onChange={(e) => handleQueryParamChange("month", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => {
+                        const monthNum = (i + 1).toString().padStart(2, '0');
+                        return (
+                          <option key={monthNum} value={monthNum}>
+                            {new Date(2000, i).toLocaleString('default', { month: 'long' })} ({monthNum})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {timeframeType === "year" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Year
+                  </label>
+                  <input
+                    type="number"
+                    value={queryParams.year}
+                    onChange={(e) => handleQueryParamChange("year", e.target.value)}
+                    min="2000"
+                    max="2100"
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+              )}
+
+              {timeframeType === "custom" && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      From Date
+                    </label>
+                    <input
+                      type="date"
+                      value={queryParams.from}
+                      onChange={(e) => handleQueryParamChange("from", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      To Date
+                    </label>
+                    <input
+                      type="date"
+                      value={queryParams.to}
+                      onChange={(e) => handleQueryParamChange("to", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Advanced Filters */}
+            <div>
+              <button
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              >
+                {showAdvancedFilters ? "Hide Advanced Filters" : "Show Advanced Filters"}
+                <ChevronDown className={`w-4 h-4 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showAdvancedFilters && (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Sale Type
+                    </label>
+                    <select
+                      value={queryParams.type}
+                      onChange={(e) => handleQueryParamChange("type", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    >
+                      <option value="">All Types</option>
+                      <option value="sale">Sale</option>
+                      <option value="reservation">Reservation</option>
+                      <option value="expense">Expense</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Status
+                    </label>
+                    <select
+                      value={queryParams.status}
+                      onChange={(e) => handleQueryParamChange("status", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    >
+                      <option value="">All Status</option>
+                      <option value="completed">Completed</option>
+                      <option value="pending">Pending</option>
+                      <option value="expense">Expense</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Customer Phone
+                    </label>
+                    <input
+                      type="text"
+                      value={queryParams.customerPhone}
+                      onChange={(e) => handleQueryParamChange("customerPhone", e.target.value)}
+                      placeholder="Filter by phone..."
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Applied Filters Summary */}
+        {appliedFilters && (
+          <div className="mt-4 text-sm text-gray-600">
+            <span className="font-medium">Applied filters:</span>
+            <span className="ml-2">
+              Status: {appliedFilters.status}, Type: {appliedFilters.type}
+              {appliedFilters.customerPhone !== 'none' && `, Phone: ${appliedFilters.customerPhone}`}
+            </span>
+          </div>
+        )}
       </div>
 
       {message && (
@@ -1522,9 +1902,9 @@ export default function SalesHistory() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
-                            sale.status === "Complétée"
+                            sale.status === "completed"
                               ? "bg-green-100 text-green-800"
-                              : sale.status === "Annulé"
+                              : sale.status === "voided"
                               ? "bg-red-100 text-red-800"
                               : "bg-yellow-100 text-yellow-800"
                           }`}
@@ -1564,12 +1944,12 @@ export default function SalesHistory() {
                               <button
                                 onClick={() => openEditModal(sale)}
                                 disabled={
-                                  sale.status === "Annulé" ||
-                                  sale.status === "Rectifié"
+                                  sale.status === "voided" ||
+                                  sale.status === "corrected"
                                 }
                                 className={`p-1 rounded ${
-                                  sale.status === "Annulé" ||
-                                  sale.status === "Rectifié"
+                                  sale.status === "voided" ||
+                                  sale.status === "corrected"
                                     ? "text-gray-400 cursor-not-allowed"
                                     : "text-yellow-600 hover:text-yellow-900"
                                 }`}
@@ -1611,65 +1991,6 @@ export default function SalesHistory() {
                   ))}
                 </tbody>
               </table>
-              
-              {/* Pagination Controls - Only show for non-edited sales view */}
-              {!showEditedSales && pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-                  <div className="text-sm text-gray-700">
-                    Page {pagination.currentPage} sur {pagination.totalPages}
-                    {pagination.totalItems > 0 && ` (${pagination.totalItems} ventes totales)`}
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handlePageChange(pagination.currentPage - 1)}
-                      disabled={pagination.currentPage <= 1}
-                      className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                    >
-                      <ChevronLeft className="w-4 h-4" /> Précédent
-                    </button>
-                    <div className="flex items-center gap-1">
-                      {[...Array(Math.min(5, pagination.totalPages))].map((_, i) => {
-                        const pageNum = i + 1;
-                        return (
-                          <button
-                            key={pageNum}
-                            onClick={() => handlePageChange(pageNum)}
-                            className={`w-8 h-8 rounded ${
-                              pagination.currentPage === pageNum
-                                ? "bg-blue-600 text-white"
-                                : "border border-gray-300 hover:bg-gray-50"
-                            }`}
-                          >
-                            {pageNum}
-                          </button>
-                        );
-                      })}
-                      {pagination.totalPages > 5 && (
-                        <>
-                          <span className="px-2">...</span>
-                          <button
-                            onClick={() => handlePageChange(pagination.totalPages)}
-                            className={`w-8 h-8 rounded ${
-                              pagination.currentPage === pagination.totalPages
-                                ? "bg-blue-600 text-white"
-                                : "border border-gray-300 hover:bg-gray-50"
-                            }`}
-                          >
-                            {pagination.totalPages}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => handlePageChange(pagination.currentPage + 1)}
-                      disabled={pagination.currentPage >= pagination.totalPages}
-                      className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                    >
-                      Suivant <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>
@@ -1734,7 +2055,7 @@ export default function SalesHistory() {
                   </label>
                   <span
                     className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
-                      selectedSale.status === "Complétée"
+                      selectedSale.status === "completed"
                         ? "bg-green-100 text-green-800"
                         : selectedSale.status === "voided"
                         ? "bg-red-100 text-red-800"

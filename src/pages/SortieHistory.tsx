@@ -10,8 +10,6 @@ import {
   Edit,
   Printer,
   Calendar,
-  ChevronLeft,
-  ChevronRight,
   RefreshCw,
   User,
   DollarSign,
@@ -20,6 +18,9 @@ import {
   X,
   AlertCircle,
   History,
+  Filter,
+  ChevronDown,
+  Shield,
 } from "lucide-react";
 
 interface ExpenseItem {
@@ -39,6 +40,64 @@ interface ExpenseItem {
   validatedAt?: string;
 }
 
+interface ExpensesResponse {
+  success: boolean;
+  data: ExpenseItem[];
+  timeframe: {
+    description: string;
+    start: string;
+    end: string;
+    query: {
+      from: string | null;
+      to: string | null;
+      date: string | null;
+      year: string | null;
+      month: string | null;
+    };
+  };
+  summary: {
+    totalRecords: number;
+    totalAmount: number;
+    pending: {
+      count: number;
+      amount: number;
+    };
+    validated: {
+      count: number;
+      amount: number;
+    };
+    rejected: {
+      count: number;
+      amount: number;
+    };
+  };
+  filtersApplied: {
+    status: string;
+    paymentMethod: string;
+    recordedBy: string;
+    search: string;
+  };
+}
+
+interface UserPermissions {
+  isAdmin: boolean;
+  canValidate: boolean;
+  canEditAll: boolean;
+  canDeleteAll: boolean;
+  userId: string;
+  userName: string;
+}
+
+// User interface for role checking
+interface User {
+  _id: string;
+  name: string;
+  email: string;
+  role: string;
+  username?: string;
+  permissions?: string[];
+}
+
 // Helper function to get today's date in correct format
 const getTodayDate = (): string => {
   const today = new Date();
@@ -46,6 +105,19 @@ const getTodayDate = (): string => {
   const month = String(today.getMonth() + 1).padStart(2, "0");
   const day = String(today.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+};
+
+// Helper function to get current month in YYYY-MM format
+const getCurrentMonth = (): string => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+};
+
+// Helper function to get current year
+const getCurrentYear = (): number => {
+  return new Date().getFullYear();
 };
 
 export default function SortieHistory() {
@@ -78,17 +150,35 @@ export default function SortieHistory() {
   const [expenseHistory, setExpenseHistory] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Timeframe state
-  const [timeframe, setTimeframe] = useState<"day" | "week" | "month" | "year">("day");
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
+  // User state for role checking
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  // Timeframe state - Updated to match backend query parameters
+  const [timeframeType, setTimeframeType] = useState<
+    "custom" | "day" | "month" | "year" | "today"
+  >("today");
+  
+  const [queryParams, setQueryParams] = useState({
+    from: "",
+    to: "",
+    date: getTodayDate(),
+    year: getCurrentYear().toString(),
+    month: getCurrentMonth().split('-')[1],
+    status: "",
+    paymentMethod: "",
+    recordedBy: "",
+    search: ""
+  });
+
   const [initialLoad, setInitialLoad] = useState(true);
+  const [summaryStats, setSummaryStats] = useState<any>(null);
+  const [appliedFilters, setAppliedFilters] = useState<any>(null);
+  const [timeframeDescription, setTimeframeDescription] = useState<string>("Today");
+  const [showFilters, setShowFilters] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
-  // User role - this should come from your auth context
-  const isAdmin = true; // Change this based on actual user role
-
-  // Fetch user permissions
-  const [userPermissions, setUserPermissions] = useState({
+  // User permissions
+  const [userPermissions, setUserPermissions] = useState<UserPermissions>({
     isAdmin: false,
     canValidate: false,
     canEditAll: false,
@@ -97,24 +187,111 @@ export default function SortieHistory() {
     userName: "",
   });
 
+  // Build query string from queryParams
+  const buildQueryString = () => {
+    const params = new URLSearchParams();
+    
+    // Add timeframe parameters based on timeframeType
+    switch(timeframeType) {
+      case "custom":
+        if (queryParams.from) params.append("from", queryParams.from);
+        if (queryParams.to) params.append("to", queryParams.to);
+        break;
+      case "day":
+        if (queryParams.date) params.append("date", queryParams.date);
+        break;
+      case "month":
+        if (queryParams.year) params.append("year", queryParams.year);
+        if (queryParams.month) params.append("month", queryParams.month);
+        break;
+      case "year":
+        if (queryParams.year) params.append("year", queryParams.year);
+        break;
+      case "today":
+        // No parameters needed - backend defaults to today
+        break;
+    }
+    
+    // Add additional filters
+    if (queryParams.status) params.append("status", queryParams.status);
+    if (queryParams.paymentMethod) params.append("paymentMethod", queryParams.paymentMethod);
+    if (queryParams.recordedBy) params.append("recordedBy", queryParams.recordedBy);
+    if (queryParams.search) params.append("search", queryParams.search);
+    
+    return params.toString();
+  };
+
+  // Fetch current user on component mount
   useEffect(() => {
-    fetchExpenses();
+    fetchCurrentUser();
     fetchUserPermissions();
+    fetchExpenses();
   }, []);
 
+  // Fetch data when query params change
   useEffect(() => {
-    if (allExpenses.length > 0) {
-      updateFilteredExpenses();
+    if (Object.keys(queryParams).length > 0) {
+      fetchExpenses();
     }
-  }, [timeframe, selectedYear, selectedDate, allExpenses, isAdmin]);
+  }, [queryParams]);
 
-  // Auto-set to today's date when timeframe changes to "day"
+  // Effect to automatically set to today's date when timeframe changes to "day"
   useEffect(() => {
-    if (!initialLoad && timeframe === "day") {
+    if (!initialLoad && timeframeType === "day") {
       const today = getTodayDate();
       setSelectedDate(today);
     }
-  }, [timeframe, initialLoad]);
+  }, [timeframeType, initialLoad]);
+
+  // Effect to enforce day-only view for non-admin users
+  useEffect(() => {
+    if (!userPermissions.isAdmin && timeframeType !== "day") {
+      setTimeframeType("day");
+      setQueryParams(prev => ({
+        ...prev,
+        date: getTodayDate(),
+        from: "",
+        to: "",
+        year: "",
+        month: ""
+      }));
+    }
+  }, [timeframeType, userPermissions.isAdmin]);
+
+  // Effect to mark initial load as complete
+  useEffect(() => {
+    if (expenses.length > 0) {
+      setInitialLoad(false);
+    }
+  }, [expenses]);
+
+  // Fetch current user from API or localStorage
+  const fetchCurrentUser = async () => {
+    try {
+      // Try to get user from localStorage first
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        const userData = JSON.parse(storedUser);
+        setCurrentUser(userData);
+      } else {
+        // Fallback to API call
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/me`, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          },
+        });
+
+        if (res.ok) {
+          const userData = await res.json();
+          setCurrentUser(userData);
+          localStorage.setItem("user", JSON.stringify(userData));
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+    }
+  };
 
   const fetchUserPermissions = async () => {
     try {
@@ -137,7 +314,14 @@ export default function SortieHistory() {
   const fetchExpenses = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/expenses`, {
+      setError(null);
+      
+      const queryString = buildQueryString();
+      const url = `${import.meta.env.VITE_API_URL}/expenses${queryString ? `?${queryString}` : ''}`;
+      
+      console.log("Fetching expenses from:", url);
+      
+      const res = await fetch(url, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
@@ -145,219 +329,139 @@ export default function SortieHistory() {
       });
 
       if (res.ok) {
-        const data = await res.json();
+        const data: ExpensesResponse = await res.json();
+        
+        if (data.success && data.data && Array.isArray(data.data)) {
+          const fetchedExpenses = data.data;
+          
+          console.log(`Fetched ${fetchedExpenses.length} expenses from API`);
+          console.log("Timeframe metadata:", data.timeframe);
+          console.log("Summary stats:", data.summary);
+          
+          // Sort expenses by date - newest first
+          const sortedExpenses = fetchedExpenses.sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
 
-        let fetchedExpenses: ExpenseItem[] = [];
-        if (Array.isArray(data)) {
-          fetchedExpenses = data;
-        } else if (data.expenses && Array.isArray(data.expenses)) {
-          fetchedExpenses = data.expenses;
-        } else if (data.data && Array.isArray(data.data)) {
-          fetchedExpenses = data.data;
+          setExpenses(sortedExpenses);
+          setAllExpenses(sortedExpenses);
+          
+          // Update metadata
+          setTimeframeDescription(data.timeframe.description);
+          setSummaryStats(data.summary);
+          setAppliedFilters(data.filtersApplied);
+          
         } else {
           console.warn("Unexpected expenses data structure:", data);
-          fetchedExpenses = [];
-        }
-
-        console.log(`Fetched ${fetchedExpenses.length} expenses from API`);
-
-        // Sort expenses by date - newest first
-        const sortedExpenses = fetchedExpenses.sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-
-        setAllExpenses(sortedExpenses);
-
-        // For regular users, automatically filter to current day
-        if (!userPermissions.isAdmin) {
-          const todayExpenses = getExpensesByTimeframe("day");
-          setExpenses(todayExpenses);
-        } else {
-          setExpenses(sortedExpenses);
+          setError("Unexpected response format from server");
         }
       } else {
         console.error("Expenses fetch failed:", res.status);
-        setError("Failed to load expenses");
+        const errorText = await res.text();
+        setError(`Failed to load expenses: ${res.status} ${errorText}`);
       }
     } catch (error) {
       console.error("Error loading expenses:", error);
-      setError("Failed to load expenses");
+      setError("Failed to load expenses. Please check your connection.");
     } finally {
       setLoading(false);
-      setInitialLoad(false);
     }
-  };
-
-  // Function to get expenses filtered by timeframe - FIXED VERSION
-  const getExpensesByTimeframe = (
-    timeframe: "day" | "week" | "month" | "year",
-    selectedYear?: number,
-    selectedDate?: string
-  ): ExpenseItem[] => {
-    const now = new Date();
-
-    switch (timeframe) {
-      case "day":
-        const targetDate = selectedDate ? new Date(selectedDate) : new Date();
-        
-        // Create start and end of the target day
-        const startOfDay = new Date(targetDate);
-        startOfDay.setHours(0, 0, 0, 0);
-        
-        const endOfDay = new Date(targetDate);
-        endOfDay.setHours(23, 59, 59, 999);
-
-        return allExpenses.filter((expense: ExpenseItem) => {
-          try {
-            const expenseDate = new Date(expense.createdAt);
-            return expenseDate >= startOfDay && expenseDate <= endOfDay;
-          } catch (error) {
-            console.error("Error parsing expense date:", expense.createdAt, error);
-            return false;
-          }
-        });
-
-      case "week":
-        const weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        weekAgo.setHours(0, 0, 0, 0);
-        
-        return allExpenses.filter((expense: ExpenseItem) => {
-          try {
-            const expenseDate = new Date(expense.createdAt);
-            return expenseDate >= weekAgo && expenseDate <= now;
-          } catch (error) {
-            console.error("Error parsing expense date:", expense.createdAt, error);
-            return false;
-          }
-        });
-
-      case "month":
-        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        firstDayOfMonth.setHours(0, 0, 0, 0);
-        
-        return allExpenses.filter((expense: ExpenseItem) => {
-          try {
-            const expenseDate = new Date(expense.createdAt);
-            return expenseDate >= firstDayOfMonth && expenseDate <= now;
-          } catch (error) {
-            console.error("Error parsing expense date:", expense.createdAt, error);
-            return false;
-          }
-        });
-
-      case "year":
-        const year = selectedYear || now.getFullYear();
-        const firstDayOfYear = new Date(year, 0, 1);
-        firstDayOfYear.setHours(0, 0, 0, 0);
-        
-        const lastDayOfYear = new Date(year, 11, 31, 23, 59, 59, 999);
-        
-        return allExpenses.filter((expense: ExpenseItem) => {
-          try {
-            const expenseDate = new Date(expense.createdAt);
-            return (
-              expenseDate >= firstDayOfYear && expenseDate <= lastDayOfYear
-            );
-          } catch (error) {
-            console.error("Error parsing expense date:", expense.createdAt, error);
-            return false;
-          }
-        });
-
-      default:
-        return allExpenses;
-    }
-  };
-
-  // Function to update filtered expenses based on timeframe
-  const updateFilteredExpenses = () => {
-    // Regular users can only see current day
-    if (!userPermissions.isAdmin) {
-      const todayExpenses = getExpensesByTimeframe("day");
-      setExpenses(todayExpenses);
-      return;
-    }
-
-    // Admin can see all timeframes
-    const timeframeExpenses = getExpensesByTimeframe(
-      timeframe,
-      selectedYear,
-      selectedDate
-    );
-
-    // Sort the filtered expenses by date - newest first
-    const sortedExpenses = timeframeExpenses.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-
-    setExpenses(sortedExpenses);
   };
 
   const getAvailableYears = (): number[] => {
-    const years = Array.from(
-      new Set(
-        allExpenses.map((expense: ExpenseItem) => {
-          try {
-            return new Date(expense.createdAt).getFullYear();
-          } catch (error) {
-            return new Date().getFullYear();
-          }
-        })
-      )
-    );
-
-    return years.sort((a, b) => b - a);
-  };
-
-  const navigateYear = (direction: "prev" | "next") => {
-    const years = getAvailableYears();
-    const currentIndex = years.indexOf(selectedYear);
-
-    if (direction === "prev" && currentIndex < years.length - 1) {
-      setSelectedYear(years[currentIndex + 1]);
-    } else if (direction === "next" && currentIndex > 0) {
-      setSelectedYear(years[currentIndex - 1]);
-    }
+    return Array.from({ length: 10 }, (_, i) => getCurrentYear() - i);
   };
 
   const getTimeframeLabel = () => {
     if (!userPermissions.isAdmin) {
       return "Aujourd'hui";
     }
-
-    switch (timeframe) {
-      case "day":
-        if (selectedDate) {
-          const date = new Date(selectedDate);
-          return date.toLocaleDateString("fr-FR", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          });
-        }
-        return "Aujourd'hui";
-      case "week":
-        return "Cette Semaine";
-      case "month":
-        return "Ce Mois";
-      case "year":
-        return `Année ${selectedYear}`;
-      default:
-        return "Cette Semaine";
-    }
+    
+    return timeframeDescription;
   };
 
-  const handleTimeframeChange = (period: "day" | "week" | "month" | "year") => {
-    if (!userPermissions.isAdmin) return; // Only admin can change timeframe
-
-    setTimeframe(period);
-
-    if (period === "year") {
-      const years = getAvailableYears();
-      setSelectedYear(years[0] || new Date().getFullYear());
+  const handleTimeframeTypeChange = (type: "custom" | "day" | "month" | "year" | "today") => {
+    if (!userPermissions.isAdmin && type !== "day") {
+      return;
     }
+    
+    setTimeframeType(type);
+    
+    // Reset specific query params based on type
+    const newParams = { ...queryParams };
+    
+    switch(type) {
+      case "today":
+        newParams.date = getTodayDate();
+        newParams.from = "";
+        newParams.to = "";
+        newParams.year = getCurrentYear().toString();
+        newParams.month = getCurrentMonth().split('-')[1];
+        break;
+      case "day":
+        newParams.date = getTodayDate();
+        newParams.from = "";
+        newParams.to = "";
+        break;
+      case "month":
+        newParams.year = getCurrentYear().toString();
+        newParams.month = getCurrentMonth().split('-')[1];
+        newParams.date = "";
+        newParams.from = "";
+        newParams.to = "";
+        break;
+      case "year":
+        newParams.year = getCurrentYear().toString();
+        newParams.month = "";
+        newParams.date = "";
+        newParams.from = "";
+        newParams.to = "";
+        break;
+      case "custom":
+        if (!newParams.from) {
+          const today = new Date();
+          const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+          newParams.from = firstDay.toISOString().split('T')[0];
+        }
+        if (!newParams.to) {
+          newParams.to = new Date().toISOString().split('T')[0];
+        }
+        newParams.date = "";
+        newParams.year = "";
+        newParams.month = "";
+        break;
+    }
+    
+    setQueryParams(newParams);
+  };
+
+  const handleQueryParamChange = (key: keyof typeof queryParams, value: string) => {
+    setQueryParams(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const clearAllFilters = () => {
+    setQueryParams({
+      from: "",
+      to: "",
+      date: getTodayDate(),
+      year: getCurrentYear().toString(),
+      month: getCurrentMonth().split('-')[1],
+      status: "",
+      paymentMethod: "",
+      recordedBy: "",
+      search: ""
+    });
+    setTimeframeType("today");
+    setSearchTerm("");
+    setShowAdvancedFilters(false);
+  };
+
+  // Helper function to set selected date (for day view)
+  const setSelectedDate = (date: string) => {
+    handleQueryParamChange("date", date);
   };
 
   const formatDate = (dateString: string) => {
@@ -525,7 +629,7 @@ export default function SortieHistory() {
               Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
             },
             body: JSON.stringify({
-              validatedBy: "admin",
+              validatedBy: userPermissions.userName || "admin",
             }),
           }
         );
@@ -967,7 +1071,7 @@ export default function SortieHistory() {
 
   // Check if user can edit this expense
   const canEditExpense = (expense: ExpenseItem): boolean => {
-    if (userPermissions.isAdmin) {
+    if (userPermissions.isAdmin || userPermissions.canEditAll) {
       return true; // Admin can edit any expense
     }
     
@@ -981,7 +1085,7 @@ export default function SortieHistory() {
 
   // Check if user can delete this expense
   const canDeleteExpense = (expense: ExpenseItem): boolean => {
-    if (userPermissions.isAdmin) {
+    if (userPermissions.isAdmin || userPermissions.canDeleteAll) {
       return true; // Admin can delete any expense
     }
     
@@ -996,7 +1100,152 @@ export default function SortieHistory() {
   // Check if update reason is required for editing
   const requiresUpdateReason = (expense: ExpenseItem | null): boolean => {
     if (!expense) return false;
-    return expense.status !== "pending" && userPermissions.isAdmin;
+    return expense.status !== "pending" && (userPermissions.isAdmin || userPermissions.canEditAll);
+  };
+
+  // Summary Statistics component - Only visible to admins
+  const SummaryStats = () => {
+    if (!summaryStats || !userPermissions.isAdmin) return null;
+
+    return (
+      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-blue-900 flex items-center gap-2">
+            <Shield className="w-5 h-5" />
+            Statistiques des Dépenses (Vue Admin)
+          </h3>
+          {currentUser && (
+            <span className="text-sm text-blue-700 bg-blue-100 px-3 py-1 rounded-full">
+              Connecté en tant que: {currentUser.name || currentUser.username} ({currentUser.role})
+            </span>
+          )}
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Dépenses</p>
+                <p className="text-2xl font-bold text-blue-600">{summaryStats.totalRecords}</p>
+                <p className="text-sm text-gray-500">{formatCurrency(summaryStats.totalAmount)}</p>
+              </div>
+              <FileText className="w-8 h-8 text-blue-500" />
+            </div>
+          </div>
+          
+          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Validées</p>
+                <p className="text-2xl font-bold text-green-600">{summaryStats.validated.count}</p>
+                <p className="text-sm text-green-600">{formatCurrency(summaryStats.validated.amount)}</p>
+              </div>
+              <CheckCircle className="w-8 h-8 text-green-500" />
+            </div>
+          </div>
+          
+          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">En Attente</p>
+                <p className="text-2xl font-bold text-yellow-600">{summaryStats.pending.count}</p>
+                <p className="text-sm text-yellow-600">{formatCurrency(summaryStats.pending.amount)}</p>
+              </div>
+              <AlertCircle className="w-8 h-8 text-yellow-500" />
+            </div>
+          </div>
+          
+          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Rejetées</p>
+                <p className="text-2xl font-bold text-red-600">{summaryStats.rejected?.count || 0}</p>
+                <p className="text-sm text-red-600">{formatCurrency(summaryStats.rejected?.amount || 0)}</p>
+              </div>
+              <XCircle className="w-8 h-8 text-red-500" />
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed statistics */}
+        <div className="mt-4 pt-4 border-t border-blue-200">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white p-3 rounded-lg border border-gray-200">
+              <div className="text-sm font-medium text-gray-700 mb-2">Répartition par statut</div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Validées:</span>
+                  <div className="text-right">
+                    <span className="font-semibold text-green-600">{summaryStats.validated.count}</span>
+                    <div className="text-xs text-gray-500">{formatCurrency(summaryStats.validated.amount)}</div>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">En attente:</span>
+                  <div className="text-right">
+                    <span className="font-semibold text-yellow-600">{summaryStats.pending.count}</span>
+                    <div className="text-xs text-gray-500">{formatCurrency(summaryStats.pending.amount)}</div>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Rejetées:</span>
+                  <div className="text-right">
+                    <span className="font-semibold text-red-600">{summaryStats.rejected?.count || 0}</span>
+                    <div className="text-xs text-gray-500">{formatCurrency(summaryStats.rejected?.amount || 0)}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-3 rounded-lg border border-gray-200">
+              <div className="text-sm font-medium text-gray-700 mb-2">Montants totaux</div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Total général:</span>
+                  <span className="font-bold text-blue-600">{formatCurrency(summaryStats.totalAmount)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Montant moyen:</span>
+                  <span className="font-medium text-gray-900">
+                    {summaryStats.totalRecords > 0 
+                      ? formatCurrency(summaryStats.totalAmount / summaryStats.totalRecords)
+                      : formatCurrency(0)
+                    }
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Taux de validation:</span>
+                  <span className="font-medium text-green-600">
+                    {summaryStats.totalRecords > 0 
+                      ? `${((summaryStats.validated.count / summaryStats.totalRecords) * 100).toFixed(1)}%`
+                      : '0%'
+                    }
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-3 rounded-lg border border-gray-200">
+              <div className="text-sm font-medium text-gray-700 mb-2">Informations temporelles</div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Période:</span>
+                  <span className="text-sm font-medium text-gray-900">{timeframeDescription}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Dernière mise à jour:</span>
+                  <span className="text-sm text-gray-900">{new Date().toLocaleTimeString('fr-FR')}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Données filtrées:</span>
+                  <span className="text-sm text-gray-900">{filteredExpenses.length} / {expenses.length}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -1039,99 +1288,251 @@ export default function SortieHistory() {
         </div>
       </div>
 
-      {/* Timeframe Filter Section - Only show for admin */}
-      {userPermissions.isAdmin && (
-        <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
-              Filtre par période ({getTimeframeLabel()})
-            </h3>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              {/* Date Picker for Day View */}
-              {timeframe === "day" && (
-                <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
-                  <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                  <label
-                    htmlFor="date-picker"
-                    className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap"
-                  >
-                    Date:
-                  </label>
-                  <input
-                    id="date-picker"
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="ml-2 px-2 py-1 border-none bg-transparent text-xs sm:text-sm focus:outline-none focus:ring-0 text-gray-900 font-medium w-full"
-                  />
-                </div>
-              )}
+      {/* Summary Stats - Only visible to admins */}
+      <SummaryStats />
 
-              {timeframe === "year" && getAvailableYears().length > 1 && (
-                <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
-                  <button
-                    onClick={() => navigateYear("prev")}
-                    disabled={
-                      getAvailableYears().indexOf(selectedYear) ===
-                      getAvailableYears().length - 1
-                    }
-                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
-                  </button>
-                  <span className="text-xs sm:text-sm font-medium text-gray-900 px-2 min-w-[60px] sm:min-w-[80px] text-center">
-                    {selectedYear}
-                  </span>
-                  <button
-                    onClick={() => navigateYear("next")}
-                    disabled={getAvailableYears().indexOf(selectedYear) === 0}
-                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
-                  </button>
-                </div>
-              )}
+      {/* Timeframe Filter Section */}
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
+            Filtre par période ({getTimeframeLabel()})
+          </h3>
+          
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-2"
+            >
+              <Filter className="w-4 h-4" />
+              {showFilters ? "Hide Filters" : "Show Filters"}
+              <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+            </button>
+            
+            <button
+              onClick={clearAllFilters}
+              className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Clear Filters
+            </button>
+          </div>
+        </div>
 
-              <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-full sm:w-auto">
-                {(["day", "week", "month", "year"] as const).map((period) => (
+        {/* Timeframe Selection */}
+        {showFilters && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Type de période
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {(["today", "day", "month", "year", "custom"] as const).map((type) => (
                   <button
-                    key={period}
-                    onClick={() => handleTimeframeChange(period)}
-                    className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 flex-1 sm:flex-none ${
-                      timeframe === period
+                    key={type}
+                    onClick={() => handleTimeframeTypeChange(type)}
+                    disabled={!userPermissions.isAdmin && type !== "day"}
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                      timeframeType === type
                         ? "bg-blue-500 text-white shadow-sm"
-                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                    }`}
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    } ${!userPermissions.isAdmin && type !== "day" ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    {period === "day" && "Jour"}
-                    {period === "week" && "Semaine"}
-                    {period === "month" && "Mois"}
-                    {period === "year" && "Année"}
+                    {type === "today" && "Aujourd'hui"}
+                    {type === "day" && "Jour spécifique"}
+                    {type === "month" && "Mois spécifique"}
+                    {type === "year" && "Année spécifique"}
+                    {type === "custom" && "Plage personnalisée"}
                   </button>
                 ))}
               </div>
             </div>
+
+            {/* Specific timeframe inputs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {timeframeType === "day" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={queryParams.date}
+                    onChange={(e) => handleQueryParamChange("date", e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                    disabled={!userPermissions.isAdmin}
+                  />
+                </div>
+              )}
+
+              {timeframeType === "month" && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Année
+                    </label>
+                    <select
+                      value={queryParams.year}
+                      onChange={(e) => handleQueryParamChange("year", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    >
+                      {getAvailableYears().map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Mois
+                    </label>
+                    <select
+                      value={queryParams.month}
+                      onChange={(e) => handleQueryParamChange("month", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => {
+                        const monthNum = (i + 1).toString().padStart(2, '0');
+                        return (
+                          <option key={monthNum} value={monthNum}>
+                            {new Date(2000, i).toLocaleString('fr-FR', { month: 'long' })} ({monthNum})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {timeframeType === "year" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Année
+                  </label>
+                  <select
+                    value={queryParams.year}
+                    onChange={(e) => handleQueryParamChange("year", e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  >
+                    {getAvailableYears().map(year => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {timeframeType === "custom" && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Date de début
+                    </label>
+                    <input
+                      type="date"
+                      value={queryParams.from}
+                      onChange={(e) => handleQueryParamChange("from", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Date de fin
+                    </label>
+                    <input
+                      type="date"
+                      value={queryParams.to}
+                      onChange={(e) => handleQueryParamChange("to", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Advanced Filters */}
+            <div>
+              <button
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              >
+                {showAdvancedFilters ? "Hide Advanced Filters" : "Show Advanced Filters"}
+                <ChevronDown className={`w-4 h-4 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showAdvancedFilters && (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Statut
+                    </label>
+                    <select
+                      value={queryParams.status}
+                      onChange={(e) => handleQueryParamChange("status", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    >
+                      <option value="">Tous les statuts</option>
+                      <option value="pending">En attente</option>
+                      <option value="validated">Validées</option>
+                      <option value="rejected">Rejetées</option>
+                      <option value="all">Toutes</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Méthode de paiement
+                    </label>
+                    <select
+                      value={queryParams.paymentMethod}
+                      onChange={(e) => handleQueryParamChange("paymentMethod", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    >
+                      <option value="">Toutes</option>
+                      <option value="cash">Espèces</option>
+                      <option value="card">Carte</option>
+                      <option value="bank">Banque</option>
+                      <option value="mpesa">M-Pesa</option>
+                      <option value="other">Autre</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Enregistré par
+                    </label>
+                    <input
+                      type="text"
+                      value={queryParams.recordedBy}
+                      onChange={(e) => handleQueryParamChange("recordedBy", e.target.value)}
+                      placeholder="Filtrer par enregistreur..."
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Applied Filters Summary */}
+        {appliedFilters && (
+          <div className="mt-4 text-sm text-gray-600">
+            <span className="font-medium">Filtres appliqués:</span>
+            <span className="ml-2">
+              Statut: {appliedFilters.status}, 
+              Paiement: {appliedFilters.paymentMethod}
+              {appliedFilters.recordedBy !== 'none' && `, Enregistreur: ${appliedFilters.recordedBy}`}
+              {appliedFilters.search !== 'none' && `, Recherche: ${appliedFilters.search}`}
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* User restriction notice */}
       {!userPermissions.isAdmin && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <svg
-                className="h-5 w-5 text-yellow-400"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
+              <AlertCircle className="h-5 w-5 text-yellow-400" />
             </div>
             <div className="ml-3">
               <h3 className="text-sm font-medium text-yellow-800">

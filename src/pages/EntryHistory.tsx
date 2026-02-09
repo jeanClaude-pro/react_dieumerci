@@ -17,9 +17,9 @@ import {
   ChevronRight,
   History,
   Filter,
+  Shield,
 } from "lucide-react";
 import jsPDF from "jspdf";
-
 
 interface EditHistoryEntry {
   editedBy: string;
@@ -53,8 +53,16 @@ interface Entry {
   editedBy?: string;
   editedAt?: string;
   editHistory?: EditHistoryEntry[];
-  // For edited entries comparison
-  originalEntryData?: any;
+}
+
+// User interface for role checking
+interface User {
+  _id: string;
+  name: string;
+  email: string;
+  role: string;
+  username?: string;
+  permissions?: string[];
 }
 
 // Helper function to get today's date in correct format
@@ -66,9 +74,45 @@ const getTodayDate = (): string => {
   return `${year}-${month}-${day}`;
 };
 
+// Helper function to get date range for different timeframes
+const getTimeframeParams = (
+  timeframe: "day" | "week" | "month" | "year", 
+  selectedYear?: number, 
+  selectedDate?: string
+) => {
+  const params = new URLSearchParams();
+  const today = new Date();
+  
+  switch (timeframe) {
+    case "day":
+      params.set("date", selectedDate || getTodayDate());
+      break;
+      
+    case "week":
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      params.set("from", weekAgo.toISOString().split('T')[0]);
+      params.set("to", today.toISOString().split('T')[0]);
+      break;
+      
+    case "month":
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      params.set("from", firstDayOfMonth.toISOString().split('T')[0]);
+      params.set("to", lastDayOfMonth.toISOString().split('T')[0]);
+      break;
+      
+    case "year":
+      const year = selectedYear || today.getFullYear();
+      params.set("year", year.toString());
+      break;
+  }
+  
+  return params.toString();
+};
+
 export default function EntryHistory() {
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [allEntries, setAllEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
@@ -87,17 +131,23 @@ export default function EntryHistory() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // User state for role checking
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
   // Timeframe state
   const [timeframe, setTimeframe] = useState<"day" | "week" | "month" | "year">("day");
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
   const [initialLoad, setInitialLoad] = useState(true);
+  const [timeframeDescription, setTimeframeDescription] = useState<string>("");
 
   // Edited entries filter state
   const [showEditedEntries, setShowEditedEntries] = useState(false);
   const [editedEntries, setEditedEntries] = useState<Entry[]>([]);
   const [selectedEditedEntry, setSelectedEditedEntry] = useState<Entry | null>(null);
   const [showEditedDetailsModal, setShowEditedDetailsModal] = useState(false);
+  const [summary, setSummary] = useState<any>(null);
 
   // Sources and categories (same as Entry.tsx)
   const sources = [
@@ -121,23 +171,67 @@ export default function EntryHistory() {
     "Autre Catégorie"
   ];
 
+  // Effect to automatically set to today's date when timeframe changes to "day"
   useEffect(() => {
+    if (!initialLoad && timeframe === "day") {
+      const today = getTodayDate();
+      setSelectedDate(today);
+    }
+  }, [timeframe, initialLoad]);
+
+  // Fetch current user on component mount
+  useEffect(() => {
+    fetchCurrentUser();
     fetchEntries();
   }, []);
 
+  // Fetch entries when timeframe or filters change
   useEffect(() => {
-    if (allEntries.length > 0) {
-      updateFilteredEntries();
-      updateEditedEntries();
+    if (currentUser !== null) { // Only fetch entries after user data is loaded
+      fetchEntries();
     }
-  }, [timeframe, selectedYear, selectedDate, allEntries, showEditedEntries]);
+  }, [timeframe, selectedYear, selectedDate, showEditedEntries, currentUser]);
 
-  // Update edited entries when allEntries changes
+  // Update edited entries when entries change
+  useEffect(() => {
+    updateEditedEntries();
+  }, [entries]);
+
+  // Fetch current user from API or localStorage
+  const fetchCurrentUser = async () => {
+    try {
+      // Try to get user from localStorage first
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        const userData = JSON.parse(storedUser);
+        setCurrentUser(userData);
+        setIsAdmin(userData.role === "admin" || userData.role === "administrator");
+      } else {
+        // Fallback to API call
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/me`, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          },
+        });
+
+        if (res.ok) {
+          const userData = await res.json();
+          setCurrentUser(userData);
+          setIsAdmin(userData.role === "admin" || userData.role === "administrator");
+          localStorage.setItem("user", JSON.stringify(userData));
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      // Default to non-admin if can't fetch user
+      setIsAdmin(false);
+    }
+  };
+
   const updateEditedEntries = () => {
-    const timeframeEntries = getEntriesByTimeframe(timeframe, selectedYear, selectedDate);
-    
     // Filter entries that have editHistory or editedBy field
-    const edited = timeframeEntries.filter(entry => 
+    const edited = entries.filter(entry => 
       (entry.editHistory && entry.editHistory.length > 0) || entry.editedBy
     );
 
@@ -151,25 +245,21 @@ export default function EntryHistory() {
     setEditedEntries(sortedEditedEntries);
   };
 
-  // Effect to automatically set to today's date when timeframe changes to "day"
-  useEffect(() => {
-    if (!initialLoad && timeframe === "day") {
-      const today = getTodayDate();
-      setSelectedDate(today);
-    }
-  }, [timeframe, initialLoad]);
-
-  // Filter out deleted entries - ONLY show active entries
-  const filterValidEntries = (entries: Entry[]): Entry[] => {
-    return entries.filter((entry: Entry) => {
-      return entry.status === "active";
-    });
-  };
-
   const fetchEntries = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/entries?limit=0`, {
+      
+      // Build query parameters based on timeframe
+      const timeframeParams = getTimeframeParams(timeframe, selectedYear, selectedDate);
+      
+      // Add status filter for edited entries view
+      const statusParam = showEditedEntries ? "&status=all" : "&status=active";
+      
+      const url = `${import.meta.env.VITE_API_URL}/entries?${timeframeParams}${statusParam}`;
+      
+      console.log("Fetching entries from:", url);
+      
+      const res = await fetch(url, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
@@ -179,172 +269,54 @@ export default function EntryHistory() {
       if (res.ok) {
         const data = await res.json();
         
-        let fetchedEntries: Entry[] = [];
-        if (Array.isArray(data)) {
-          fetchedEntries = data;
-        } else if (data.entries && Array.isArray(data.entries)) {
-          fetchedEntries = data.entries;
-        } else if (data.data && Array.isArray(data.data)) {
-          fetchedEntries = data.data;
+        console.log("API Response:", data);
+        
+        if (data.success && data.data) {
+          // Set entries
+          const fetchedEntries: Entry[] = data.data;
+          setEntries(fetchedEntries);
+          
+          // Set timeframe description
+          setTimeframeDescription(data.timeframe?.description || "");
+          
+          // Set summary data
+          if (data.summary) {
+            setSummary(data.summary);
+          }
+          
+          console.log(`Fetched ${fetchedEntries.length} entries with timeframe: ${data.timeframe?.description}`);
         } else {
-          console.warn("Unexpected entries data structure:", data);
-          fetchedEntries = [];
+          console.error("Unexpected API response format:", data);
+          setEntries([]);
+          setSummary(null);
+          setError("Format de réponse API inattendu");
         }
-
-        console.log(`Fetched ${fetchedEntries.length} entries from API`);
-        
-        // Filter out deleted entries
-        const validEntries = filterValidEntries(fetchedEntries);
-        console.log(`After filtering: ${validEntries.length} valid entries`);
-        
-        // Sort entries by date - newest first
-        const sortedEntries = validEntries.sort((a, b) => 
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        
-        setAllEntries(sortedEntries);
-        setEntries(sortedEntries);
       } else {
-        console.error("Entries fetch failed:", res.status);
-        await tryAlternativeFetch();
+        const errorData = await res.json().catch(() => ({ error: "Erreur serveur" }));
+        console.error("Entries fetch failed:", res.status, errorData);
+        setError(errorData.error || `Échec du chargement (${res.status})`);
+        setEntries([]);
       }
     } catch (error) {
       console.error("Error loading entries:", error);
-      setError("Failed to load entries");
-      await tryAlternativeFetch();
+      setError("Échec de la connexion au serveur");
+      setEntries([]);
     } finally {
       setLoading(false);
       setInitialLoad(false);
     }
   };
 
-  // Alternative fetch method if the main one fails
-  const tryAlternativeFetch = async () => {
-    try {
-      const endpoints = [
-        `${import.meta.env.VITE_API_URL}/entries?limit=1000`,
-        `${import.meta.env.VITE_API_URL}/entries/all`,
-      ];
-      
-      let fetchedEntries: Entry[] = [];
-      
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(endpoint, {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-            },
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            if (Array.isArray(data)) {
-              fetchedEntries = data;
-              break;
-            } else if (data.entries && Array.isArray(data.entries)) {
-              fetchedEntries = data.entries;
-              break;
-            } else if (data.data && Array.isArray(data.data)) {
-              fetchedEntries = data.data;
-              break;
-            }
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch from ${endpoint}:`, error);
-          continue;
-        }
-      }
-      
-      const validEntries = filterValidEntries(fetchedEntries);
-      const sortedEntries = validEntries.sort((a, b) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-      
-      setAllEntries(sortedEntries);
-      setEntries(sortedEntries);
-    } catch (error) {
-      console.error("Alternative fetch also failed:", error);
-    }
-  };
-
-  // Function to get entries filtered by timeframe
-  const getEntriesByTimeframe = (timeframe: "day" | "week" | "month" | "year", selectedYear?: number, selectedDate?: string): Entry[] => {
-    const now = new Date();
-    
-    switch (timeframe) {
-      case "day":
-        const targetDate = selectedDate ? new Date(selectedDate) : new Date();
-        const targetDateString = targetDate.toDateString();
-        return allEntries.filter((entry: Entry) => {
-          try {
-            const entryDate = new Date(entry.createdAt);
-            return entryDate.toDateString() === targetDateString;
-          } catch (error) {
-            return false;
-          }
-        });
-
-      case "week":
-        const weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        return allEntries.filter((entry: Entry) => {
-          try {
-            const entryDate = new Date(entry.createdAt);
-            return entryDate >= weekAgo && entryDate <= now;
-          } catch (error) {
-            return false;
-          }
-        });
-
-      case "month":
-        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        return allEntries.filter((entry: Entry) => {
-          try {
-            const entryDate = new Date(entry.createdAt);
-            return entryDate >= firstDayOfMonth && entryDate <= now;
-          } catch (error) {
-            return false;
-          }
-        });
-
-      case "year":
-        const year = selectedYear || now.getFullYear();
-        const firstDayOfYear = new Date(year, 0, 1);
-        const lastDayOfYear = new Date(year, 11, 31, 23, 59, 59);
-        return allEntries.filter((entry: Entry) => {
-          try {
-            const entryDate = new Date(entry.createdAt);
-            return entryDate >= firstDayOfYear && entryDate <= lastDayOfYear;
-          } catch (error) {
-            return false;
-          }
-        });
-
-      default:
-        return allEntries;
-    }
-  };
-
-  // Function to update filtered entries based on timeframe
-  const updateFilteredEntries = () => {
-    const timeframeEntries = getEntriesByTimeframe(timeframe, selectedYear, selectedDate);
-    
-    const sortedEntries = timeframeEntries.sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-    
-    setEntries(sortedEntries);
-  };
-
+  // Get available years from API or default
   const getAvailableYears = (): number[] => {
-    const years = Array.from(new Set(allEntries.map((entry: Entry) => {
-      try {
-        return new Date(entry.createdAt).getFullYear();
-      } catch (error) {
-        return new Date().getFullYear();
-      }
-    })));
+    // Start with current year
+    const currentYear = new Date().getFullYear();
+    const years = [currentYear];
+    
+    // Add previous years (up to 5 years back)
+    for (let i = 1; i <= 5; i++) {
+      years.push(currentYear - i);
+    }
     
     return years.sort((a, b) => b - a);
   };
@@ -361,6 +333,10 @@ export default function EntryHistory() {
   };
 
   const getTimeframeLabel = () => {
+    if (timeframeDescription) {
+      return timeframeDescription;
+    }
+    
     switch (timeframe) {
       case "day":
         if (selectedDate) {
@@ -388,21 +364,14 @@ export default function EntryHistory() {
     }
   };
 
-  const filteredEntries = showEditedEntries 
-    ? editedEntries.filter(entry =>
-        entry.entryId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        entry.receivedFrom.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        entry.receivedFrom.phone.includes(searchTerm) ||
-        entry.source.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (entry.createdBy?.username && entry.createdBy.username.toLowerCase().includes(searchTerm.toLowerCase()))
-      )
-    : entries.filter(entry =>
-        entry.entryId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        entry.receivedFrom.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        entry.receivedFrom.phone.includes(searchTerm) ||
-        entry.source.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (entry.createdBy?.username && entry.createdBy.username.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
+  // Filter entries based on search term
+  const filteredEntries = (showEditedEntries ? editedEntries : entries).filter(entry =>
+    entry.entryId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    entry.receivedFrom.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    entry.receivedFrom.phone.includes(searchTerm) ||
+    entry.source.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (entry.createdBy?.username && entry.createdBy.username.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("fr-FR", {
@@ -814,6 +783,113 @@ export default function EntryHistory() {
     }
   };
 
+  // Summary statistics display component - ONLY VISIBLE TO ADMINS
+  const SummaryStats = () => {
+    if (!summary || !isAdmin) return null;
+
+    return (
+      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-blue-900 flex items-center gap-2">
+            <Shield className="w-5 h-5" />
+            Statistiques des Entrées (Vue Admin)
+          </h3>
+          {currentUser && (
+            <span className="text-sm text-blue-700 bg-blue-100 px-3 py-1 rounded-full">
+              Connecté en tant que: {currentUser.name || currentUser.username} ({currentUser.role})
+            </span>
+          )}
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Entrées</p>
+                <p className="text-2xl font-bold text-blue-600">{summary.totalRecords}</p>
+              </div>
+              <FileText className="w-8 h-8 text-blue-500" />
+            </div>
+          </div>
+          
+          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Montant Total</p>
+                <p className="text-2xl font-bold text-green-600">{formatCurrency(summary.totalAmount)}</p>
+              </div>
+              <DollarSign className="w-8 h-8 text-green-500" />
+            </div>
+          </div>
+          
+          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Entrées Actives</p>
+                <p className="text-2xl font-bold text-green-600">{summary.active?.count || 0}</p>
+                <p className="text-sm text-gray-500">{formatCurrency(summary.active?.amount || 0)}</p>
+              </div>
+              <FileText className="w-8 h-8 text-green-500" />
+            </div>
+          </div>
+          
+          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Méthodes de Paiement</p>
+                <p className="text-xl font-semibold text-purple-600">
+                  {Object.keys(summary.paymentMethods || {}).length}
+                </p>
+              </div>
+              <DollarSign className="w-8 h-8 text-purple-500" />
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed stats row */}
+        {summary.paymentMethods && Object.keys(summary.paymentMethods).length > 0 && (
+          <div className="mt-4 pt-4 border-t border-blue-200">
+            <h4 className="font-medium text-blue-800 mb-3">Détails par méthode de paiement:</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {Object.entries(summary.paymentMethods).map(([method, data]: [string, any]) => (
+                <div key={method} className="bg-white p-3 rounded-lg border border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium text-gray-700 capitalize">{method}:</span>
+                    <span className="font-semibold text-green-600">{data.count}</span>
+                  </div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    Total: {formatCurrency(data.amount)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Sources summary */}
+        {summary.sources && Object.keys(summary.sources).length > 0 && (
+          <div className="mt-4 pt-4 border-t border-blue-200">
+            <h4 className="font-medium text-blue-800 mb-3">Sources principales:</h4>
+            <div className="space-y-2">
+              {Object.entries(summary.sources)
+                .sort(([, a], [, b]) => (b as any).amount - (a as any).amount)
+                .slice(0, 3)
+                .map(([source, data]: [string, any]) => (
+                  <div key={source} className="flex justify-between items-center bg-white p-2 rounded border">
+                    <span className="text-gray-700">{source}</span>
+                    <div className="text-right">
+                      <div className="font-semibold text-gray-900">{data.count} entrées</div>
+                      <div className="text-sm text-green-600">{formatCurrency(data.amount)}</div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 p-6 flex-1 overflow-auto">
       <div className="flex items-center justify-between flex-wrap gap-4 overflow-auto">
@@ -862,7 +938,7 @@ export default function EntryHistory() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
-            {showEditedEntries ? "Entrées modifiées" : "Toutes les entrées"} ({getTimeframeLabel()})
+            {showEditedEntries ? "Entrées modifiées" : "Toutes les entrées"} - {getTimeframeLabel()}
           </h3>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             {/* Date Picker for Day View */}
@@ -882,7 +958,7 @@ export default function EntryHistory() {
               </div>
             )}
             
-            {timeframe === "year" && getAvailableYears().length > 1 && (
+            {timeframe === "year" && (
               <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
                 <button
                   onClick={() => navigateYear('prev')}
@@ -920,8 +996,20 @@ export default function EntryHistory() {
                 </button>
               ))}
             </div>
+            
+            {/* Refresh Button */}
+            <button
+              onClick={fetchEntries}
+              disabled={loading}
+              className="px-3 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
         </div>
+        
+        {/* Show summary statistics - Admin only */}
+        <SummaryStats />
       </div>
 
       {message && (
