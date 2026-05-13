@@ -37,14 +37,11 @@ export default function App() {
       <ToastContainer position="top-right" autoClose={3000} newestOnTop />
 
       <Router>
-        <div className="min-h-screen flex bg-background">
-          <div className="fixed">
+        <div className="h-screen overflow-hidden flex bg-background">
             <Sidebar />
-          </div>
 
-          {/* Main content */}
-          <main className="flex-1 overflow-auto ml-[80px] md:ml-[280px]">
-            <div className="h-full">
+          <main className="h-screen flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
+            <div className="min-h-full min-w-0">
               <Routes>
                 <Route
                   path="/products"

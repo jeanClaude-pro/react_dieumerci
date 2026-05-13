@@ -24,14 +24,14 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}) {
 }
 
 export function login(payload: LoginPayload) {
-  return apiFetch<LoginResponse>("/api/auth/login", {
+  return apiFetch<LoginResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify(payload)
   });
 }
 
 export function register(payload: RegisterPayload) {
-  return apiFetch<{ message: string }>("/api/auth/register", {
+  return apiFetch<{ message: string }>("/auth/register", {
     method: "POST",
     body: JSON.stringify(payload)
   });

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useState, useRef } from "react";
+import { formatNowGMT2, formatDateGMT2, formatTimeGMT2 } from "../utils/dateUtils";
 import { useAuth } from "../hooks/useAuth";
 import { DollarSign, RefreshCw, Calculator, Search } from "lucide-react";
 
@@ -1269,11 +1270,8 @@ export default function Reservation() {
     try {
       // Get current date and time for reservation
       const now = new Date();
-      const reservationDate = now.toLocaleDateString("fr-FR");
-      const reservationTime = now.toLocaleTimeString("fr-FR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      const reservationDate = now.toLocaleDateString("fr-FR", { timeZone: 'Africa/Harare' });
+      const reservationTime = formatTimeGMT2(now);
 
       const body = {
         customer: {
@@ -1367,13 +1365,7 @@ export default function Reservation() {
         total: cartTotal,
         paymentMethod: form.paymentMethod,
         salesPerson: currentUser?.username || "VENDEUR",
-        date: new Date().toLocaleString('fr-FR', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        }),
+        date: formatNowGMT2(),
         receiptNumber: reservationId,
         stubNumber: reservationId,
         reservationDate: reservationDate,
@@ -1435,7 +1427,7 @@ export default function Reservation() {
                       1 USD = {new Intl.NumberFormat('fr-FR').format(exchangeRate.rate)} FC
                     </div>
                     <div className="text-xs text-blue-600">
-                      Effectif depuis {new Date(exchangeRate.effectiveFrom).toLocaleDateString('fr-FR')}
+                      Effectif depuis {formatDateGMT2(exchangeRate.effectiveFrom)}
                     </div>
                   </div>
                 ) : (

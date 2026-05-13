@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { formatDateTimeGMT2 } from "../utils/dateUtils";
 import {
   Search,
   FileText,
@@ -373,15 +374,7 @@ export default function EntryHistory() {
     (entry.createdBy?.username && entry.createdBy.username.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("fr-FR", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+  const formatDate = (dateString: string) => formatDateTimeGMT2(dateString);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("fr-FR", {

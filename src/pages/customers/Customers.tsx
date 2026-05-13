@@ -1,6 +1,7 @@
 "use client";
 
 import type React from "react";
+import { formatDateGMT2, formatDateTimeGMT2 } from "../../utils/dateUtils";
 import { useState, useEffect } from "react";
 import {
   Users,
@@ -148,30 +149,12 @@ export default function Customers() {
 
   const formatDate = (dateString: string) => {
     if (!dateString || dateString === "null" || dateString === "undefined") return "N/A";
-    try {
-      return new Date(dateString).toLocaleDateString("fr-FR", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
-    } catch (error) {
-      return "N/A";
-    }
+    return formatDateGMT2(dateString) || "N/A";
   };
 
   const formatDateTime = (dateString: string) => {
     if (!dateString || dateString === "null" || dateString === "undefined") return "N/A";
-    try {
-      return new Date(dateString).toLocaleDateString("fr-FR", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch (error) {
-      return "N/A";
-    }
+    return formatDateTimeGMT2(dateString) || "N/A";
   };
 
   const formatCurrency = (amount: number) => {

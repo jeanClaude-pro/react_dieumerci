@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { formatDateTimeGMT2, formatMonthNameGMT2 } from "../../utils/dateUtils";
 import {
   Search,
   FileText,
@@ -495,15 +496,7 @@ export default function SalesHistory() {
         (sale.salesPerson && sale.salesPerson.toLowerCase().includes(searchTerm.toLowerCase()))
       );
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+  const formatDate = (dateString: string) => formatDateTimeGMT2(dateString);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -1656,7 +1649,7 @@ export default function SalesHistory() {
                         const monthNum = (i + 1).toString().padStart(2, '0');
                         return (
                           <option key={monthNum} value={monthNum}>
-                            {new Date(2000, i).toLocaleString('default', { month: 'long' })} ({monthNum})
+                            {formatMonthNameGMT2(i)} ({monthNum})
                           </option>
                         );
                       })}

@@ -3,6 +3,7 @@
 import type React from "react";
 
 import { useState, useEffect, useRef } from "react";
+import { formatTimeGMT2, formatDayGMT2 } from "../utils/dateUtils";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
@@ -324,23 +325,8 @@ export default function Sidebar() {
     window.location.href = "/login?message=auto_logout";
   };
 
-  // Format time for display
-  const formatTime = (date: Date): string => {
-    return date.toLocaleTimeString('fr-FR', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: false 
-    });
-  };
-
-  // Format day for display
-  const formatDay = (date: Date): string => {
-    return date.toLocaleDateString('fr-FR', { 
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long'
-    });
-  };
+  const formatTime = formatTimeGMT2;
+  const formatDay = formatDayGMT2;
 
   // Get restriction message based on the restriction type
   const getRestrictionMessage = (): string => {
@@ -389,11 +375,11 @@ export default function Sidebar() {
           x: isMobile ? (isMobileOpen ? 0 : -280) : 0
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className="bg-gray-900 border-r border-gray-800 flex flex-col h-screen relative z-50"
+        className="bg-gray-900 border-r border-gray-800 flex flex-col h-screen min-h-0 z-50 flex-shrink-0 overflow-hidden"
         style={{ 
           touchAction: "pan-y",
-          // On mobile, make it overlay content
-          position: isMobile ? "fixed" : "relative",
+          position: isMobile ? "fixed" : "sticky",
+          top: 0,
           left: isMobile ? 0 : "auto"
         }}
       >
@@ -580,7 +566,7 @@ export default function Sidebar() {
 
         {/* If NOT authenticated → show only Login */}
         {!isAuthed ? (
-          <div className="flex-1 p-4">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4">
             <Link
               to="/login"
               className={clsx(
@@ -614,7 +600,7 @@ export default function Sidebar() {
         ) : (
           <>
             {/* Navigation (only when authenticated) */}
-            <nav className="flex-1 overflow-y-auto p-4 space-y-6">
+            <nav className="flex-1 min-h-0 overflow-y-auto p-4 space-y-6">
               {sidebarSections.map((section) => {
                 // Filter items based on user role
                 const accessibleItems = section.items.filter(hasAccess);

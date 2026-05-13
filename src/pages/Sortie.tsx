@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from "react";
+import { formatDateGMT2 } from "../utils/dateUtils";
 import { useAuth } from "../hooks/useAuth";
 import { Calculator, DollarSign, RefreshCw } from "lucide-react";
 
@@ -227,7 +228,7 @@ export default function Sortie() {
                       1 USD = {new Intl.NumberFormat('fr-FR').format(exchangeRate.rate)} FC
                     </div>
                     <div className="text-xs text-blue-600">
-                      Effectif depuis {new Date(exchangeRate.effectiveFrom).toLocaleDateString('fr-FR')}
+                      Effectif depuis {formatDateGMT2(exchangeRate.effectiveFrom)}
                     </div>
                   </div>
                 ) : (

@@ -24,6 +24,8 @@ interface DashboardStats {
   customerGrowth: number;
 }
 
+import { formatDateTimeGMT2 } from "../../utils/dateUtils";
+
 const serverUrl = import.meta.env.VITE_API_URL;
 
 export default function Dashboard() {
@@ -338,14 +340,7 @@ export default function Dashboard() {
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+  const formatDate = (dateString: string) => formatDateTimeGMT2(dateString);
 
   if (loading) {
     return (

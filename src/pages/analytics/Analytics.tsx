@@ -18,7 +18,10 @@ import {
   Shield,
   FileText,
   RefreshCw,
+  FileDown,
+  AlertTriangle,
 } from "lucide-react";
+import { generateCompanyReport, type ReportSections } from "./reportGenerator";
 
 // Define interfaces for the data structures
 interface SaleItem {
@@ -168,6 +171,19 @@ const isAdmin = (): boolean => {
   return getUserRole() === "admin";
 };
 
+// Read admin username from localStorage (display-only)
+const getAdminUsername = (): string => {
+  if (typeof window === "undefined") return "Admin";
+  try {
+    const raw = localStorage.getItem("user");
+    if (raw) {
+      const u = JSON.parse(raw);
+      return u.username || u.email || "Admin";
+    }
+  } catch { /* ignore */ }
+  return "Admin";
+};
+
 // Check if user should see only today's data (non-admin)
 const shouldSeeOnlyTodayData = (): boolean => {
   return !isAdmin();
@@ -232,6 +248,20 @@ export default function Analytics() {
   const [timeframeData, setTimeframeData] = useState<TimeframeData | null>(null);
   const [initialLoad, setInitialLoad] = useState(true);
   const [availableYears, setAvailableYears] = useState<number[]>([]);
+
+  // ── Report generation state (admin only) ──────────────────────────────
+  const [reportSections, setReportSections] = useState<ReportSections>({
+    financial: true,
+    sales: true,
+    products: true,
+    clients: true,
+    expenses: true,
+    entries: true,
+  });
+  const [adminSignatureText, setAdminSignatureText] = useState("");
+  const [hasSignature, setHasSignature] = useState(false);
+  const [hasStamp, setHasStamp] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   // Effect to automatically set to today's date when timeframe changes to "day"
   useEffect(() => {
@@ -451,10 +481,11 @@ export default function Analytics() {
     const salesByDay = [
       {
         date: today.toLocaleDateString("fr-FR", {
+          timeZone: "Africa/Harare",
           day: "numeric",
           month: "short",
         }),
-        dayName: today.toLocaleDateString("fr-FR", { weekday: "long" }),
+        dayName: today.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", weekday: "long" }),
         sales: totalSales,
         revenue: totalRevenue,
       },
@@ -484,8 +515,7 @@ export default function Analytics() {
 
     const topProducts = Array.from(productStats.entries())
       .map(([name, stats]) => ({ name, ...stats }))
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 50);
+      .sort((a, b) => b.quantity - a.quantity);
 
     // Top customers from today's sales
     const customerStats = new Map();
@@ -616,8 +646,7 @@ export default function Analytics() {
 
     const topProducts = Array.from(productStats.entries())
       .map(([name, stats]) => ({ name, ...stats }))
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 50);
+      .sort((a, b) => b.quantity - a.quantity);
 
     // Top customers
     const customerStats = new Map();
@@ -700,8 +729,8 @@ export default function Analytics() {
         }
       });
       return {
-        date: date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }),
-        dayName: date.toLocaleDateString("fr-FR", { weekday: "long" }),
+        date: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", day: "numeric", month: "short" }),
+        dayName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", weekday: "long" }),
         sales: daySales.length,
         revenue: daySales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
       };
@@ -718,8 +747,8 @@ export default function Analytics() {
         }
       });
 
-      const startDateStr = week.start.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-      const endDateStr = week.end.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+      const startDateStr = week.start.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", day: "numeric", month: "short" });
+      const endDateStr = week.end.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", day: "numeric", month: "short" });
 
       return {
         week: `Semaine ${index + 1}`,
@@ -772,7 +801,7 @@ export default function Analytics() {
       const monthDate = new Date(currentYear, i, 1);
       return {
         month: String(i),
-        monthName: monthDate.toLocaleDateString("fr-FR", { month: "long" }),
+        monthName: monthDate.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", month: "long" }),
         sales: monthSales.length,
         revenue: monthSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
       };
@@ -822,8 +851,8 @@ export default function Analytics() {
       months.push({
         month: date.getMonth(),
         year: date.getFullYear(),
-        shortName: date.toLocaleDateString("fr-FR", { month: "short" }),
-        fullName: date.toLocaleDateString("fr-FR", { month: "long" }),
+        shortName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", month: "short" }),
+        fullName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", month: "long" }),
       });
     }
     return months;
@@ -903,6 +932,7 @@ export default function Analytics() {
         if (selectedDate) {
           const date = new Date(selectedDate);
           return date.toLocaleDateString("fr-FR", {
+            timeZone: "Africa/Harare",
             weekday: "long",
             year: "numeric",
             month: "long",
@@ -937,6 +967,29 @@ export default function Analytics() {
       } else if (availableYears.length > 0) {
         setSelectedYear(availableYears[0]);
       }
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    if (!analytics || !isAdmin()) return;
+    if (!Object.values(reportSections).some(Boolean)) return;
+
+    setGeneratingReport(true);
+    try {
+      // Yield to let React re-render the loading state before the synchronous PDF build
+      await new Promise((res) => setTimeout(res, 50));
+      generateCompanyReport({
+        sections: reportSections,
+        analytics,
+        adminUsername: getAdminUsername(),
+        adminSignatureText,
+        hasSignature,
+        hasStamp,
+        timeframeLabel: getTimeframeLabel(),
+        formatCurrency,
+      });
+    } finally {
+      setGeneratingReport(false);
     }
   };
 
@@ -1469,6 +1522,225 @@ export default function Analytics() {
             </div>
           </div>
         </div>
+        {/* ── Report Generation — Admin Only ────────────────────────── */}
+        {isAdmin() && (
+          <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+            {/* Card header */}
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-900 to-blue-700">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <FileDown className="w-5 h-5" />
+                    Génération de Rapport Officiel
+                  </h3>
+                  <p className="text-sm text-blue-200 mt-0.5">
+                    Générez et téléchargez des rapports professionnels au format PDF
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 self-start sm:self-auto">
+                  <Shield className="w-4 h-4 text-blue-200" />
+                  <span className="text-sm text-white font-medium">Accès Administrateur</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                {/* ── Left: Section selection ──────────────────────── */}
+                <div className="lg:col-span-2 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Sections à inclure
+                    </h4>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setReportSections({
+                            financial: true, sales: true, products: true,
+                            clients: true, expenses: true, entries: true,
+                          })
+                        }
+                        className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                      >
+                        Tout sélectionner
+                      </button>
+                      <span className="text-gray-300 text-xs">|</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setReportSections({
+                            financial: false, sales: false, products: false,
+                            clients: false, expenses: false, entries: false,
+                          })
+                        }
+                        className="text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+                      >
+                        Tout désélectionner
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {([
+                      { key: "financial", label: "Résumé Financier",     desc: "Ventes, revenus, dépenses, net" },
+                      { key: "sales",     label: "Rapport de Ventes",    desc: "Tendances et statistiques" },
+                      { key: "products",  label: "Rapport des Produits", desc: "Articles vendus et revenus" },
+                      { key: "clients",   label: "Rapport Clients",      desc: "Statistiques clients" },
+                      { key: "expenses",  label: "Rapport des Dépenses", desc: "Dépenses validées" },
+                      { key: "entries",   label: "Rapport d'Entrées",    desc: "Entrées de caisse" },
+                    ] as const).map(({ key, label, desc }) => {
+                      const checked = reportSections[key];
+                      return (
+                        <label
+                          key={key}
+                          className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                            checked
+                              ? "bg-blue-50 border-blue-300 shadow-sm"
+                              : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              setReportSections((prev) => ({ ...prev, [key]: e.target.checked }))
+                            }
+                            className="mt-0.5 w-4 h-4 text-blue-600 rounded border-gray-300 flex-shrink-0 cursor-pointer"
+                          />
+                          <div>
+                            <div className="text-sm font-medium text-gray-800">{label}</div>
+                            <div className="text-xs text-gray-500">{desc}</div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {/* Selected count badge */}
+                  <p className="text-xs text-gray-500">
+                    {Object.values(reportSections).filter(Boolean).length} section(s) sélectionnée(s)
+                    {Object.values(reportSections).every(Boolean) && (
+                      <span className="ml-2 text-blue-600 font-medium">— Rapport complet</span>
+                    )}
+                  </p>
+                </div>
+
+                {/* ── Right: Certification & download ─────────────── */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Certification
+                  </h4>
+
+                  {/* Admin info (read-only) */}
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-3">
+                    <p className="text-xs text-gray-500 mb-0.5">Administrateur</p>
+                    <p className="text-sm font-semibold text-gray-900">{getAdminUsername()}</p>
+                  </div>
+
+                  {/* Signature text input */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Titre / Poste (optionnel)
+                    </label>
+                    <input
+                      type="text"
+                      value={adminSignatureText}
+                      onChange={(e) => setAdminSignatureText(e.target.value)}
+                      placeholder="ex: Directeur Général"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    />
+                  </div>
+
+                  {/* Signature & Stamp toggles */}
+                  <div className="space-y-2">
+                    <label
+                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                        hasSignature ? "bg-green-50 border-green-300" : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={hasSignature}
+                        onChange={(e) => setHasSignature(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 text-green-600 rounded border-gray-300 cursor-pointer"
+                      />
+                      <div>
+                        <div className="text-sm font-medium text-gray-800">Signature officielle</div>
+                        <div className="text-xs text-gray-500">Certifier avec signature admin</div>
+                      </div>
+                    </label>
+                    <label
+                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                        hasStamp ? "bg-green-50 border-green-300" : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={hasStamp}
+                        onChange={(e) => setHasStamp(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 text-green-600 rounded border-gray-300 cursor-pointer"
+                      />
+                      <div>
+                        <div className="text-sm font-medium text-gray-800">Cachet officiel</div>
+                        <div className="text-xs text-gray-500">Inclure le cachet de l'entreprise</div>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Validation status badge */}
+                  {hasSignature && hasStamp ? (
+                    <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <Shield className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-green-700">
+                        Le rapport sera émis en tant que <strong>Document Officiel</strong>.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-700">
+                        Sans signature <em>et</em> cachet, le rapport sera marqué{" "}
+                        <strong>Document Non Officiel</strong>.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Generate button */}
+                  <button
+                    type="button"
+                    onClick={handleGenerateReport}
+                    disabled={
+                      generatingReport ||
+                      !Object.values(reportSections).some(Boolean)
+                    }
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-700 text-white font-semibold rounded-lg hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm text-sm"
+                  >
+                    {generatingReport ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Génération en cours…
+                      </>
+                    ) : (
+                      <>
+                        <FileDown className="w-4 h-4" />
+                        Générer &amp; Télécharger PDF
+                      </>
+                    )}
+                  </button>
+
+                  {!Object.values(reportSections).some(Boolean) && (
+                    <p className="text-xs text-center text-gray-400">
+                      Sélectionnez au moins une section.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

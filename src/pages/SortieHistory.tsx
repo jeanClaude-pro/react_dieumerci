@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { formatDateTimeGMT2, formatTimeGMT2, formatMonthNameGMT2 } from "../utils/dateUtils";
 import {
   Search,
   FileText,
@@ -464,15 +465,7 @@ export default function SortieHistory() {
     handleQueryParamChange("date", date);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("fr-FR", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+  const formatDate = (dateString: string) => formatDateTimeGMT2(dateString);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("fr-FR", {
@@ -773,26 +766,9 @@ export default function SortieHistory() {
         currency: "USD",
       }).format(expense.amount);
 
-      // Format the date directly for the print window
-      const formattedDate = new Date(expense.createdAt).toLocaleDateString(
-        "fr-FR",
-        {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        }
-      );
-
+      const formattedDate = formatDateTimeGMT2(expense.createdAt);
       const validatedDate = expense.validatedAt
-        ? new Date(expense.validatedAt).toLocaleDateString("fr-FR", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })
+        ? formatDateTimeGMT2(expense.validatedAt)
         : formattedDate;
 
       printWindow.document.write(`
@@ -1234,7 +1210,7 @@ export default function SortieHistory() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Dernière mise à jour:</span>
-                  <span className="text-sm text-gray-900">{new Date().toLocaleTimeString('fr-FR')}</span>
+                  <span className="text-sm text-gray-900">{formatTimeGMT2(new Date())}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Données filtrées:</span>
@@ -1394,7 +1370,7 @@ export default function SortieHistory() {
                         const monthNum = (i + 1).toString().padStart(2, '0');
                         return (
                           <option key={monthNum} value={monthNum}>
-                            {new Date(2000, i).toLocaleString('fr-FR', { month: 'long' })} ({monthNum})
+                            {formatMonthNameGMT2(i)} ({monthNum})
                           </option>
                         );
                       })}
@@ -2426,7 +2402,7 @@ export default function SortieHistory() {
                             </span>
                           </div>
                           <p className="text-xs text-gray-600 mt-1">
-                            {new Date(item.timestamp).toLocaleTimeString("fr-FR")}
+                            {formatTimeGMT2(new Date(item.timestamp))}
                           </p>
                         </div>
                       ))}

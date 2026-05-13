@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from "react";
+import { formatDateGMT2, formatDateTimeGMT2, formatTimeGMT2, formatNowGMT2 } from "../utils/dateUtils";
 import { 
   Search, 
   Eye, 
@@ -203,66 +204,13 @@ export default function ReservationManagement() {
   const completedReservations = reservations.filter(r => r.status === 'completed');
 
   const formatDate = (dateString: string) => {
-    try {
-      // Handle different date formats
-      let date: Date;
-      
-      // If it's already a valid date string
-      if (dateString && !isNaN(new Date(dateString).getTime())) {
-        date = new Date(dateString);
-      } else {
-        // Try to parse as timestamp
-        const timestamp = parseInt(dateString);
-        if (!isNaN(timestamp)) {
-          date = new Date(timestamp);
-        } else {
-          return "Date invalide";
-        }
-      }
-      
-      if (isNaN(date.getTime())) {
-        return "Date invalide";
-      }
-      
-      return date.toLocaleDateString("fr-FR", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
-    } catch {
-      return "Date invalide";
-    }
+    const result = formatDateGMT2(dateString);
+    return result === '—' ? "Date invalide" : result;
   };
 
   const formatDateTime = (dateString: string) => {
-    try {
-      let date: Date;
-      
-      if (dateString && !isNaN(new Date(dateString).getTime())) {
-        date = new Date(dateString);
-      } else {
-        const timestamp = parseInt(dateString);
-        if (!isNaN(timestamp)) {
-          date = new Date(timestamp);
-        } else {
-          return "Date invalide";
-        }
-      }
-      
-      if (isNaN(date.getTime())) {
-        return "Date invalide";
-      }
-      
-      return date.toLocaleDateString("fr-FR", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return "Date invalide";
-    }
+    const result = formatDateTimeGMT2(dateString);
+    return result === '—' ? "Date invalide" : result;
   };
 
   const formatCurrency = (amount: number) => {
@@ -299,10 +247,7 @@ export default function ReservationManagement() {
       try {
         const date = new Date(reservation.createdAt);
         if (!isNaN(date.getTime())) {
-          return date.toLocaleTimeString('fr-FR', { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          });
+          return formatTimeGMT2(date);
         }
       } catch {
         // Ignore errors
@@ -610,13 +555,7 @@ export default function ReservationManagement() {
     const printWindow = window.open("", "_blank", "width=320,height=600");
     if (printWindow) {
       const username = localStorage.getItem("username") || "VENDEUR";
-      const currentDate = new Date().toLocaleString('fr-FR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+      const currentDate = formatNowGMT2();
       
       const isCompleted = reservation.status === 'completed';
       

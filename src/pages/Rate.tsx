@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatDateTimeGMT2 } from "../utils/dateUtils";
 import { 
   DollarSign, 
   RefreshCw, 
@@ -165,17 +166,8 @@ export default function TauxChange() {
   };
 
   const formaterDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString('fr-FR', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch (error) {
-      return 'Date invalide';
-    }
+    const result = formatDateTimeGMT2(dateString);
+    return result === '—' ? 'Date invalide' : result;
   };
 
   const formaterMontant = (montant: number) => {
