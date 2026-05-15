@@ -40,7 +40,7 @@ interface SidebarItem {
   icon: React.ComponentType<{ className?: string }>;
   path: string;
   badge?: number;
-  roles?: string[]; // Add roles property to define access
+  roles?: string[];
 }
 
 interface SidebarSection {
@@ -57,171 +57,143 @@ const sidebarSections: SidebarSection[] = [
         label: "Tableau de bord",
         icon: LayoutDashboard,
         path: "/dashboard",
-        roles: ["admin"] // Admin
+        roles: ["admin"]
       },
       {
         id: "taux",
         label: "Taux d'echange",
         icon: LayoutDashboard,
         path: "/rate",
-        roles: ["admin"] // Admin
+        roles: ["admin"]
       },
-      { 
-        id: "pos", 
-        label: "Point de Vente", 
-        icon: ShoppingCart, 
+      {
+        id: "pos",
+        label: "Point de Vente",
+        icon: ShoppingCart,
         path: "/",
-        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"] // All roles can access POS
+        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"]
       },
-      { 
-        id: "reservation", 
-        label: "Reservation", 
-        icon: Calendar, 
+      {
+        id: "reservation",
+        label: "Reservation",
+        icon: Calendar,
         path: "/reservation",
-        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"] // All roles can access reservation
+        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"]
       },
-      { 
-        id: "entry", 
-        label: "Entrée de caisse", 
-        icon: Wallet, 
+      {
+        id: "entry",
+        label: "Entrée de caisse",
+        icon: Wallet,
         path: "/entry",
-        roles: ["admin", "cashier_supervisor", "inventory_manager", "manager"] // Admin and cashier_supervisor
+        roles: ["admin", "cashier_supervisor", "inventory_manager", "manager"]
       },
-      { 
-        id: "sortie", 
-        label: "Sortie", 
-        icon: Wallet, 
+      {
+        id: "sortie",
+        label: "Sortie",
+        icon: Wallet,
         path: "/sortie",
-        roles: ["admin", "cashier_supervisor", "inventory_manager", "manager"] // Admin and cashier_supervisor
+        roles: ["admin", "cashier_supervisor", "inventory_manager", "manager"]
       },
     ],
   },
   {
     title: "Stock",
     items: [
-      { 
-        id: "products", 
-        label: "Articles", 
-        icon: Package, 
+      {
+        id: "products",
+        label: "Articles",
+        icon: Package,
         path: "/products",
-        roles: ["admin", "manager", "inventory_manager"] // All roles except cashier_supervisor can access products
+        roles: ["admin", "manager", "inventory_manager"]
       },
     ],
   },
   {
     title: "Ventes & Rapports",
     items: [
-      { 
-        id: "sales", 
-        label: "Historique de Vente", 
-        icon: TrendingUp, 
+      {
+        id: "sales",
+        label: "Historique de Vente",
+        icon: TrendingUp,
         path: "/sales",
-        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"] // All roles can access sales history
+        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"]
       },
-      { 
-        id: "reservation-history", 
-        label: "Historique de reservation", 
-        icon: History, 
+      {
+        id: "reservation-history",
+        label: "Historique de reservation",
+        icon: History,
         path: "/reservationhistory",
-        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"] // All roles can access reservation history
+        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"]
       },
-      { 
-        id: "entryhistory", 
-        label: "Historique d'Entrée", 
-        icon: Wallet, 
+      {
+        id: "entryhistory",
+        label: "Historique d'Entrée",
+        icon: Wallet,
         path: "/EntryHistory",
-        roles: ["admin", "cashier_supervisor", "inventory_manager", "manager"] // Admin and cashier_supervisor
+        roles: ["admin", "cashier_supervisor", "inventory_manager", "manager"]
       },
-      { 
-        id: "historicsortie", 
-        label: "Historique de Sortie", 
-        icon: Wallet, 
+      {
+        id: "historicsortie",
+        label: "Historique de Sortie",
+        icon: Wallet,
         path: "/sortiehistory",
-        roles: ["admin","cashier_supervisor", "inventory_manager", "manager"] // Admin and cashier
+        roles: ["admin","cashier_supervisor", "inventory_manager", "manager"]
       },
-      { 
-        id: "reports", 
-        label: "Rapports", 
-        icon: BarChart3, 
+      {
+        id: "reports",
+        label: "Rapports",
+        icon: BarChart3,
         path: "/reports",
-        roles: ["admin"] // Admin can access reports
+        roles: ["admin"]
       },
     ],
   },
   {
     title: "Gestion",
     items: [
-      { 
-        id: "customers", 
-        label: "Clients", 
-        icon: Users, 
+      {
+        id: "customers",
+        label: "Clients",
+        icon: Users,
         path: "/customers",
-        roles: ["admin", "manager", "cashier_supervisor"] // Admin, Manager, and Cashier Supervisor can access customers
+        roles: ["admin", "manager", "cashier_supervisor"]
       },
     ],
   },
 ];
 
-// Function to check if current time is within allowed hours (8 AM to 8 PM)
-const isAllowedTime = (): boolean => {
-  const now = new Date();
-  const currentHour = now.getHours();
-  // Allowed from 8 AM (8) to 8 PM (20)
-  return currentHour >= 7 && currentHour < 20;
-};
-
-// Function to check if today is Sunday
-const isSunday = (): boolean => {
-  const now = new Date();
-  return now.getDay() === 0; // 0 is Sunday
-};
-
-// Function to check if user has restricted access (non-admin outside allowed hours or on Sunday)
-const hasRestrictedAccess = (userRole: string | undefined): boolean => {
-  // Admin users always have access
-  if (userRole === "admin") return false;
-  
-  // Non-admin users have restricted access outside 8 AM - 8 PM or on Sundays
-  return !isAllowedTime() || isSunday();
-};
-
 export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [showTimeWarning, setShowTimeWarning] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const location = useLocation();
   const { token, user, clearAuth } = useAuth();
-  
+
   const sidebarRef = useRef<HTMLElement>(null);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const touchEndX = useRef(0);
 
   const isAuthed = Boolean(token && user);
-  const isNonAdmin = user?.role !== "admin";
-  const isRestricted = isNonAdmin && hasRestrictedAccess(user?.role);
 
   // Check if mobile device and set appropriate initial state
   useEffect(() => {
     const checkMobile = () => {
-      const mobile = window.innerWidth < 1024; // Consider tablets as mobile too
+      const mobile = window.innerWidth < 1024;
       setIsMobile(mobile);
-      
-      // On mobile, start with sidebar collapsed and hidden
+
       if (mobile) {
         setIsCollapsed(true);
         setIsMobileOpen(false);
       } else {
-        // On desktop, use the normal collapsed state
         setIsMobileOpen(false);
       }
     };
-    
+
     checkMobile();
     window.addEventListener('resize', checkMobile);
-    
+
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
@@ -229,27 +201,10 @@ export default function Sidebar() {
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-    }, 60000); // Update every minute
+    }, 60000);
 
     return () => clearInterval(timer);
   }, []);
-
-  // Check for restricted time and auto-logout non-admin users
-  useEffect(() => {
-    if (isAuthed && isNonAdmin) {
-      if (isRestricted) {
-        // Show warning for 10 seconds before auto-logout
-        setShowTimeWarning(true);
-        const logoutTimer = setTimeout(() => {
-          handleAutoLogout();
-        }, 10000); // 10 seconds warning
-
-        return () => clearTimeout(logoutTimer);
-      } else {
-        setShowTimeWarning(false);
-      }
-    }
-  }, [isAuthed, isNonAdmin, isRestricted, currentTime]);
 
   // Close mobile sidebar when route changes
   useEffect(() => {
@@ -275,14 +230,11 @@ export default function Sidebar() {
     const handleTouchEnd = () => {
       const touchDiffX = touchEndX.current - touchStartX.current;
       const touchDiffY = Math.abs(touchEndX.current - touchStartX.current);
-      
-      // Only trigger swipe if horizontal movement is significant and vertical movement is minimal
+
       if (Math.abs(touchDiffX) > 50 && touchDiffY < 100) {
         if (touchDiffX > 0) {
-          // Swipe right - open sidebar
           setIsMobileOpen(true);
         } else {
-          // Swipe left - close sidebar
           setIsMobileOpen(false);
         }
       }
@@ -299,11 +251,9 @@ export default function Sidebar() {
     };
   }, [isMobile]);
 
-  // Check if user has access to a specific item
   const hasAccess = (item: SidebarItem): boolean => {
-    if (!item.roles) return true; // If no roles specified, allow access
-    if (!user?.role) return false; // If user has no role, deny access
-    
+    if (!item.roles) return true;
+    if (!user?.role) return false;
     return item.roles.includes(user.role);
   };
 
@@ -320,23 +270,8 @@ export default function Sidebar() {
     window.location.href = "/login";
   };
 
-  const handleAutoLogout = () => {
-    clearAuth();
-    window.location.href = "/login?message=auto_logout";
-  };
-
   const formatTime = formatTimeGMT2;
   const formatDay = formatDayGMT2;
-
-  // Get restriction message based on the restriction type
-  const getRestrictionMessage = (): string => {
-    if (isSunday()) {
-      return "L'accès est restreint le dimanche.";
-    } else if (!isAllowedTime()) {
-      return `L'accès est restreint pour les utilisateurs non-admin de ${formatTime(new Date(new Date().setHours(20, 0, 0)))} à ${formatTime(new Date(new Date().setHours(8, 0, 0)))}.`;
-    }
-    return "Accès restreint.";
-  };
 
   // Mobile overlay to close sidebar when clicking outside
   const MobileOverlay = () => (
@@ -370,53 +305,19 @@ export default function Sidebar() {
       <motion.aside
         ref={sidebarRef}
         initial={false}
-        animate={{ 
+        animate={{
           width: isMobile ? (isMobileOpen ? 280 : 0) : (isCollapsed ? 70 : 280),
           x: isMobile ? (isMobileOpen ? 0 : -280) : 0
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
         className="bg-gray-900 border-r border-gray-800 flex flex-col h-screen min-h-0 z-50 flex-shrink-0 overflow-hidden"
-        style={{ 
+        style={{
           touchAction: "pan-y",
           position: isMobile ? "fixed" : "sticky",
           top: 0,
           left: isMobile ? 0 : "auto"
         }}
       >
-        {/* Auto-logout Warning Modal */}
-        <AnimatePresence>
-          {showTimeWarning && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
-            >
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.8, opacity: 0 }}
-                className="bg-red-600 text-white p-6 rounded-lg max-w-sm mx-4 text-center"
-              >
-                <Clock className="w-12 h-12 mx-auto mb-4" />
-                <h3 className="text-lg font-bold mb-2">Accès Restreint</h3>
-                <p className="mb-4">
-                  {getRestrictionMessage()}
-                </p>
-                <p className="mb-4 font-semibold">
-                  Déconnexion automatique dans 10 secondes...
-                </p>
-                <button
-                  onClick={handleLogout}
-                  className="bg-white text-red-600 px-4 py-2 rounded font-semibold hover:bg-gray-100 transition-colors"
-                >
-                  Se déconnecter maintenant
-                </button>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* Header */}
         <div className="p-4 border-b border-gray-800 flex-shrink-0">
           <div className="flex items-center justify-between">
@@ -478,11 +379,6 @@ export default function Sidebar() {
                 <div className="text-xs text-gray-500 mt-1">
                   {formatDay(currentTime)}
                 </div>
-                {isNonAdmin && isRestricted && (
-                  <div className="text-xs text-red-400 mt-1">
-                    {isSunday() ? "Dimanche - Accès restreint" : "Accès restreint • Ouverture à 07:00"}
-                  </div>
-                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -498,20 +394,15 @@ export default function Sidebar() {
                 className="mt-4 pt-4 border-t border-gray-800"
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    isNonAdmin && isRestricted ? 'bg-red-500' : 'bg-blue-500'
-                  }`}>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500">
                     <User className="w-4 h-4 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">
                       {user?.username || "Utilisateur"}
                     </p>
-                    <p className={`text-xs capitalize ${
-                      isNonAdmin && isRestricted ? 'text-red-400' : 'text-blue-400'
-                    }`}>
+                    <p className="text-xs capitalize text-blue-400">
                       {user?.role || "Non défini"}
-                      {isNonAdmin && isRestricted && " • Accès restreint"}
                     </p>
                   </div>
                 </div>
@@ -530,25 +421,18 @@ export default function Sidebar() {
                 className="mt-4 pt-4 border-t border-gray-800 flex justify-center"
               >
                 <div className="relative group">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    isNonAdmin && isRestricted ? 'bg-red-500' : 'bg-blue-500'
-                  }`}>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500">
                     <User className="w-4 h-4 text-white" />
                   </div>
-                  
+
                   {/* Tooltip showing user info when hovered */}
                   <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
                     <div className="text-center">
                       <div className="font-medium">
                         {user?.username || "Utilisateur"}
                       </div>
-                      <div className={`capitalize text-xs ${
-                        isNonAdmin && isRestricted ? 'text-red-400' : 'text-blue-400'
-                      }`}>
+                      <div className="capitalize text-xs text-blue-400">
                         {user?.role || "Non défini"}
-                        {isNonAdmin && isRestricted && (
-                          <div className="text-red-300">Accès restreint</div>
-                        )}
                       </div>
                       <div className="text-gray-300 text-xs mt-1">
                         {formatTime(currentTime)}
@@ -602,10 +486,8 @@ export default function Sidebar() {
             {/* Navigation (only when authenticated) */}
             <nav className="flex-1 min-h-0 overflow-y-auto p-4 space-y-6">
               {sidebarSections.map((section) => {
-                // Filter items based on user role
                 const accessibleItems = section.items.filter(hasAccess);
-                
-                // Don't render section if no items are accessible
+
                 if (accessibleItems.length === 0) return null;
 
                 return (
@@ -628,37 +510,28 @@ export default function Sidebar() {
                       {accessibleItems.map((item) => {
                         const isActive = location.pathname === item.path;
                         const Icon = item.icon;
-                        const isItemDisabled = isNonAdmin && isRestricted;
 
                         return (
                           <li key={item.id}>
                             <Link
-                              to={isItemDisabled ? "#" : item.path}
-                              onClick={(e) => {
-                                if (isItemDisabled) {
-                                  e.preventDefault();
-                                  setShowTimeWarning(true);
-                                }
+                              to={item.path}
+                              onClick={() => {
                                 if (isMobile) {
                                   setIsMobileOpen(false);
                                 }
                               }}
                               className={clsx(
                                 "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative",
-                                isActive && !isItemDisabled
+                                isActive
                                   ? "bg-blue-600 text-white shadow-sm"
-                                  : isItemDisabled
-                                  ? "text-gray-500 cursor-not-allowed bg-gray-800 bg-opacity-50"
                                   : "text-gray-300 hover:bg-gray-800 hover:text-white"
                               )}
                             >
                               <Icon
                                 className={clsx(
                                   "w-5 h-5 flex-shrink-0",
-                                  isActive && !isItemDisabled
+                                  isActive
                                     ? "text-white"
-                                    : isItemDisabled
-                                    ? "text-gray-500"
                                     : "text-gray-400 group-hover:text-white"
                                 )}
                               />
@@ -673,7 +546,6 @@ export default function Sidebar() {
                                     className="font-medium text-sm"
                                   >
                                     {item.label}
-                                    {isItemDisabled && " 🔒"}
                                   </motion.span>
                                 )}
                               </AnimatePresence>
@@ -697,7 +569,6 @@ export default function Sidebar() {
                               {(isCollapsed && !isMobile) && (
                                 <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
                                   {item.label}
-                                  {isItemDisabled && " (Accès restreint)"}
                                 </div>
                               )}
                             </Link>
@@ -709,7 +580,7 @@ export default function Sidebar() {
                 );
               })}
             </nav>
-            
+
             {/* Footer (only when authenticated) */}
             <div className="p-4 border-t border-gray-800 space-y-2 flex-shrink-0">
               {/* Logout Button */}
@@ -794,8 +665,6 @@ export default function Sidebar() {
                   )}
                 </Link>
               )}
-
-              
             </div>
           </>
         )}
