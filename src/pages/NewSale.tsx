@@ -110,11 +110,24 @@ export default function NewSale() {
   const [loadingRate, setLoadingRate] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [shopSettings, setShopSettings] = useState({
+    shopName: "ETS. DIEU MERCI",
+    shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
+    shopNumber: "+243 977 771 421 / +243 853 549 102",
+    shopRegistration: "RCCM: 14-A-017885",
+    receiptFooter: "Merci pour votre confiance ! À bientôt.",
+  });
   const receiptRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
   // Get the current user from your auth context
   const { user: currentUser } = useAuth();
+
+  // Can this user override product prices?
+  const canEditPrice =
+    currentUser?.role === "admin" ||
+    currentUser?.role === "manager" ||
+    (currentUser?.actionPermissions ?? []).includes("edit_receipts");
 
   const [form, setForm] = useState({
     productId: "",
@@ -148,6 +161,27 @@ export default function NewSale() {
     };
   }, []);
 
+  // Load shop settings for receipts
+  const loadShopSettings = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/settings/receipt`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setShopSettings({
+          shopName: data.shopName || "ETS. DIEU MERCI",
+          shopAddress: data.shopAddress || "",
+          shopNumber: data.shopNumber || "",
+          shopRegistration: data.shopRegistration || "",
+          receiptFooter: data.receiptFooter || "",
+        });
+      }
+    } catch (err) {
+      console.warn("Could not load shop settings, using defaults:", err);
+    }
+  };
+
   // Load exchange rate
   const loadExchangeRate = async () => {
     try {
@@ -179,10 +213,11 @@ export default function NewSale() {
       setError(null);
       
       try {
-        // Load products and exchange rate concurrently
+        // Load products, exchange rate and shop settings concurrently
         await Promise.all([
           loadProducts(),
-          loadExchangeRate()
+          loadExchangeRate(),
+          loadShopSettings(),
         ]);
       } catch (e: any) {
         if (!cancelled) setError(e?.message || "Failed to load initial data");
@@ -527,16 +562,35 @@ export default function NewSale() {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
-      .receipt-container { 
+      .receipt-container {
         width: 78mm;
         margin: 0 auto;
         padding: 1mm 2mm;
         border: none;
         text-align: center;
+        position: relative;
       }
-      .header { 
-        text-align: center; 
-        margin-bottom: 2mm; 
+      .logo-watermark {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image: url('${window.location.origin}/logo.jpeg');
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: 65%;
+        opacity: 0.18;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .content-wrapper {
+        position: relative;
+        z-index: 1;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 2mm;
         padding-bottom: 1mm;
         border-bottom: 2px double #000;
       }
@@ -755,6 +809,8 @@ export default function NewSale() {
   </head>
   <body>
     <div class="receipt-container">
+      <div class="logo-watermark"></div>
+      <div class="content-wrapper">
       <div class="header">
         <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
         <div class="shop-details"><strong>${receiptData.shopAddress}</strong></div>
@@ -823,15 +879,15 @@ export default function NewSale() {
       </div>
       
       <div class="footer">
-        <div class="thank-you"><strong>MERCI POUR VOTRE ACHAT !</strong></div>
+        <div class="thank-you"><strong>${receiptData.receiptFooter || "MERCI POUR VOTRE ACHAT !"}</strong></div>
         <div class="warning"><strong>Article non echangeable</strong></div>
         <div class="warning"><strong>Non remboursable</strong></div>
-        <div class="thank-you"><strong>A BIENTOT !</strong></div>
       </div>
-      
+
       <!-- PAPER CUT INDICATOR -->
       <div class="cut-line">
         ✄ ────────────────────────── ✄
+      </div>
       </div>
     </div>
     <script>
@@ -880,16 +936,35 @@ export default function NewSale() {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
-      .stub-container { 
+      .stub-container {
         width: 78mm;
         margin: 0 auto;
         padding: 1mm 2mm;
         border: none;
         text-align: center;
+        position: relative;
       }
-      .header { 
-        text-align: center; 
-        margin-bottom: 2mm; 
+      .logo-watermark {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image: url('${window.location.origin}/logo.jpeg');
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: 65%;
+        opacity: 0.18;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .content-wrapper {
+        position: relative;
+        z-index: 1;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 2mm;
         padding-bottom: 1mm;
         border-bottom: 2px double #000;
       }
@@ -1118,6 +1193,8 @@ export default function NewSale() {
   </head>
   <body>
     <div class="stub-container">
+      <div class="logo-watermark"></div>
+      <div class="content-wrapper">
       <div class="header">
         <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
         <div class="shop-details"><strong>${receiptData.shopAddress}</strong></div>
@@ -1186,10 +1263,11 @@ export default function NewSale() {
         <div class="warning">Recu #: <strong>${receiptData.receiptNumber}</strong></div>
         <div class="warning">Date: <strong>${receiptData.date}</strong></div>
       </div>
-      
+
       <!-- PAPER CUT INDICATOR -->
       <div class="cut-line">
         ✄ ────────────────────────── ✄
+      </div>
       </div>
     </div>
     <script>
@@ -1311,10 +1389,11 @@ export default function NewSale() {
       
       // Enhanced receipt data with better formatting - use actual sale ID
       const newReceiptData = {
-        shopName: "ETS. DIEU MERCI",
-        shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
-        shopNumber: "+243 977 771 421 / +243 853 549 102",
-        shopRegistration: "RCCM: 14-A-017885",
+        shopName: shopSettings.shopName,
+        shopAddress: shopSettings.shopAddress,
+        shopNumber: shopSettings.shopNumber,
+        shopRegistration: shopSettings.shopRegistration,
+        receiptFooter: shopSettings.receiptFooter,
         customerName: form.customerName,
         customerPhone: form.customerPhone,
         customerEmail: form.customerEmail,
@@ -1491,15 +1570,21 @@ export default function NewSale() {
                 </button>
               </div>
               
+              {!canEditPrice && (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mb-2">
+                  Prix verrouillé — permission requise pour modifier les prix.
+                </p>
+              )}
               {form.currencyMode === 'usd' ? (
                 <input
                   type="number"
                   step="0.01"
                   name="unitPrice"
                   value={form.unitPrice}
-                  onChange={(e) => setForm({ ...form, unitPrice: e.target.value })}
+                  onChange={(e) => canEditPrice && setForm({ ...form, unitPrice: e.target.value })}
+                  readOnly={!canEditPrice}
                   placeholder={product?.price ? `ex: ${product.price}` : "Entrer le prix en USD"}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${!canEditPrice ? "bg-gray-50 border-gray-200 cursor-not-allowed text-gray-500" : "border-gray-300"}`}
                   min={0.01}
                 />
               ) : (
@@ -1507,9 +1592,10 @@ export default function NewSale() {
                   type="number"
                   name="priceInFC"
                   value={form.priceInFC}
-                  onChange={(e) => setForm({ ...form, priceInFC: e.target.value })}
+                  onChange={(e) => canEditPrice && setForm({ ...form, priceInFC: e.target.value })}
+                  readOnly={!canEditPrice}
                   placeholder="Entrer le prix en FC"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${!canEditPrice ? "bg-gray-50 border-gray-200 cursor-not-allowed text-gray-500" : "border-gray-300"}`}
                   min={1}
                 />
               )}

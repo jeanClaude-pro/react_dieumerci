@@ -115,6 +115,13 @@ const getTimeframeParams = (
 export default function EntryHistory() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [shopSettings, setShopSettings] = useState({
+    shopName: "ETS. DIEU MERCI",
+    shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
+    shopNumber: "+243 977 771 421 / +243 853 549 102",
+    shopRegistration: "RCCM: 14-A-017885",
+    receiptFooter: "Merci pour votre confiance ! À bientôt.",
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -184,6 +191,22 @@ export default function EntryHistory() {
   useEffect(() => {
     fetchCurrentUser();
     fetchEntries();
+    fetch(`${import.meta.env.VITE_API_URL}/settings/receipt`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` },
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data) {
+          setShopSettings({
+            shopName: data.shopName || "ETS. DIEU MERCI",
+            shopAddress: data.shopAddress || "",
+            shopNumber: data.shopNumber || "",
+            shopRegistration: data.shopRegistration || "",
+            receiptFooter: data.receiptFooter || "",
+          });
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Fetch entries when timeframe or filters change
@@ -457,52 +480,56 @@ export default function EntryHistory() {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { 
-        font-family: 'Courier New', Courier, monospace; 
-        margin: 0; padding: 0; 
-        font-size: 13px; font-weight: bold; line-height: 1.1;
-        width: 72mm; background-color: white;
+      body {
+        font-family: 'Courier New', Courier, monospace;
+        margin: 0; padding: 0;
+        font-size: 12px; font-weight: bold; line-height: 1.2;
+        width: 80mm; background-color: white;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
-        display: flex; justify-content: center;
       }
-      .receipt-container { width: 70mm; margin: 0 auto; padding: 0.5mm; border: none; text-align: center; }
-      .header { text-align: center; margin-bottom: 1mm; padding-bottom: 1mm; border-bottom: 2px double #000; }
-      .shop-name { font-size: 15px; font-weight: bold; margin-bottom: 0.5mm; text-transform: uppercase; }
-      .shop-details { font-size: 11px; margin-bottom: 0.3mm; line-height: 1; font-weight: bold; }
-      .receipt-info { margin: 1mm 0; padding: 1mm; background-color: #f8f8f8; border-left: 3px solid #000; }
-      .receipt-title { font-size: 13px; font-weight: bold; margin: 1mm 0; text-transform: uppercase; background-color: #000; color: white; padding: 1mm; border-radius: 2px; }
-      .entry-badge { background-color: #000; color: white; padding: 2mm; font-weight: bold; text-align: center; margin: 1mm 0; font-size: 14px; border-radius: 3px; }
-      .details-section { margin: 1mm 0; padding: 1mm; background-color: #fafafa; border: 1px solid #eee; }
-      .detail-row { display: flex; justify-content: space-between; margin-bottom: 0.5mm; padding: 0 1mm; border-bottom: 1px dotted #ddd; }
-      .detail-label { text-align: left; font-weight: bold; font-size: 12px; flex: 1; }
-      .detail-value { text-align: right; font-weight: bold; font-size: 12px; flex: 1; }
-      .amount-section { font-weight: bold; margin-top: 1mm; padding: 1mm; background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 3px; }
-      .amount-row { display: flex; justify-content: space-between; margin-bottom: 0.3mm; font-size: 13px; padding: 0 1mm; }
-      .payment-method { text-transform: uppercase; font-weight: bold; font-size: 13px; color: #000; }
-      .footer { text-align: center; margin-top: 1mm; font-size: 11px; font-weight: bold; padding: 1mm; background-color: #f8f8f8; border-top: 1px dashed #000; }
-      .agent-info { margin-top: 1mm; text-align: center; font-weight: bold; font-size: 12px; padding: 1mm; background-color: #e8e8e8; border: 1px solid #ccc; border-radius: 2px; }
-      .sender-info { margin: 1mm 0; padding: 1mm; font-weight: bold; text-align: center; background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; }
-      .sender-field { margin-bottom: 0.3mm; font-size: 12px; }
-      .cut-line { text-align: center; margin: 1mm 0; font-weight: bold; font-size: 11px; color: #000; letter-spacing: 1px; }
-      .thank-you { font-weight: bold; margin: 0.5mm 0; font-size: 12px; }
-      .warning { font-size: 10px; color: #000; margin: 0.3mm 0; font-weight: bold; }
-      .description { margin: 1mm 0; padding: 1mm; background-color: #f5f5f5; border-left: 3px solid #ccc; font-size: 11px; font-weight: bold; border-radius: 2px; }
+      .receipt-container { width: 78mm; margin: 0 auto; padding: 1mm 2mm; border: none; text-align: center; position: relative; }
+      .logo-watermark { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-image: url('${window.location.origin}/logo.jpeg'); background-repeat: no-repeat; background-position: center; background-size: 65%; opacity: 0.18; pointer-events: none; z-index: 0; }
+      .content-wrapper { position: relative; z-index: 1; }
+      .header { text-align: center; margin-bottom: 2mm; padding-bottom: 1mm; border-bottom: 2px double #000; }
+      .shop-name { font-size: 14px; font-weight: bold; margin-bottom: 0.5mm; text-transform: uppercase; }
+      .shop-details { font-size: 10px; margin-bottom: 0.3mm; line-height: 1.2; font-weight: bold; }
+      .receipt-info { margin: 2mm 0; padding: 1mm 2mm; background-color: #f8f8f8; border-left: 3px solid #000; text-align: left; }
+      .receipt-title { font-size: 11px; font-weight: bold; margin: 1mm 0; text-transform: uppercase; background-color: #000; color: white; padding: 1mm 2mm; border-radius: 2px; text-align: center; }
+      .entry-badge { background-color: #000; color: white; padding: 2mm; font-weight: bold; text-align: center; margin: 1mm 0; font-size: 13px; border-radius: 3px; }
+      .details-section { margin: 0; padding: 0; background-color: #fafafa; border: none; }
+      .detail-row { display: flex; justify-content: space-between; margin-bottom: 0.5mm; padding: 0.5mm 2mm; border-bottom: 1px dotted #ddd; font-size: 10px; }
+      .detail-label { text-align: left; font-weight: bold; font-size: 10px; flex: 1; }
+      .detail-value { text-align: right; font-weight: bold; font-size: 10px; flex: 1; }
+      .amount-section { font-weight: bold; margin-top: 2mm; padding: 1mm 2mm; background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 3px; }
+      .amount-row { display: flex; justify-content: space-between; margin-bottom: 0.5mm; font-size: 11px; padding: 0 1mm; }
+      .payment-method { text-transform: uppercase; font-weight: bold; font-size: 11px; color: #000; }
+      .footer { text-align: center; margin-top: 2mm; font-size: 10px; font-weight: bold; padding: 1mm 2mm; background-color: #f8f8f8; border-top: 1px dashed #000; }
+      .agent-info { margin-top: 2mm; text-align: center; font-weight: bold; font-size: 10px; padding: 1mm 2mm; background-color: #e8e8e8; border: 1px solid #ccc; border-radius: 2px; }
+      .sender-info { margin: 2mm 0; padding: 1mm 2mm; font-weight: bold; text-align: left; background-color: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; font-size: 10px; }
+      .sender-field { margin-bottom: 0.3mm; font-size: 10px; }
+      .cut-line { text-align: center; margin: 2mm 0 0 0; font-weight: bold; font-size: 10px; color: #000; letter-spacing: 1px; }
+      .thank-you { font-weight: bold; margin: 0.5mm 0; font-size: 10px; }
+      .warning { font-size: 9px; color: #000; margin: 0.3mm 0; font-weight: bold; }
+      .description { margin: 1mm 0; padding: 1mm 2mm; background-color: #f5f5f5; border-left: 3px solid #ccc; font-size: 10px; font-weight: bold; border-radius: 2px; text-align: left; }
       .section-divider { height: 2px; background: linear-gradient(to right, transparent, #000, transparent); margin: 1mm 0; }
       @media print {
-        @page { margin: 0 !important; size: 72mm auto !important; }
-        body { margin: 0 !important; padding: 0 !important; width: 72mm !important; font-size: 13px !important; background: white !important; font-weight: bold !important; height: auto !important; overflow: hidden !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; display: flex !important; justify-content: center !important; }
-        .receipt-container { border: none !important; box-shadow: none !important; margin: 0 auto !important; padding: 0.5mm !important; width: 70mm !important; page-break-after: avoid !important; page-break-inside: avoid !important; }
+        @page { margin: 0 !important; size: 80mm auto !important; }
+        body { margin: 0 !important; padding: 0 !important; width: 80mm !important; font-size: 12px !important; background: white !important; font-weight: bold !important; height: auto !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        .receipt-container { border: none !important; box-shadow: none !important; margin: 0 auto !important; padding: 1mm 2mm !important; width: 78mm !important; }
         .cut-line { page-break-after: always !important; margin-bottom: 0 !important; }
+        body::after, body::before { display: none !important; content: none !important; }
       }
     </style>
   </head>
   <body>
     <div class="receipt-container">
+      <div class="logo-watermark"></div>
+      <div class="content-wrapper">
       <div class="header">
-        <div class="shop-name"><strong>ETS. DIEU MERCI</strong></div>
-        <div class="shop-details"><strong>Av Manono Coin Munama N°39, C. Kenya, Lubumbashi</strong></div>
-        <div class="shop-details">TEL: <strong>+243 977 771 421 / +243 853 549 102</strong></div>
-        <div class="shop-details"><strong>RCCM: 14-A-017885</strong></div>
+        <div class="shop-name"><strong>${shopSettings.shopName}</strong></div>
+        <div class="shop-details"><strong>${shopSettings.shopAddress}</strong></div>
+        <div class="shop-details">TEL: <strong>${shopSettings.shopNumber}</strong></div>
+        <div class="shop-details"><strong>${shopSettings.shopRegistration}</strong></div>
       </div>
       
       <div class="section-divider"></div>
@@ -553,13 +580,12 @@ export default function EntryHistory() {
       </div>
       
       <div class="footer">
-        <div class="thank-you"><strong>ENTRÉE ENREGISTRÉE AVEC SUCCÈS !</strong></div>
+        <div class="thank-you"><strong>${shopSettings.receiptFooter || "ENTRÉE ENREGISTRÉE AVEC SUCCÈS !"}</strong></div>
         <div class="warning"><strong>Conserver ce reçu comme preuve</strong></div>
-        <div class="warning"><strong>Merci pour votre confiance</strong></div>
-        <div class="thank-you"><strong>À BIENTÔT !</strong></div>
       </div>
 
       <div class="cut-line">✄ ────────────────────────── ✄</div>
+      </div>
     </div>
     <script>
       window.onload = function() {

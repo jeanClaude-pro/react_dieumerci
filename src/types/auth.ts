@@ -1,10 +1,18 @@
-export type Role = "admin" | "staff";
+export type Role =
+  | "admin"
+  | "manager"
+  | "inventory_manager"
+  | "cashier_supervisor"
+  | "staff";
 
 export interface User {
   id: string;
   username: string;
   email: string;
   role: Role;
+  isActive?: boolean;
+  permissions?: string[];
+  actionPermissions?: string[];
   createdAt?: string;
   updatedAt?: string;
 }

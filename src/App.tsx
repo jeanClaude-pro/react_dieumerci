@@ -5,6 +5,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -12,7 +13,6 @@ import "react-toastify/dist/ReactToastify.css";
 import Sidebar from "./components/Sidebar";
 import Products from "./pages/products/products";
 import SalesHistory from "./pages/history/SalesHistory";
-import Dashboard from "./pages/dashboard/Dashboard";
 import Analytics from "./pages/analytics/Analytics";
 import Customers from "./pages/customers/Customers";
 import LoginPage from "./pages/login/page";
@@ -26,7 +26,21 @@ import Entry from "./pages/Entry";
 import EntryHistory from "./pages/EntryHistory";
 import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider } from "./context/AuthProvider";
+import AdminPanel from "./pages/admin/AdminPanel";
 
+function AppLayout({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const isLogin = location.pathname === "/login";
+
+  return (
+    <div className="h-screen overflow-hidden flex bg-background text-slate-900">
+      {!isLogin && <Sidebar />}
+      <main className="h-screen flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
+        <div className="min-h-full min-w-0">{children}</div>
+      </main>
+    </div>
+  );
+}
 
 export default function App() {
   const token = localStorage.getItem("token");
@@ -37,12 +51,8 @@ export default function App() {
       <ToastContainer position="top-right" autoClose={3000} newestOnTop />
 
       <Router>
-        <div className="h-screen overflow-hidden flex bg-background">
-            <Sidebar />
-
-          <main className="h-screen flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
-            <div className="min-h-full min-w-0">
-              <Routes>
+        <AppLayout>
+          <Routes>
                 <Route
                   path="/products"
                   element={
@@ -139,14 +149,7 @@ export default function App() {
                     </RequireAuth>
                   }
                 />
-                <Route
-                  path="/dashboard"
-                  element={
-                    <RequireAuth>
-                      <Dashboard />
-                    </RequireAuth>
-                  }
-                />
+                
                 <Route
                   path="/reports"
                   element={
@@ -164,6 +167,14 @@ export default function App() {
                   }
                 />
                 <Route
+                  path="/admin"
+                  element={
+                    <RequireAuth>
+                      <AdminPanel />
+                    </RequireAuth>
+                  }
+                />
+                <Route
                   path="/login"
                   element={
                     isAuthenticated ? (
@@ -174,9 +185,7 @@ export default function App() {
                   }
                 />
               </Routes>
-            </div>
-          </main>
-        </div>
+        </AppLayout>
       </Router>
     </AuthProvider>
   );

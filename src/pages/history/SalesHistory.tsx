@@ -139,6 +139,13 @@ const getCurrentYear = (): number => {
 export default function SalesHistory() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [shopSettings, setShopSettings] = useState({
+    shopName: "ETS. DIEU MERCI",
+    shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
+    shopNumber: "+243 977 771 421 / +243 853 549 102",
+    shopRegistration: "RCCM: 14-A-017885",
+    receiptFooter: "Merci pour votre confiance ! À bientôt.",
+  });
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
@@ -196,6 +203,22 @@ export default function SalesHistory() {
     fetchCurrentUser();
     fetchSales();
     fetchProducts();
+    fetch(`${import.meta.env.VITE_API_URL}/settings/receipt`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` },
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data) {
+          setShopSettings({
+            shopName: data.shopName || "ETS. DIEU MERCI",
+            shopAddress: data.shopAddress || "",
+            shopNumber: data.shopNumber || "",
+            shopRegistration: data.shopRegistration || "",
+            receiptFooter: data.receiptFooter || "",
+          });
+        }
+      })
+      .catch(() => {});
     const handleSalesUpdate = () => {
       // Refresh sales when triggered from other components
       fetchSales();
@@ -760,30 +783,47 @@ export default function SalesHistory() {
         padding: 0;
         box-sizing: border-box;
       }
-      body { 
-        font-family: 'Courier New', Courier, monospace; 
-        margin: 0; 
-        padding: 0; 
-        font-size: 13px;
+      body {
+        font-family: 'Courier New', Courier, monospace;
+        margin: 0;
+        padding: 0;
+        font-size: 12px;
         font-weight: bold;
-        line-height: 1.1;
-        width: 72mm;
+        line-height: 1.2;
+        width: 80mm;
         background-color: white;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
-        display: flex;
-        justify-content: center;
       }
-      .receipt-container { 
-        width: 70mm;
+      .receipt-container {
+        width: 78mm;
         margin: 0 auto;
-        padding: 0.5mm;
+        padding: 1mm 2mm;
         border: none;
         text-align: center;
+        position: relative;
       }
-      .header { 
-        text-align: center; 
-        margin-bottom: 1mm; 
+      .logo-watermark {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image: url('${window.location.origin}/logo.jpeg');
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: 65%;
+        opacity: 0.18;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .content-wrapper {
+        position: relative;
+        z-index: 1;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 2mm;
         padding-bottom: 1mm;
         border-bottom: 2px double #000;
       }
@@ -800,98 +840,142 @@ export default function SalesHistory() {
         font-weight: bold;
       }
       .receipt-info {
-        margin: 1mm 0;
-        padding: 1mm;
+        margin: 2mm 0;
+        padding: 1mm 2mm;
         background-color: #f8f8f8;
         border-left: 3px solid #000;
+        text-align: left;
       }
       .receipt-title {
-        font-size: 13px;
+        font-size: 11px;
         font-weight: bold;
         margin: 1mm 0;
         text-transform: uppercase;
         background-color: #000;
         color: white;
-        padding: 1mm;
+        padding: 1mm 2mm;
         border-radius: 2px;
+        text-align: center;
       }
       .items-section {
-        margin: 1mm 0;
-        padding: 1mm;
+        margin: 0;
+        padding: 0;
         background-color: #fafafa;
-        border: 1px solid #eee;
+        border: none;
+        border-top: none;
       }
-      .item-row { 
+      .items-col-header {
+        display: flex;
+        justify-content: space-between;
+        background-color: #e0e0e0;
+        padding: 1mm 2mm;
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 10px;
+        margin: 0;
+        border-bottom: 1px solid #999;
+      }
+      .col-article {
+        flex: 2;
+        text-align: left;
+      }
+      .col-qte {
+        width: 10mm;
+        text-align: center;
+      }
+      .col-pu {
+        width: 18mm;
+        text-align: right;
+      }
+      .col-pt {
+        width: 18mm;
+        text-align: right;
+      }
+      .item-row {
         display: flex;
         justify-content: space-between;
         margin-bottom: 0.5mm;
-        padding: 0 1mm;
+        padding: 0.5mm 2mm;
         border-bottom: 1px dotted #ddd;
+        font-size: 10px;
       }
       .item-name {
+        flex: 2;
         text-align: left;
         font-weight: bold;
-        font-size: 12px;
-        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding-right: 1mm;
       }
-      .item-details {
+      .item-quantity {
+        width: 10mm;
+        text-align: center;
+        font-weight: bold;
+      }
+      .item-unit-price {
+        width: 18mm;
         text-align: right;
         font-weight: bold;
-        font-size: 12px;
-        flex: 1;
       }
-      .total-section { 
-        font-weight: bold; 
-        margin-top: 1mm;
-        padding: 1mm;
+      .item-line-total {
+        width: 18mm;
+        text-align: right;
+        font-weight: bold;
+      }
+      .total-section {
+        font-weight: bold;
+        margin-top: 2mm;
+        padding: 1mm 2mm;
         background-color: #f0f0f0;
         border: 1px solid #ddd;
         border-radius: 3px;
       }
       .total-row {
         display: flex;
-        justify-between;
-        margin-bottom: 0.3mm;
-        font-size: 13px;
+        justify-content: space-between;
+        margin-bottom: 0.5mm;
+        font-size: 11px;
         padding: 0 1mm;
       }
       .payment-method {
         text-transform: uppercase;
         font-weight: bold;
-        font-size: 13px;
+        font-size: 11px;
         color: #000;
       }
-      .footer { 
-        text-align: center; 
-        margin-top: 1mm; 
-        font-size: 11px;
+      .footer {
+        text-align: center;
+        margin-top: 2mm;
+        font-size: 10px;
         font-weight: bold;
-        padding: 1mm;
+        padding: 1mm 2mm;
         background-color: #f8f8f8;
         border-top: 1px dashed #000;
       }
       .sales-person {
-        margin-top: 1mm;
+        margin-top: 2mm;
         text-align: center;
         font-weight: bold;
-        font-size: 12px;
-        padding: 1mm;
+        font-size: 10px;
+        padding: 1mm 2mm;
         background-color: #e8e8e8;
         border: 1px solid #ccc;
         border-radius: 2px;
       }
       .customer-info {
-        margin: 1mm 0;
-        padding: 1mm;
+        margin: 2mm 0;
+        padding: 1mm 2mm;
         font-weight: bold;
-        text-align: center;
+        text-align: left;
         background-color: #f5f5f5;
         border: 1px solid #ddd;
         border-radius: 3px;
+        font-size: 10px;
       }
       .customer-field {
         margin-bottom: 0.3mm;
-        font-size: 12px;
+        font-size: 10px;
       }
       .separator {
         border-top: 1px dashed #000;
@@ -924,30 +1008,25 @@ export default function SalesHistory() {
       @media print {
         @page {
           margin: 0 !important;
-          size: 72mm auto !important;
+          size: 80mm auto !important;
         }
-        body { 
-          margin: 0 !important; 
-          padding: 0 !important; 
-          width: 72mm !important;
-          font-size: 13px !important;
+        body {
+          margin: 0 !important;
+          padding: 0 !important;
+          width: 80mm !important;
+          font-size: 12px !important;
           background: white !important;
           font-weight: bold !important;
           height: auto !important;
-          overflow: hidden !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
-          display: flex !important;
-          justify-content: center !important;
         }
-        .receipt-container { 
-          border: none !important; 
-          box-shadow: none !important; 
+        .receipt-container {
+          border: none !important;
+          box-shadow: none !important;
           margin: 0 auto !important;
-          padding: 0.5mm !important;
-          width: 70mm !important;
-          page-break-after: avoid !important;
-          page-break-inside: avoid !important;
+          padding: 1mm 2mm !important;
+          width: 78mm !important;
         }
         .cut-line {
           page-break-after: always !important;
@@ -963,11 +1042,13 @@ export default function SalesHistory() {
   </head>
   <body>
     <div class="receipt-container">
+      <div class="logo-watermark"></div>
+      <div class="content-wrapper">
       <div class="header">
-        <div class="shop-name"><strong>ETS. DIEU MERCI</strong></div>
-        <div class="shop-details"><strong>Av Manono Coin Munama N°39, C. Kenya, Lubumbashi</strong></div>
-        <div class="shop-details">TEL: <strong>+243 977 771 421 / +243 853 549 102</strong></div>
-        <div class="shop-details"><strong>RCCM: 14-A-017885</strong></div>
+        <div class="shop-name"><strong>${shopSettings.shopName}</strong></div>
+        <div class="shop-details"><strong>${shopSettings.shopAddress}</strong></div>
+        <div class="shop-details">TEL: <strong>${shopSettings.shopNumber}</strong></div>
+        <div class="shop-details"><strong>${shopSettings.shopRegistration}</strong></div>
       </div>
       
       <div class="section-divider"></div>
@@ -988,16 +1069,23 @@ export default function SalesHistory() {
       </div>
       
       <div class="receipt-title">ARTICLES ACHETES</div>
-      
+
+      <div class="items-col-header">
+        <span class="col-article">Article</span>
+        <span class="col-qte">Qte</span>
+        <span class="col-pu">PU($)</span>
+        <span class="col-pt">PT($)</span>
+      </div>
+
       <div class="items-section">
       ${sale.items
         .map(
           (item) => `
         <div class="item-row">
           <div class="item-name"><strong>${item.name}</strong></div>
-          <div class="item-details">
-            <strong>${item.quantity}PcsX$${item.price.toFixed(2)}</strong>
-          </div>
+          <div class="item-quantity"><strong>${item.quantity}</strong></div>
+          <div class="item-unit-price"><strong>${item.price.toFixed(2)}</strong></div>
+          <div class="item-line-total"><strong>${item.total.toFixed(2)}</strong></div>
         </div>
       `
         )
@@ -1024,15 +1112,15 @@ export default function SalesHistory() {
       </div>
       
       <div class="footer">
-        <div class="thank-you"><strong>MERCI POUR VOTRE ACHAT !</strong></div>
+        <div class="thank-you"><strong>${shopSettings.receiptFooter || "MERCI POUR VOTRE ACHAT !"}</strong></div>
         <div class="warning"><strong>Article non echangeable</strong></div>
         <div class="warning"><strong>Non remboursable</strong></div>
-        <div class="thank-you"><strong>A BIENTOT !</strong></div>
       </div>
-      
+
       <!-- PAPER CUT INDICATOR -->
       <div class="cut-line">
         ✄ ────────────────────────── ✄
+      </div>
       </div>
     </div>
     <script>
@@ -1854,11 +1942,9 @@ export default function SalesHistory() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Date
                     </th>
-                    {showEditedSales && (
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Dernière modification
-                      </th>
-                    )}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Modifié par
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
@@ -1908,11 +1994,21 @@ export default function SalesHistory() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(sale.createdAt)}
                       </td>
-                      {showEditedSales && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {sale.editedAt ? formatDate(sale.editedAt) : "N/A"}
-                        </td>
-                      )}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {(() => {
+                          const modifier =
+                            (sale.editHistory && sale.editHistory.length > 0
+                              ? sale.editHistory[sale.editHistory.length - 1].editedBy
+                              : null) || sale.editedBy;
+                          return modifier ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium border border-yellow-200">
+                              ✏️ {modifier}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">—</span>
+                          );
+                        })()}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex gap-2">
                           {showEditedSales ? (

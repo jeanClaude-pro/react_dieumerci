@@ -14,7 +14,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Store,
   TrendingUp,
   Bell,
   LogOut,
@@ -23,9 +22,10 @@ import {
   Clock,
   Calendar,
   History,
-   Wallet,
+  Wallet,
   Menu,
   X,
+  Shield,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -129,7 +129,7 @@ const sidebarSections: SidebarSection[] = [
         id: "entryhistory",
         label: "Historique d'Entrée",
         icon: Wallet,
-        path: "/EntryHistory",
+        path: "/entryhistory",
         roles: ["admin", "cashier_supervisor", "inventory_manager", "manager"]
       },
       {
@@ -157,6 +157,13 @@ const sidebarSections: SidebarSection[] = [
         icon: Users,
         path: "/customers",
         roles: ["admin", "manager", "cashier_supervisor"]
+      },
+      {
+        id: "admin",
+        label: "Administration",
+        icon: Shield,
+        path: "/admin",
+        roles: ["admin"]
       },
     ],
   },
@@ -254,6 +261,12 @@ export default function Sidebar() {
   const hasAccess = (item: SidebarItem): boolean => {
     if (!item.roles) return true;
     if (!user?.role) return false;
+    // Admin panel is always admin-only, never overridden by custom permissions
+    if (item.path === "/admin") return user.role === "admin";
+    // If user has custom permissions, use path-based check
+    if (user.permissions && user.permissions.length > 0) {
+      return user.permissions.includes(item.path);
+    }
     return item.roles.includes(user.role);
   };
 
@@ -279,7 +292,7 @@ export default function Sidebar() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+      className="lg:hidden fixed inset-0 bg-slate-950/55 backdrop-blur-[2px] z-40"
       onClick={() => setIsMobileOpen(false)}
     />
   );
@@ -290,7 +303,8 @@ export default function Sidebar() {
       {isMobile && isAuthed && (
         <button
           onClick={toggleSidebar}
-          className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-gray-900 rounded-md text-white shadow-lg"
+          className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-slate-950 rounded-lg text-white shadow-lg"
+          aria-label={isMobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
         >
           {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
@@ -310,7 +324,7 @@ export default function Sidebar() {
           x: isMobile ? (isMobileOpen ? 0 : -280) : 0
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className="bg-gray-900 border-r border-gray-800 flex flex-col h-screen min-h-0 z-50 flex-shrink-0 overflow-hidden"
+        className="bg-slate-950 border-r border-white/10 flex flex-col h-screen min-h-0 z-50 flex-shrink-0 overflow-hidden shadow-2xl shadow-slate-950/20"
         style={{
           touchAction: "pan-y",
           position: isMobile ? "fixed" : "sticky",
@@ -319,7 +333,7 @@ export default function Sidebar() {
         }}
       >
         {/* Header */}
-        <div className="p-4 border-b border-gray-800 flex-shrink-0">
+        <div className="p-4 border-b border-white/10 flex-shrink-0 bg-white/[0.02]">
           <div className="flex items-center justify-between">
             <AnimatePresence mode="wait">
               {(!isCollapsed && !isMobile) || (isMobile && isMobileOpen) ? (
@@ -330,19 +344,19 @@ export default function Sidebar() {
                   transition={{ duration: 0.2 }}
                   className="flex items-center gap-3"
                 >
-                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <Store className="w-5 h-5 text-white" />
+                  <div className="w-9 h-9 rounded-lg overflow-hidden bg-white ring-1 ring-white/15 shadow-sm flex items-center justify-center">
+                    <img src="/logo.jpeg" alt="" className="h-full w-full object-cover" />
                   </div>
                   <div>
-                    <h1 className="text-lg font-bold text-white">
+                    <h1 className="text-[15px] font-bold text-white tracking-wide">
                       ETS. DIEU MERCI
                     </h1>
-                    <p className="text-xs text-gray-400">Gestion de Vente</p>
+                    <p className="text-xs text-slate-400">Gestion de vente</p>
                   </div>
                 </motion.div>
               ) : !isMobile ? (
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mx-auto">
-                  <Store className="w-5 h-5 text-white" />
+                <div className="w-9 h-9 rounded-lg overflow-hidden bg-white ring-1 ring-white/15 mx-auto">
+                  <img src="/logo.jpeg" alt="" className="h-full w-full object-cover" />
                 </div>
               ) : null}
             </AnimatePresence>
@@ -351,12 +365,13 @@ export default function Sidebar() {
             {!isMobile && (
               <button
                 onClick={toggleSidebar}
-                className="p-1.5 rounded-md hover:bg-gray-800 transition-colors"
+                className="p-1.5 rounded-md text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
+                aria-label={isCollapsed ? "Etendre le menu" : "Reduire le menu"}
               >
                 {isCollapsed ? (
-                  <ChevronRight className="w-4 h-4 text-gray-300" />
+                  <ChevronRight className="w-4 h-4" />
                 ) : (
-                  <ChevronLeft className="w-4 h-4 text-gray-300" />
+                  <ChevronLeft className="w-4 h-4" />
                 )}
               </button>
             )}
@@ -370,13 +385,13 @@ export default function Sidebar() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
-                className="mt-2 text-center"
+                className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-center"
               >
-                <div className="text-xs text-gray-400 flex items-center justify-center gap-1">
+                <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
                   <Clock className="w-3 h-3" />
                   {formatTime(currentTime)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-slate-500 mt-1">
                   {formatDay(currentTime)}
                 </div>
               </motion.div>
@@ -391,17 +406,17 @@ export default function Sidebar() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
-                className="mt-4 pt-4 border-t border-gray-800"
+                className="mt-4 pt-4 border-t border-white/10"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500">
-                    <User className="w-4 h-4 text-white" />
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500/20 text-blue-200 ring-1 ring-blue-300/20">
+                    <User className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">
                       {user?.username || "Utilisateur"}
                     </p>
-                    <p className="text-xs capitalize text-blue-400">
+                    <p className="text-xs capitalize text-blue-300">
                       {user?.role || "Non défini"}
                     </p>
                   </div>
@@ -418,20 +433,20 @@ export default function Sidebar() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                className="mt-4 pt-4 border-t border-gray-800 flex justify-center"
+                className="mt-4 pt-4 border-t border-white/10 flex justify-center"
               >
                 <div className="relative group">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500">
-                    <User className="w-4 h-4 text-white" />
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500/20 text-blue-200 ring-1 ring-blue-300/20">
+                    <User className="w-4 h-4" />
                   </div>
 
                   {/* Tooltip showing user info when hovered */}
-                  <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                  <div className="absolute left-full ml-2 px-3 py-2 bg-slate-900 text-white text-sm rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-white/10">
                     <div className="text-center">
                       <div className="font-medium">
                         {user?.username || "Utilisateur"}
                       </div>
-                      <div className="capitalize text-xs text-blue-400">
+                      <div className="capitalize text-xs text-blue-300">
                         {user?.role || "Non défini"}
                       </div>
                       <div className="text-gray-300 text-xs mt-1">
@@ -455,7 +470,7 @@ export default function Sidebar() {
               to="/login"
               className={clsx(
                 "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative",
-                "bg-blue-600 text-white hover:bg-blue-700"
+                "bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
               )}
             >
               <LogIn className="w-5 h-5 flex-shrink-0" />
@@ -475,7 +490,7 @@ export default function Sidebar() {
 
               {/* Tooltip for collapsed state */}
               {(isCollapsed && !isMobile) && (
-                <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                <div className="absolute left-full ml-2 px-3 py-2 bg-slate-900 text-white text-sm rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-white/10">
                   Se connecter
                 </div>
               )}
@@ -484,7 +499,7 @@ export default function Sidebar() {
         ) : (
           <>
             {/* Navigation (only when authenticated) */}
-            <nav className="flex-1 min-h-0 overflow-y-auto p-4 space-y-6">
+            <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-5">
               {sidebarSections.map((section) => {
                 const accessibleItems = section.items.filter(hasAccess);
 
@@ -499,7 +514,7 @@ export default function Sidebar() {
                           animate={{ opacity: 1 }}
                           exit={{ opacity: 0 }}
                           transition={{ duration: 0.2 }}
-                          className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3"
+                          className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2 px-2"
                         >
                           {section.title}
                         </motion.h3>
@@ -523,16 +538,16 @@ export default function Sidebar() {
                               className={clsx(
                                 "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative",
                                 isActive
-                                  ? "bg-blue-600 text-white shadow-sm"
-                                  : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                                  ? "bg-white text-slate-950 shadow-sm"
+                                  : "text-slate-300 hover:bg-white/10 hover:text-white"
                               )}
                             >
                               <Icon
                                 className={clsx(
                                   "w-5 h-5 flex-shrink-0",
                                   isActive
-                                    ? "text-white"
-                                    : "text-gray-400 group-hover:text-white"
+                                    ? "text-blue-700"
+                                    : "text-slate-500 group-hover:text-white"
                                 )}
                               />
 
@@ -567,7 +582,7 @@ export default function Sidebar() {
 
                               {/* Tooltip for collapsed state on desktop */}
                               {(isCollapsed && !isMobile) && (
-                                <div className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                                <div className="absolute left-full ml-2 px-3 py-2 bg-slate-900 text-white text-sm rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-white/10">
                                   {item.label}
                                 </div>
                               )}
@@ -582,13 +597,13 @@ export default function Sidebar() {
             </nav>
 
             {/* Footer (only when authenticated) */}
-            <div className="p-4 border-t border-gray-800 space-y-2 flex-shrink-0">
+            <div className="p-3 border-t border-white/10 space-y-2 flex-shrink-0 bg-white/[0.02]">
               {/* Logout Button */}
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:bg-red-600 hover:text-white transition-colors group"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-red-500/15 hover:text-red-100 transition-colors group relative"
               >
-                <LogOut className="w-5 h-5 text-gray-400 group-hover:text-white" />
+                <LogOut className="w-5 h-5 text-slate-500 group-hover:text-red-200" />
                 <AnimatePresence mode="wait">
                   {((!isCollapsed && !isMobile) || (isMobile && isMobileOpen)) && (
                     <motion.span
@@ -613,9 +628,9 @@ export default function Sidebar() {
                 <Link
                   to="/notifications"
                   onClick={() => isMobile && setIsMobileOpen(false)}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white transition-colors group"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/10 hover:text-white transition-colors group relative"
                 >
-                  <Bell className="w-5 h-5 text-gray-400 group-hover:text-white" />
+                  <Bell className="w-5 h-5 text-slate-500 group-hover:text-white" />
                   <AnimatePresence mode="wait">
                     {((!isCollapsed && !isMobile) || (isMobile && isMobileOpen)) && (
                       <motion.span
@@ -642,9 +657,9 @@ export default function Sidebar() {
                 <Link
                   to="/settings"
                   onClick={() => isMobile && setIsMobileOpen(false)}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white transition-colors group"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/10 hover:text-white transition-colors group relative"
                 >
-                  <Settings className="w-5 h-5 text-gray-400 group-hover:text-white" />
+                  <Settings className="w-5 h-5 text-slate-500 group-hover:text-white" />
                   <AnimatePresence mode="wait">
                     {((!isCollapsed && !isMobile) || (isMobile && isMobileOpen)) && (
                       <motion.span
