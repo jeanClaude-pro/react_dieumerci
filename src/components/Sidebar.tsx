@@ -20,8 +20,6 @@ import {
   LogIn,
   User,
   Clock,
-  Calendar,
-  History,
   Wallet,
   Menu,
   X,
@@ -53,13 +51,6 @@ const sidebarSections: SidebarSection[] = [
     title: "Menu principal",
     items: [
       {
-        id: "dashboard",
-        label: "Tableau de bord",
-        icon: LayoutDashboard,
-        path: "/dashboard",
-        roles: ["admin"]
-      },
-      {
         id: "taux",
         label: "Taux d'echange",
         icon: LayoutDashboard,
@@ -71,13 +62,6 @@ const sidebarSections: SidebarSection[] = [
         label: "Point de Vente",
         icon: ShoppingCart,
         path: "/",
-        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"]
-      },
-      {
-        id: "reservation",
-        label: "Reservation",
-        icon: Calendar,
-        path: "/reservation",
         roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"]
       },
       {
@@ -116,13 +100,6 @@ const sidebarSections: SidebarSection[] = [
         label: "Historique de Vente",
         icon: TrendingUp,
         path: "/sales",
-        roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"]
-      },
-      {
-        id: "reservation-history",
-        label: "Historique de reservation",
-        icon: History,
-        path: "/reservationhistory",
         roles: ["admin", "manager", "cashier_supervisor", "inventory_manager"]
       },
       {
@@ -303,7 +280,7 @@ export default function Sidebar() {
       {isMobile && isAuthed && (
         <button
           onClick={toggleSidebar}
-          className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-slate-950 rounded-lg text-white shadow-lg"
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-slate-950 rounded-lg text-white shadow-lg ring-1 ring-white/10"
           aria-label={isMobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
         >
           {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -324,7 +301,7 @@ export default function Sidebar() {
           x: isMobile ? (isMobileOpen ? 0 : -280) : 0
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className="bg-slate-950 border-r border-white/10 flex flex-col h-screen min-h-0 z-50 flex-shrink-0 overflow-hidden shadow-2xl shadow-slate-950/20"
+        className="bg-[linear-gradient(180deg,#070f1f_0%,#0f172a_48%,#111827_100%)] border-r border-white/10 flex flex-col h-screen min-h-0 z-50 flex-shrink-0 overflow-hidden shadow-2xl shadow-slate-950/25"
         style={{
           touchAction: "pan-y",
           position: isMobile ? "fixed" : "sticky",
@@ -333,7 +310,7 @@ export default function Sidebar() {
         }}
       >
         {/* Header */}
-        <div className="p-4 border-b border-white/10 flex-shrink-0 bg-white/[0.02]">
+        <div className="p-4 border-b border-white/10 flex-shrink-0 bg-white/[0.035]">
           <div className="flex items-center justify-between">
             <AnimatePresence mode="wait">
               {(!isCollapsed && !isMobile) || (isMobile && isMobileOpen) ? (
@@ -344,18 +321,18 @@ export default function Sidebar() {
                   transition={{ duration: 0.2 }}
                   className="flex items-center gap-3"
                 >
-                  <div className="w-9 h-9 rounded-lg overflow-hidden bg-white ring-1 ring-white/15 shadow-sm flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-white ring-1 ring-white/20 shadow-sm flex items-center justify-center">
                     <img src="/logo.jpeg" alt="" className="h-full w-full object-cover" />
                   </div>
                   <div>
-                    <h1 className="text-[15px] font-bold text-white tracking-wide">
+                    <h1 className="text-[15px] font-bold text-white tracking-wide leading-tight">
                       ETS. DIEU MERCI
                     </h1>
-                    <p className="text-xs text-slate-400">Gestion de vente</p>
+                    <p className="text-xs text-slate-400">Gestion commerciale</p>
                   </div>
                 </motion.div>
               ) : !isMobile ? (
-                <div className="w-9 h-9 rounded-lg overflow-hidden bg-white ring-1 ring-white/15 mx-auto">
+                <div className="w-10 h-10 rounded-lg overflow-hidden bg-white ring-1 ring-white/20 mx-auto">
                   <img src="/logo.jpeg" alt="" className="h-full w-full object-cover" />
                 </div>
               ) : null}
@@ -365,7 +342,7 @@ export default function Sidebar() {
             {!isMobile && (
               <button
                 onClick={toggleSidebar}
-                className="p-1.5 rounded-md text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
+                className="p-1.5 rounded-md text-slate-400 hover:bg-white/10 hover:text-white transition-colors ring-1 ring-transparent hover:ring-white/10"
                 aria-label={isCollapsed ? "Etendre le menu" : "Reduire le menu"}
               >
                 {isCollapsed ? (
@@ -385,7 +362,7 @@ export default function Sidebar() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
-                className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-center"
+                className="mt-3 rounded-lg border border-white/10 bg-white/[0.055] px-3 py-2 text-center shadow-inner shadow-black/10"
               >
                 <div className="text-xs text-slate-300 flex items-center justify-center gap-1">
                   <Clock className="w-3 h-3" />
@@ -413,7 +390,7 @@ export default function Sidebar() {
                     <User className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">
+                    <p className="text-sm font-semibold text-white truncate">
                       {user?.username || "Utilisateur"}
                     </p>
                     <p className="text-xs capitalize text-blue-300">
@@ -538,7 +515,7 @@ export default function Sidebar() {
                               className={clsx(
                                 "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative",
                                 isActive
-                                  ? "bg-white text-slate-950 shadow-sm"
+                                  ? "bg-white text-slate-950 shadow-sm ring-1 ring-white/20"
                                   : "text-slate-300 hover:bg-white/10 hover:text-white"
                               )}
                             >
@@ -597,7 +574,7 @@ export default function Sidebar() {
             </nav>
 
             {/* Footer (only when authenticated) */}
-            <div className="p-3 border-t border-white/10 space-y-2 flex-shrink-0 bg-white/[0.02]">
+            <div className="p-3 border-t border-white/10 space-y-2 flex-shrink-0 bg-white/[0.035]">
               {/* Logout Button */}
               <button
                 onClick={handleLogout}

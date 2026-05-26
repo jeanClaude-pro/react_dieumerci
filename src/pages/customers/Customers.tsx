@@ -15,6 +15,7 @@ import {
   ShoppingBag,
   RefreshCw,
   AlertCircle,
+  Shield,
 } from "lucide-react";
 
 interface Customer {
@@ -248,6 +249,30 @@ export default function Customers() {
     setSelectedCustomer(customer);
     setShowModal(true);
   };
+
+  // Admin-only: block non-admin users after all hooks and functions are defined
+  const isAdmin = (() => {
+    try {
+      const raw = localStorage.getItem("user");
+      return raw ? JSON.parse(raw).role === "admin" : false;
+    } catch { return false; }
+  })();
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-lg border border-red-200 p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Shield className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Accès Refusé</h2>
+          <p className="text-gray-500 text-sm">
+            Cette section est réservée aux administrateurs uniquement.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-6">

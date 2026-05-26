@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   BarChart3,
   TrendingUp,
@@ -249,6 +249,14 @@ export default function Analytics() {
   const [initialLoad, setInitialLoad] = useState(true);
   const [availableYears, setAvailableYears] = useState<number[]>([]);
 
+  // ── Company / shop settings ───────────────────────────────────────────
+  const [shopSettings, setShopSettings] = useState({
+    shopName: "ETS. DIEU MERCI",
+    shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
+    shopPhone: "+243 977 771 421 / +243 853 549 102",
+    shopRegistration: "RCCM: 14-A-017885",
+  });
+
   // ── Report generation state (admin only) ──────────────────────────────
   const [reportSections, setReportSections] = useState<ReportSections>({
     financial: true,
@@ -262,6 +270,17 @@ export default function Analytics() {
   const [hasSignature, setHasSignature] = useState(false);
   const [hasStamp, setHasStamp] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
+
+  // ── Security gates ────────────────────────────────────────────────────
+  const [accessVerified, setAccessVerified] = useState(false);
+  const [accessPassword, setAccessPassword] = useState("");
+  const [accessError, setAccessError] = useState("");
+  const [accessLoading, setAccessLoading] = useState(false);
+
+  const [showPrintPasswordModal, setShowPrintPasswordModal] = useState(false);
+  const [printPassword, setPrintPassword] = useState("");
+  const [printPasswordError, setPrintPasswordError] = useState("");
+  const [printPasswordLoading, setPrintPasswordLoading] = useState(false);
 
   // Effect to automatically set to today's date when timeframe changes to "day"
   useEffect(() => {
@@ -285,6 +304,23 @@ export default function Analytics() {
       setSelectedDate(getTodayDate());
     }
   }, [timeframe]);
+
+  // Fetch shop settings once on mount
+  useEffect(() => {
+    fetch(`${serverUrl}/settings/receipt`, { headers: getHeaders() })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data) {
+          setShopSettings({
+            shopName: data.shopName || "ETS. DIEU MERCI",
+            shopAddress: data.shopAddress || "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
+            shopPhone: data.shopNumber || "+243 977 771 421 / +243 853 549 102",
+            shopRegistration: data.shopRegistration || "RCCM: 14-A-017885",
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Main effect to fetch data when timeframe changes
   useEffect(() => {
@@ -970,33 +1006,160 @@ export default function Analytics() {
     }
   };
 
-  const handleGenerateReport = async () => {
+  // Verify admin password against the server
+  const verifyPassword = async (password: string): Promise<boolean> => {
+    try {
+      const userRaw = localStorage.getItem("user");
+      if (!userRaw) return false;
+      const user = JSON.parse(userRaw);
+      const email = user.email;
+      if (!email) return false;
+      const res = await fetch(`${serverUrl}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleAccessVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAccessError("");
+    setAccessLoading(true);
+    try {
+      const ok = await verifyPassword(accessPassword);
+      if (ok) {
+        setAccessVerified(true);
+      } else {
+        setAccessError("Mot de passe incorrect. Accès refusé.");
+        setAccessPassword("");
+      }
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
+  const handlePrintPasswordVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPrintPasswordError("");
+    setPrintPasswordLoading(true);
+    try {
+      const ok = await verifyPassword(printPassword);
+      if (ok) {
+        setShowPrintPasswordModal(false);
+        setPrintPassword("");
+        await doGenerateReport();
+      } else {
+        setPrintPasswordError("Mot de passe incorrect. Impression refusée.");
+        setPrintPassword("");
+      }
+    } finally {
+      setPrintPasswordLoading(false);
+    }
+  };
+
+  const handleGenerateReport = () => {
     if (!analytics || !isAdmin()) return;
     if (!Object.values(reportSections).some(Boolean)) return;
+    setPrintPassword("");
+    setPrintPasswordError("");
+    setShowPrintPasswordModal(true);
+  };
 
+  const doGenerateReport = async () => {
     setGeneratingReport(true);
     try {
       // Yield to let React re-render the loading state before the synchronous PDF build
       await new Promise((res) => setTimeout(res, 50));
       generateCompanyReport({
         sections: reportSections,
-        analytics,
+        analytics: analytics!,
         adminUsername: getAdminUsername(),
         adminSignatureText,
         hasSignature,
         hasStamp,
         timeframeLabel: getTimeframeLabel(),
         formatCurrency,
+        companyAddress: shopSettings.shopAddress,
+        companyPhone: shopSettings.shopPhone,
+        companyRegistration: shopSettings.shopRegistration,
       });
     } finally {
       setGeneratingReport(false);
     }
   };
 
+  // Non-admin: hard block
+  if (!isAdmin()) {
+    return (
+      <div className="min-h-screen analytics-page flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-lg border border-red-200 p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Shield className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Accès Refusé</h2>
+          <p className="text-gray-500 text-sm">
+            Cette section est réservée aux administrateurs uniquement.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Admin: password gate before showing anything
+  if (!accessVerified) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-8 max-w-sm w-full">
+          <div className="text-center mb-6">
+            <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Shield className="w-7 h-7 text-blue-600" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">Vérification Requise</h2>
+            <p className="text-gray-500 text-sm mt-1">
+              Entrez votre mot de passe pour accéder aux Analytiques
+            </p>
+          </div>
+          <form onSubmit={handleAccessVerify} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Mot de passe administrateur
+              </label>
+              <input
+                type="password"
+                value={accessPassword}
+                onChange={(e) => setAccessPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                placeholder="Votre mot de passe"
+                autoFocus
+                required
+              />
+            </div>
+            {accessError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                {accessError}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={accessLoading}
+              className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm"
+            >
+              {accessLoading ? "Vérification..." : "Accéder"}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
-        <div className="max-w-7xl mx-auto space-y-6">
+      <div className="min-h-screen analytics-page p-4 sm:p-6">
+        <div className="max-w-7xl mx-auto space-y-6 analytics-shell">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Analytiques
@@ -1018,8 +1181,8 @@ export default function Analytics() {
 
   if (!analytics) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
-        <div className="max-w-7xl mx-auto space-y-6">
+      <div className="min-h-screen analytics-page p-4 sm:p-6">
+        <div className="max-w-7xl mx-auto space-y-6 analytics-shell">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Analytiques
@@ -1063,16 +1226,17 @@ export default function Analytics() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <>
+    <div className="min-h-screen analytics-page p-4 sm:p-6">
+      <div className="max-w-7xl mx-auto space-y-6 analytics-shell">
         {/* Header */}
-        <div className="text-center sm:text-left">
+        <div className="analytics-hero rounded-lg text-center sm:text-left">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              <h1 className="text-2xl sm:text-3xl font-bold text-slate-950">
                 Analytiques
               </h1>
-              <p className="text-sm sm:text-base text-gray-600 mt-2">
+              <p className="text-sm sm:text-base text-slate-600 mt-2 max-w-2xl">
                 Analyse approfondie de la performance de votre entreprise
               </p>
             </div>
@@ -1098,7 +1262,7 @@ export default function Analytics() {
         </div>
 
         {/* Timeframe Selection */}
-        <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+        <div className="analytics-card bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -1175,7 +1339,7 @@ export default function Analytics() {
 
         {/* Key Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+          <div className="metric-card bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs sm:text-sm text-gray-600">
@@ -1201,13 +1365,13 @@ export default function Analytics() {
                   </span>
                 </div>
               </div>
-              <div className="p-2 sm:p-3 bg-blue-100 rounded-full">
+              <div className="metric-icon p-2 sm:p-3 rounded-full">
                 <BarChart3 className="w-4 h-4 sm:w-6 sm:h-6 text-blue-600" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+          <div className="metric-card bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs sm:text-sm text-gray-600">Revenu Total</p>
@@ -1231,13 +1395,13 @@ export default function Analytics() {
                   </span>
                 </div>
               </div>
-              <div className="p-2 sm:p-3 bg-green-100 rounded-full">
+              <div className="metric-icon p-2 sm:p-3 rounded-full">
                 <DollarSign className="w-4 h-4 sm:w-6 sm:h-6 text-green-600" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+          <div className="metric-card bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs sm:text-sm text-gray-600">
@@ -1248,13 +1412,13 @@ export default function Analytics() {
                 </p>
                 <p className="text-xs text-gray-500 mt-1">Total reçu</p>
               </div>
-              <div className="p-2 sm:p-3 bg-yellow-100 rounded-full">
+              <div className="metric-icon p-2 sm:p-3 rounded-full">
                 <FileText className="w-4 h-4 sm:w-6 sm:h-6 text-yellow-600" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+          <div className="metric-card bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs sm:text-sm text-gray-600">
@@ -1265,7 +1429,7 @@ export default function Analytics() {
                 </p>
                 <p className="text-xs text-gray-500 mt-1">Total validé</p>
               </div>
-              <div className="p-2 sm:p-3 bg-red-100 rounded-full">
+              <div className="metric-icon p-2 sm:p-3 rounded-full">
                 <Receipt className="w-4 h-4 sm:w-6 sm:h-6 text-red-600" />
               </div>
             </div>
@@ -1274,7 +1438,7 @@ export default function Analytics() {
 
         {/* Additional Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+          <div className="metric-card bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs sm:text-sm text-gray-600">Revenu Net</p>
@@ -1283,13 +1447,13 @@ export default function Analytics() {
                 </p>
                 <p className="text-xs text-gray-500 mt-1">(Ventes + Entrées) - Dépenses</p>
               </div>
-              <div className="p-2 sm:p-3 bg-purple-100 rounded-full">
+              <div className="metric-icon p-2 sm:p-3 rounded-full">
                 <Calculator className="w-4 h-4 sm:w-6 sm:h-6 text-purple-600" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+          <div className="metric-card bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs sm:text-sm text-gray-600">
@@ -1305,13 +1469,13 @@ export default function Analytics() {
                   </span>
                 </div>
               </div>
-              <div className="p-2 sm:p-3 bg-orange-100 rounded-full">
+              <div className="metric-icon p-2 sm:p-3 rounded-full">
                 <Users className="w-4 h-4 sm:w-6 sm:h-6 text-orange-600" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+          <div className="metric-card bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs sm:text-sm text-gray-600">
@@ -1322,7 +1486,7 @@ export default function Analytics() {
                 </p>
                 <p className="text-xs text-gray-500 mt-1">Produits actifs</p>
               </div>
-              <div className="p-2 sm:p-3 bg-indigo-100 rounded-full">
+              <div className="metric-icon p-2 sm:p-3 rounded-full">
                 <Package className="w-4 h-4 sm:w-6 sm:h-6 text-indigo-600" />
               </div>
             </div>
@@ -1330,7 +1494,7 @@ export default function Analytics() {
         </div>
 
         {/* Sales Chart */}
-        <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+        <div className="analytics-card bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -1437,7 +1601,7 @@ export default function Analytics() {
 
         {/* Top Products and Customers */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+          <div className="analytics-card bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Package className="w-4 h-4 sm:w-5 sm:h-5" />
               Articles Vendus ({getTimeframeLabel()})
@@ -1476,7 +1640,7 @@ export default function Analytics() {
             </div>
           </div>
 
-          <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+          <div className="analytics-card bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Users className="w-4 h-4 sm:w-5 sm:h-5" />
               Meilleurs Clients ({getTimeframeLabel()})
@@ -1524,9 +1688,9 @@ export default function Analytics() {
         </div>
         {/* ── Report Generation — Admin Only ────────────────────────── */}
         {isAdmin() && (
-          <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+          <div className="report-builder bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
             {/* Card header */}
-            <div className="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-900 to-blue-700">
+            <div className="report-builder-header px-4 sm:px-6 py-4 border-b border-gray-200">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
                   <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -1743,5 +1907,55 @@ export default function Analytics() {
 
       </div>
     </div>
+
+    {/* ── Print password confirmation modal ───────────────────────── */}
+    {showPrintPasswordModal && (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-6 max-w-sm w-full">
+          <div className="text-center mb-5">
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Shield className="w-6 h-6 text-blue-600" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Confirmation Requise</h3>
+            <p className="text-gray-500 text-sm mt-1">
+              Confirmez votre mot de passe pour générer le rapport
+            </p>
+          </div>
+          <form onSubmit={handlePrintPasswordVerify} className="space-y-4">
+            <input
+              type="password"
+              value={printPassword}
+              onChange={(e) => setPrintPassword(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              placeholder="Mot de passe"
+              autoFocus
+              required
+            />
+            {printPasswordError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
+                {printPasswordError}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => { setShowPrintPasswordModal(false); setPrintPassword(""); setPrintPasswordError(""); }}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={printPasswordLoading}
+                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm font-semibold"
+              >
+                {printPasswordLoading ? "Vérification..." : "Confirmer"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

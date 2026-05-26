@@ -1081,7 +1081,14 @@ export default function SortieHistory() {
 
   // Summary Statistics component - Only visible to admins
   const SummaryStats = () => {
-    if (!summaryStats || !userPermissions.isAdmin) return null;
+    // Double-guard: API permission AND localStorage role must both confirm admin
+    const localIsAdmin = (() => {
+      try {
+        const raw = localStorage.getItem("user");
+        return raw ? JSON.parse(raw).role === "admin" : false;
+      } catch { return false; }
+    })();
+    if (!summaryStats || !userPermissions.isAdmin || !localIsAdmin) return null;
 
     return (
       <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-6">

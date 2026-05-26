@@ -1,8 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import jsPDF from 'jspdf';
-import { formatNowGMT2 } from '../../utils/dateUtils';
-
-// ── Minimal types (mirrors Analytics.tsx, no import needed) ─────────────────
+import jsPDF from "jspdf";
+import { formatNowGMT2 } from "../../utils/dateUtils";
 
 interface TopProduct {
   name: string;
@@ -44,123 +42,150 @@ export interface ReportConfig {
   hasStamp: boolean;
   timeframeLabel: string;
   formatCurrency: (n: number) => string;
+  companyAddress?: string;
+  companyPhone?: string;
+  companyRegistration?: string;
 }
 
-// ── Layout constants ─────────────────────────────────────────────────────────
+const COMPANY = "ETS. DIEU MERCI";
+const COMPANY_SUB = "Gestion de Vente";
+const PW = 210;
+const PH = 297;
+const M = 18;
+const CW = PW - M * 2;
+const HDR_BOTTOM = 24;
+const FTR_TOP = PH - 24;
+const CT = HDR_BOTTOM + 12;
+const CB = FTR_TOP - 8;
 
-const COMPANY      = 'ETS. DIEU MERCI';
-const COMPANY_SUB  = 'Gestion de Vente';
-const PW           = 210;   // A4 width  mm
-const PH           = 297;   // A4 height mm
-const M            = 18;    // page margin
-const CW           = PW - M * 2;           // content width
-const HDR_BOTTOM   = M + 10;               // running header bottom edge
-const FTR_TOP      = PH - M - 8;           // running footer top edge
-const CT           = HDR_BOTTOM + 5;       // content top
-const CB           = FTR_TOP - 4;          // content bottom (before footer)
+const ink = {
+  navy: [15, 23, 42],
+  blue: [30, 64, 175],
+  muted: [100, 116, 139],
+  border: [203, 213, 225],
+  borderSoft: [226, 232, 240],
+  surface: [248, 250, 252],
+  white: [255, 255, 255],
+  success: [15, 118, 110],
+  danger: [153, 27, 27],
+  warning: [180, 83, 9],
+} as const;
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+function color(doc: jsPDF, rgb: readonly number[]): void {
+  doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+}
 
-/** Draw the running page header (all pages except cover). */
+function fill(doc: jsPDF, rgb: readonly number[]): void {
+  doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+}
+
+function stroke(doc: jsPDF, rgb: readonly number[]): void {
+  doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+}
+
 function drawHeader(doc: jsPDF, reportTitle: string): void {
-  doc.setFillColor(15, 48, 99);
-  doc.rect(0, 0, PW, HDR_BOTTOM, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.text(COMPANY, M, HDR_BOTTOM - 3);
-  doc.setFont('helvetica', 'normal');
+  fill(doc, ink.white);
+  doc.rect(0, 0, PW, HDR_BOTTOM, "F");
+  stroke(doc, ink.borderSoft);
+  doc.line(M, HDR_BOTTOM, PW - M, HDR_BOTTOM);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  color(doc, ink.navy);
+  doc.text(COMPANY, M, HDR_BOTTOM - 7);
+
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
-  doc.text(reportTitle, PW - M, HDR_BOTTOM - 3, { align: 'right' });
-  doc.setTextColor(31, 41, 55);
+  color(doc, ink.muted);
+  doc.text(reportTitle, PW - M, HDR_BOTTOM - 7, { align: "right" });
 }
 
-/** Draw the running page footer. */
 function drawFooter(doc: jsPDF, page: number, total: number, genAt: string): void {
-  doc.setDrawColor(203, 213, 225);
+  stroke(doc, ink.borderSoft);
   doc.line(M, FTR_TOP, PW - M, FTR_TOP);
-  doc.setTextColor(107, 114, 128);
-  doc.setFont('helvetica', 'normal');
+
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
-  doc.text(`Généré le ${genAt}`, M, FTR_TOP + 4.5);
-  doc.text(`Page ${page} / ${total}`, PW - M, FTR_TOP + 4.5, { align: 'right' });
-  doc.text(`${COMPANY} — ${COMPANY_SUB}`, PW / 2, FTR_TOP + 4.5, { align: 'center' });
-  doc.setTextColor(31, 41, 55);
+  color(doc, ink.muted);
+  doc.text(`Genere le ${genAt}`, M, FTR_TOP + 5);
+  doc.text(`Page ${page} / ${total}`, PW - M, FTR_TOP + 5, { align: "right" });
+  doc.text(`${COMPANY} - ${COMPANY_SUB}`, PW / 2, FTR_TOP + 5, { align: "center" });
 }
 
-/** Draw a dark-blue section title bar, returns Y after the bar + gap. */
-function sectionBar(doc: jsPDF, title: string, y: number): number {
-  doc.setFillColor(15, 48, 99);
-  doc.rect(M, y, CW, 9, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text(title, M + 4, y + 6.3);
-  doc.setTextColor(31, 41, 55);
-  return y + 13; // 9 bar + 4 gap
+function sectionTitle(doc: jsPDF, title: string, y: number): number {
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  color(doc, ink.navy);
+  doc.text(title, M, y);
+  stroke(doc, ink.blue);
+  doc.setLineWidth(0.5);
+  doc.line(M, y + 3, M + 28, y + 3);
+  stroke(doc, ink.borderSoft);
+  doc.setLineWidth(0.2);
+  doc.line(M + 32, y + 3, PW - M, y + 3);
+  return y + 10;
 }
 
-/** Draw a light info band (blue-tinted), returns Y after band + gap. */
-function infoBand(doc: jsPDF, text: string, y: number): number {
-  doc.setFillColor(219, 234, 254);
-  doc.rect(M, y, CW, 12, 'F');
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(15, 23, 42);
-  doc.text(text, M + 4, y + 7.5);
-  return y + 16;
+function infoPanel(doc: jsPDF, title: string, text: string, y: number): number {
+  fill(doc, ink.surface);
+  stroke(doc, ink.borderSoft);
+  doc.rect(M, y, CW, 18, "FD");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  color(doc, ink.navy);
+  doc.text(title.toUpperCase(), M + 4, y + 6);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.2);
+  color(doc, ink.muted);
+  doc.text(doc.splitTextToSize(text, CW - 8), M + 4, y + 12);
+  return y + 24;
 }
 
-/**
- * Draw a 2-column or 3-column grid of metric cards.
- * Returns Y after the last row + gap.
- */
 function metricGrid(
   doc: jsPDF,
   items: { label: string; value: string; note?: string }[],
   y: number,
   cols = 3,
 ): number {
-  const cardH = 20;
-  const gap   = 3;
-  const colW  = CW / cols;
+  const gap = 4;
+  const cardH = 24;
+  const colW = (CW - gap * (cols - 1)) / cols;
 
   items.forEach((item, idx) => {
-    const col  = idx % cols;
-    const row  = Math.floor(idx / cols);
-    const x    = M + col * colW;
-    const cy   = y + row * (cardH + gap);
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    const x = M + col * (colW + gap);
+    const cy = y + row * (cardH + gap);
 
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(203, 213, 225);
-    doc.rect(x + 1, cy, colW - 2, cardH, 'FD');
+    fill(doc, ink.white);
+    stroke(doc, ink.borderSoft);
+    doc.rect(x, cy, colW, cardH, "FD");
+    fill(doc, ink.blue);
+    doc.rect(x, cy, 1.4, cardH, "F");
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(107, 114, 128);
-    doc.text(item.label, x + 4, cy + 6);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.2);
+    color(doc, ink.muted);
+    doc.text(item.label.toUpperCase(), x + 4, cy + 6);
 
-    doc.setFont('helvetica', 'bold');
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
-    doc.setTextColor(15, 23, 42);
-    doc.text(item.value, x + 4, cy + 13);
+    color(doc, ink.navy);
+    doc.text(doc.splitTextToSize(item.value, colW - 8)[0] ?? "", x + 4, cy + 14);
 
     if (item.note) {
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(6.5);
-      doc.setTextColor(107, 114, 128);
-      doc.text(item.note, x + 4, cy + 18.5);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.6);
+      color(doc, ink.muted);
+      doc.text(doc.splitTextToSize(item.note, colW - 8)[0] ?? "", x + 4, cy + 20);
     }
   });
 
-  const rows = Math.ceil(items.length / cols);
-  return y + rows * (cardH + gap) + 4;
+  return y + Math.ceil(items.length / cols) * (cardH + gap) + 4;
 }
 
-/**
- * Draw a simple striped table, adding pages as needed.
- * Returns Y after the table + gap.
- */
 function dataTable(
   doc: jsPDF,
   headers: string[],
@@ -174,15 +199,15 @@ function dataTable(
   const tw = widths.reduce((a, b) => a + b, 0);
 
   const drawTableHeader = (hy: number): void => {
-    doc.setFillColor(15, 48, 99);
-    doc.rect(x, hy, tw, rowH, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
+    fill(doc, ink.navy);
+    doc.rect(x, hy, tw, rowH, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    color(doc, ink.white);
 
     let hx = x;
     headers.forEach((h, i) => {
-      doc.text(h, hx + 2.5, hy + rowH - 2.3);
+      doc.text(h, hx + 2.5, hy + rowH - 2.4);
       hx += widths[i];
     });
   };
@@ -190,160 +215,202 @@ function dataTable(
   let pageStartY = y;
   drawTableHeader(pageStartY);
   let ry = y + rowH;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
 
   for (let ri = 0; ri < rows.length; ri++) {
     if (ry + rowH > CB) {
-      doc.setDrawColor(203, 213, 225);
-      doc.rect(x, pageStartY, tw, ry - pageStartY, 'S');
+      stroke(doc, ink.border);
+      doc.rect(x, pageStartY, tw, ry - pageStartY, "S");
 
       if (!onPageBreak) break;
-
       onPageBreak();
       pageStartY = CT;
       drawTableHeader(pageStartY);
       ry = pageStartY + rowH;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
     }
 
     if (ri % 2 === 0) {
-      doc.setFillColor(248, 250, 252);
-      doc.rect(x, ry, tw, rowH, 'F');
+      fill(doc, ink.surface);
+      doc.rect(x, ry, tw, rowH, "F");
     }
 
-    doc.setTextColor(31, 41, 55);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.8);
+    color(doc, ink.navy);
     let cx = x;
     rows[ri].forEach((cell, ci) => {
-      // Truncate to fit column width (≈ 2.1 chars per mm for 8pt helvetica)
-      const maxChars = Math.max(4, Math.floor(widths[ci] / 2.1));
-      const t = cell.length > maxChars ? cell.substring(0, maxChars - 1) + '…' : cell;
-      doc.text(t, cx + 2.5, ry + rowH - 2.3);
+      const maxChars = Math.max(4, Math.floor(widths[ci] / 2));
+      const clipped = cell.length > maxChars ? `${cell.substring(0, maxChars - 3)}...` : cell;
+      doc.text(clipped, cx + 2.5, ry + rowH - 2.4);
       cx += widths[ci];
     });
 
-    doc.setDrawColor(226, 232, 240);
+    stroke(doc, ink.borderSoft);
     doc.line(x, ry + rowH, x + tw, ry + rowH);
     ry += rowH;
   }
 
-  doc.setDrawColor(203, 213, 225);
-  doc.rect(x, pageStartY, tw, ry - pageStartY, 'S');
-  return ry + 3;
+  stroke(doc, ink.border);
+  doc.rect(x, pageStartY, tw, ry - pageStartY, "S");
+  return ry + 5;
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
+function drawCertificationBox(
+  doc: jsPDF,
+  y: number,
+  config: Pick<ReportConfig, "adminUsername" | "adminSignatureText" | "hasSignature" | "hasStamp">,
+): number {
+  const { adminUsername, adminSignatureText, hasSignature, hasStamp } = config;
+  const sigW = CW / 2 - 3;
+  const stX = M + CW / 2 + 3;
+  const stW = CW / 2 - 3;
+
+  fill(doc, ink.white);
+  stroke(doc, ink.borderSoft);
+  doc.rect(M, y, sigW, 56, "FD");
+  doc.rect(stX, y, stW, 56, "FD");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  color(doc, ink.navy);
+  doc.text("Signature administrateur", M + 4, y + 8);
+  doc.text("Cachet officiel", stX + 4, y + 8);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  color(doc, ink.muted);
+  doc.text(`Nom: ${adminUsername}`, M + 4, y + 17);
+  if (adminSignatureText) doc.text(`Titre: ${adminSignatureText}`, M + 4, y + 24);
+  doc.text(hasSignature ? "Signature confirmee" : "Signature non confirmee", M + 4, y + 50);
+
+  stroke(doc, ink.border);
+  doc.line(M + 4, y + 42, M + sigW - 6, y + 42);
+
+  const eCx = stX + stW / 2;
+  const eCy = y + 32;
+  stroke(doc, hasStamp ? ink.blue : ink.border);
+  doc.setLineWidth(0.4);
+  doc.ellipse(eCx, eCy, 16, 16, "S");
+  doc.ellipse(eCx, eCy, 12, 12, "S");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.4);
+  color(doc, hasStamp ? ink.blue : ink.muted);
+  doc.text("CACHET", eCx, eCy - 2, { align: "center" });
+  doc.text(hasStamp ? "CONFIRME" : "NON CONFIRME", eCx, eCy + 4, { align: "center" });
+  doc.setLineWidth(0.2);
+
+  return y + 64;
+}
 
 export function generateCompanyReport(config: ReportConfig): void {
   const {
-    analytics, sections, adminUsername, adminSignatureText,
-    hasSignature, hasStamp, timeframeLabel, formatCurrency,
+    analytics,
+    sections,
+    adminUsername,
+    adminSignatureText,
+    hasSignature,
+    hasStamp,
+    timeframeLabel,
+    formatCurrency,
+    companyAddress = "Av Manono Coin Munama N39, C. Kenya, Lubumbashi",
+    companyPhone = "+243 977 771 421 / +243 853 549 102",
+    companyRegistration = "RCCM: 14-A-017885",
   } = config;
 
-  const doc    = new (jsPDF as any)({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const genAt  = formatNowGMT2();
+  const doc = new (jsPDF as any)({ orientation: "portrait", unit: "mm", format: "a4" });
+  const genAt = formatNowGMT2();
   const official = hasSignature && hasStamp;
 
-  // Section names for display
   const secNames: string[] = [];
-  if (sections.financial) secNames.push('Résumé Financier');
-  if (sections.sales)     secNames.push('Ventes');
-  if (sections.products)  secNames.push('Produits');
-  if (sections.clients)   secNames.push('Clients');
-  if (sections.expenses)  secNames.push('Dépenses');
-  if (sections.entries)   secNames.push('Entrées');
+  if (sections.financial) secNames.push("Resume financier");
+  if (sections.sales) secNames.push("Ventes");
+  if (sections.products) secNames.push("Produits");
+  if (sections.clients) secNames.push("Clients");
+  if (sections.expenses) secNames.push("Depenses");
+  if (sections.entries) secNames.push("Entrees");
 
-  const allSelected  = Object.values(sections).every(Boolean);
-  const reportTitle  = allSelected
-    ? 'Rapport Complet d\'Entreprise'
+  const allSelected = Object.values(sections).every(Boolean);
+  const reportTitle = allSelected
+    ? "Rapport complet d'entreprise"
     : secNames.length === 1
       ? secNames[0]
-      : 'Rapport Sélectif';
+      : "Rapport selectif";
 
-  // ── COVER PAGE ────────────────────────────────────────────────────────────
-  // Dark-blue header block
-  doc.setFillColor(15, 48, 99);
-  doc.rect(0, 0, PW, 82, 'F');
-  // Accent stripe
-  doc.setFillColor(37, 99, 235);
-  doc.rect(0, 80, PW, 4, 'F');
+  fill(doc, ink.white);
+  doc.rect(0, 0, PW, PH, "F");
+  fill(doc, ink.navy);
+  doc.rect(0, 0, PW, 66, "F");
+  fill(doc, ink.blue);
+  doc.rect(0, 64.5, PW, 1.5, "F");
 
-  // Company name
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(26);
-  doc.text(COMPANY, PW / 2, 34, { align: 'center' });
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(25);
+  color(doc, ink.white);
+  doc.text(COMPANY, PW / 2, 24, { align: "center" });
 
-  // Company subtitle
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11);
-  doc.setTextColor(147, 197, 253);
-  doc.text(COMPANY_SUB, PW / 2, 43, { align: 'center' });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text(COMPANY_SUB, PW / 2, 33, { align: "center" });
 
-  // Report title
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(17);
-  doc.setTextColor(255, 255, 255);
-  doc.text(reportTitle.toUpperCase(), PW / 2, 58, { align: 'center' });
+  doc.setFontSize(7.8);
+  doc.text(companyAddress, PW / 2, 42, { align: "center" });
+  doc.text(companyPhone, PW / 2, 47, { align: "center" });
+  doc.text(companyRegistration, PW / 2, 52, { align: "center" });
 
-  // Period
-  doc.setFont('helvetica', 'normal');
+  const coverY = 88;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  color(doc, ink.navy);
+  doc.text(reportTitle.toUpperCase(), M, coverY);
+
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(9.5);
-  doc.setTextColor(147, 197, 253);
-  doc.text(`Période: ${timeframeLabel}`, PW / 2, 67, { align: 'center' });
+  color(doc, ink.muted);
+  doc.text(`Periode: ${timeframeLabel}`, M, coverY + 9);
 
-  // ── Meta info card ──────────────────────────────────────────────────────
-  const mY = 94;
-  doc.setFillColor(219, 234, 254);
-  doc.setDrawColor(37, 99, 235);
-  doc.rect(M, mY, CW, 44, 'FD');
+  fill(doc, ink.surface);
+  stroke(doc, ink.borderSoft);
+  doc.rect(M, coverY + 22, CW, 50, "FD");
 
   const metaRows: [string, string][] = [
-    ['Généré le:', genAt],
-    ['Généré par:', adminUsername],
-    ['Sections:', secNames.join(', ') || 'Aucune sélectionnée'],
-    ['Statut:', official ? '✓ Document Officiel' : '⚠ Document Non Officiel'],
+    ["Date de generation", genAt],
+    ["Prepare par", adminUsername],
+    ["Sections incluses", secNames.join(", ") || "Aucune section"],
+    ["Statut du document", official ? "Document officiel" : "Document non officiel"],
   ];
 
   metaRows.forEach(([label, value], i) => {
-    const ly = mY + 9 + i * 9;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
-    doc.setTextColor(15, 23, 42);
-    doc.text(label, M + 5, ly);
-
-    doc.setFont('helvetica', 'normal');
-    if (i === 3) {
-      // Status row — green for official, red for unofficial
-      doc.setTextColor(official ? 22 : 185, official ? 163 : 28, official ? 74 : 26);
-    }
-    const lines = doc.splitTextToSize(value, CW - 48);
-    doc.text(lines[0] ?? '', M + 44, ly);
-    doc.setTextColor(15, 23, 42);
+    const rowY = coverY + 34 + i * 9;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    color(doc, ink.navy);
+    doc.text(label, M + 6, rowY);
+    doc.setFont("helvetica", "normal");
+    color(doc, i === 3 ? (official ? ink.success : ink.warning) : ink.muted);
+    doc.text(doc.splitTextToSize(value, CW - 62)[0] ?? "", M + 58, rowY);
   });
 
-  // ── Cover unofficial warning ───────────────────────────────────────────
-  if (!official) {
-    const wY = mY + 50;
-    doc.setFillColor(220, 38, 38);
-    doc.rect(M, wY, CW, 22, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.text('⚠  DOCUMENT NON OFFICIEL', M + 4, wY + 8);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    const missing = !hasSignature && !hasStamp
-      ? 'Ce rapport ne contient ni signature autorisée ni cachet officiel de l\'entreprise.'
-      : !hasSignature
-        ? 'Ce rapport ne contient pas de signature administrateur autorisée.'
-        : 'Ce rapport ne contient pas de cachet officiel de l\'entreprise.';
-    const warnLines = doc.splitTextToSize(missing, CW - 8);
-    doc.text(warnLines, M + 4, wY + 15);
-  }
+  const noticeY = coverY + 88;
+  stroke(doc, official ? ink.success : ink.warning);
+  fill(doc, official ? [240, 253, 250] : [255, 251, 235]);
+  doc.rect(M, noticeY, CW, 24, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.6);
+  color(doc, official ? ink.success : ink.warning);
+  doc.text(official ? "CERTIFICATION" : "NOTE DE VALIDATION", M + 5, noticeY + 8);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  color(doc, ink.navy);
+  doc.text(
+    doc.splitTextToSize(
+      official
+        ? "Ce rapport a ete confirme avec signature administrateur et cachet officiel."
+        : "Ce rapport reste non officiel tant que la signature et le cachet ne sont pas confirmes.",
+      CW - 10,
+    ),
+    M + 5,
+    noticeY + 16,
+  );
 
-  // ── CONTENT PAGES ────────────────────────────────────────────────────────
   let Y = CT;
   let secNum = 0;
 
@@ -353,61 +420,61 @@ export function generateCompanyReport(config: ReportConfig): void {
     Y = CT;
   }
 
-  /** Ensure at least `need` mm is available; add new page if not. */
   function ensure(need: number): void {
     if (Y + need > CB) newPage();
   }
 
   newPage();
 
-  // ── Financial Summary ──────────────────────────────────────────────────
   if (sections.financial) {
     secNum++;
-    ensure(90);
-    Y = sectionBar(doc, `${secNum}. Résumé Financier`, Y);
-
-    Y = metricGrid(doc, [
-      { label: 'Ventes Totales',       value: String(analytics.totalSales),                        note: 'Transactions complétées' },
-      { label: 'Revenu Total',          value: formatCurrency(analytics.totalRevenue),               note: 'Revenu des ventes' },
-      { label: 'Entrées de Caisse',     value: formatCurrency(analytics.totalEntries),               note: 'Montant total reçu' },
-      { label: 'Dépenses Validées',     value: formatCurrency(analytics.totalValidatedExpenses),     note: 'Montant total validé' },
-      { label: 'Revenu Net',            value: formatCurrency(analytics.netRevenue),                 note: '(Ventes + Entrées) - Dépenses' },
-      { label: 'Clients Uniques',       value: String(analytics.totalCustomers),                     note: 'Dans la période' },
-    ], Y, 3);
+    ensure(86);
+    Y = sectionTitle(doc, `${secNum}. Resume financier`, Y);
+    Y = metricGrid(
+      doc,
+      [
+        { label: "Ventes totales", value: String(analytics.totalSales), note: "Transactions completees" },
+        { label: "Revenu total", value: formatCurrency(analytics.totalRevenue), note: "Revenu des ventes" },
+        { label: "Entrees caisse", value: formatCurrency(analytics.totalEntries), note: "Montant recu" },
+        { label: "Depenses", value: formatCurrency(analytics.totalValidatedExpenses), note: "Montant valide" },
+        { label: "Revenu net", value: formatCurrency(analytics.netRevenue), note: "Ventes + entrees - depenses" },
+        { label: "Clients uniques", value: String(analytics.totalCustomers), note: "Sur la periode" },
+      ],
+      Y,
+      3,
+    );
   }
 
-  // ── Sales ──────────────────────────────────────────────────────────────
   if (sections.sales) {
-    ensure(36);
     secNum++;
-    Y = sectionBar(doc, `${secNum}. Rapport de Ventes`, Y);
-
+    ensure(34);
+    Y = sectionTitle(doc, `${secNum}. Rapport de ventes`, Y);
     const trend = analytics.recentTrends.revenueGrowth;
-    Y = infoBand(
+    Y = infoPanel(
       doc,
-      `Ventes: ${analytics.totalSales}  |  Revenu: ${formatCurrency(analytics.totalRevenue)}  |  Clients: ${analytics.totalCustomers}  |  Tendance: ${trend >= 0 ? '+' : ''}${trend}%`,
+      "Performance commerciale",
+      `Ventes: ${analytics.totalSales} | Revenu: ${formatCurrency(analytics.totalRevenue)} | Clients: ${analytics.totalCustomers} | Tendance: ${trend >= 0 ? "+" : ""}${trend}%`,
       Y,
     );
   }
 
-  // ── Products ───────────────────────────────────────────────────────────
   if (sections.products) {
-    ensure(40);
     secNum++;
-    Y = sectionBar(doc, `${secNum}. Rapport des Produits`, Y);
-
+    ensure(42);
+    Y = sectionTitle(doc, `${secNum}. Rapport des produits`, Y);
     if (analytics.topProducts.length > 0) {
       Y = dataTable(
         doc,
-        ['#', 'Article', 'Qté', 'Revenu'],
+        ["#", "Article", "Qte", "Revenu"],
         analytics.topProducts.map((p, i) => [
           String(i + 1),
           p.name,
           `${p.quantity} u.`,
           formatCurrency(p.revenue),
         ]),
-        M, Y,
-        [12, 92, 34, 32],
+        M,
+        Y,
+        [12, 92, 32, 38],
         7.5,
         () => {
           doc.addPage();
@@ -415,163 +482,79 @@ export function generateCompanyReport(config: ReportConfig): void {
         },
       );
     } else {
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(107, 114, 128);
-      doc.text('Aucun produit vendu dans cette période.', M + 4, Y + 7);
-      Y += 14;
+      Y = infoPanel(doc, "Aucune vente produit", "Aucun produit vendu dans cette periode.", Y);
     }
   }
 
-  // ── Clients ────────────────────────────────────────────────────────────
   if (sections.clients) {
-    ensure(32);
     secNum++;
-    Y = sectionBar(doc, `${secNum}. Rapport Clients`, Y);
-    const ct = analytics.recentTrends.customerGrowth;
-    Y = infoBand(
+    ensure(34);
+    Y = sectionTitle(doc, `${secNum}. Rapport clients`, Y);
+    const trend = analytics.recentTrends.customerGrowth;
+    Y = infoPanel(
       doc,
-      `Clients actifs dans la période: ${analytics.totalCustomers}  |  Tendance: ${ct >= 0 ? '+' : ''}${ct}%`,
+      "Activite client",
+      `Clients actifs: ${analytics.totalCustomers} | Tendance: ${trend >= 0 ? "+" : ""}${trend}%`,
       Y,
     );
   }
 
-  // ── Expenses ───────────────────────────────────────────────────────────
   if (sections.expenses) {
-    ensure(32);
     secNum++;
-    Y = sectionBar(doc, `${secNum}. Rapport des Dépenses`, Y);
-    Y = infoBand(doc, `Dépenses validées: ${formatCurrency(analytics.totalValidatedExpenses)}`, Y);
+    ensure(34);
+    Y = sectionTitle(doc, `${secNum}. Rapport des depenses`, Y);
+    Y = infoPanel(doc, "Depenses validees", `Total valide: ${formatCurrency(analytics.totalValidatedExpenses)}`, Y);
   }
 
-  // ── Entries ────────────────────────────────────────────────────────────
   if (sections.entries) {
-    ensure(32);
     secNum++;
-    Y = sectionBar(doc, `${secNum}. Rapport d'Entrées de Caisse`, Y);
-    Y = infoBand(doc, `Entrées de caisse totales: ${formatCurrency(analytics.totalEntries)}`, Y);
+    ensure(34);
+    Y = sectionTitle(doc, `${secNum}. Rapport des entrees de caisse`, Y);
+    Y = infoPanel(doc, "Entrees de caisse", `Total recu: ${formatCurrency(analytics.totalEntries)}`, Y);
   }
 
-  // ── SIGNATURE / CERTIFICATION PAGE ────────────────────────────────────
-  ensure(120);
-  Y = sectionBar(doc, 'Certification & Signature Officielle', Y);
+  ensure(112);
+  Y = sectionTitle(doc, "Certification et signature", Y);
+  Y = drawCertificationBox(doc, Y, {
+    adminUsername,
+    adminSignatureText,
+    hasSignature,
+    hasStamp,
+  });
 
-  // Signature box (left)
-  const sigW = CW / 2 - 3;
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(203, 213, 225);
-  doc.rect(M, Y, sigW, 52, 'FD');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(15, 23, 42);
-  doc.text('Signature Administrateur', M + 4, Y + 8);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(55, 65, 81);
-  doc.text(`Nom: ${adminUsername}`, M + 4, Y + 16);
-  if (adminSignatureText) {
-    doc.text(`Titre: ${adminSignatureText}`, M + 4, Y + 23);
-  }
-  // Signature line
-  doc.setDrawColor(120, 130, 150);
-  doc.line(M + 4, Y + 44, M + sigW - 6, Y + 44);
-  doc.setFontSize(7);
-  doc.setTextColor(107, 114, 128);
-  doc.text('Signature autorisée', M + 4, Y + 49);
-
-  if (!hasSignature) {
-    doc.setTextColor(185, 28, 28);
-    doc.setFontSize(7.5);
-    doc.text('⚠ Signature manquante', M + 4, Y + 56);
-  }
-
-  // Stamp box (right)
-  const stX = M + CW / 2 + 3;
-  const stW = CW / 2 - 3;
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(203, 213, 225);
-  doc.rect(stX, Y, stW, 52, 'FD');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(15, 23, 42);
-  doc.text('Cachet Officiel', stX + 4, Y + 8);
-
-  // Stamp circle placeholder
-  const eCx = stX + stW / 2;
-  const eCy = Y + 32;
-  doc.setDrawColor(150, 170, 210);
-  doc.setFillColor(240, 244, 255);
-  doc.ellipse(eCx, eCy, 15, 15, 'FD');
-  doc.setDrawColor(130, 155, 200);
-  doc.ellipse(eCx, eCy, 12, 12, 'S');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
-  doc.setTextColor(100, 120, 170);
-  doc.text('CACHET', eCx, eCy - 2, { align: 'center' });
-  doc.text('OFFICIEL', eCx, eCy + 3.5, { align: 'center' });
-  doc.setFontSize(5.5);
-  doc.text(COMPANY, eCx, eCy + 9, { align: 'center' });
-
-  if (!hasStamp) {
-    doc.setTextColor(185, 28, 28);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.text('⚠ Cachet manquant', stX + 4, Y + 56);
-  }
-
-  Y += 62;
-
-  // ── Certification banner ───────────────────────────────────────────────
-  if (official) {
-    doc.setFillColor(22, 163, 74);
-    doc.rect(M, Y, CW, 14, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    const okMsg = doc.splitTextToSize(
-      '✓  DOCUMENT OFFICIELLEMENT VALIDÉ — Signé et tamponné par un administrateur autorisé.',
-      CW - 8,
-    );
-    doc.text(okMsg, M + 4, Y + 9);
-    Y += 18;
-  } else {
-    doc.setFillColor(220, 38, 38);
-    doc.rect(M, Y, CW, 26, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.text('⚠  DOCUMENT NON OFFICIEL', M + 4, Y + 9);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    const warnLines = doc.splitTextToSize(
-      'Ce rapport n\'est pas officiellement validé car il ne contient pas de signature administrateur autorisée et/ou de cachet officiel de l\'entreprise.',
-      CW - 8,
-    );
-    doc.text(warnLines, M + 4, Y + 17);
-    Y += 30;
-  }
-
-  // Generation attribution line
-  Y += 5;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(107, 114, 128);
+  stroke(doc, official ? ink.success : ink.warning);
+  fill(doc, official ? [240, 253, 250] : [255, 251, 235]);
+  doc.rect(M, Y, CW, 22, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.6);
+  color(doc, official ? ink.success : ink.warning);
+  doc.text(official ? "DOCUMENT OFFICIEL" : "DOCUMENT NON OFFICIEL", M + 5, Y + 8);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  color(doc, ink.navy);
   doc.text(
-    `Rapport généré le ${genAt} par ${adminUsername} — ${COMPANY} ${COMPANY_SUB}`,
-    PW / 2, Y, { align: 'center' },
+    doc.splitTextToSize(
+      official
+        ? "Document signe et tamponne par un administrateur autorise."
+        : "Document genere sans validation complete de signature et/ou de cachet officiel.",
+      CW - 10,
+    ),
+    M + 5,
+    Y + 16,
   );
+  Y += 32;
 
-  // ── Apply footers to all content pages (skip cover = page 1) ──────────
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  color(doc, ink.muted);
+  doc.text(`Rapport genere le ${genAt} par ${adminUsername}`, PW / 2, Y, { align: "center" });
+
   const totalPgs = doc.getNumberOfPages();
   for (let p = 2; p <= totalPgs; p++) {
     doc.setPage(p);
     drawFooter(doc, p - 1, totalPgs - 1, genAt);
   }
 
-  // ── Save ──────────────────────────────────────────────────────────────
-  const dateStamp = new Date().toISOString().split('T')[0];
+  const dateStamp = new Date().toISOString().split("T")[0];
   doc.save(`rapport-ets-dieu-merci-${dateStamp}.pdf`);
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useAuth } from "../../hooks/useAuth";
 import { formatDateTimeGMT2, formatMonthNameGMT2 } from "../../utils/dateUtils";
 import {
   Search,
@@ -70,10 +71,12 @@ interface Product {
   sku?: string;
 }
 
-// User interface for role checking
+// User interface for role checking — matches what the server returns
 interface User {
-  _id: string;
-  name: string;
+  _id?: string;
+  id?: string;
+  name?: string;
+  username?: string;
   email: string;
   role: string;
   permissions?: string[];
@@ -137,6 +140,17 @@ const getCurrentYear = (): number => {
 };
 
 export default function SalesHistory() {
+  const { token: authToken } = useAuth();
+
+  // Always prefer the React auth context token; fall back to localStorage
+  const getToken = useCallback(
+    () => authToken || localStorage.getItem("token") || "",
+    [authToken]
+  );
+
+  // Ref always points to the latest fetchSales — prevents stale closure in event listener
+  const fetchSalesRef = useRef<() => void>(() => {});
+
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [shopSettings, setShopSettings] = useState({
@@ -204,7 +218,7 @@ export default function SalesHistory() {
     fetchSales();
     fetchProducts();
     fetch(`${import.meta.env.VITE_API_URL}/settings/receipt`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` },
+      headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
@@ -220,8 +234,7 @@ export default function SalesHistory() {
       })
       .catch(() => {});
     const handleSalesUpdate = () => {
-      // Refresh sales when triggered from other components
-      fetchSales();
+      fetchSalesRef.current();
     };
 
     window.addEventListener("salesUpdated", handleSalesUpdate);
@@ -238,34 +251,33 @@ export default function SalesHistory() {
     }
   }, [queryParams]);
 
-  // Fetch current user from API or localStorage
+  // Fetch current user from localStorage (with API fallback)
   const fetchCurrentUser = async () => {
     try {
-      // Try to get user from localStorage first
       const storedUser = localStorage.getItem("user");
       if (storedUser) {
         const userData = JSON.parse(storedUser);
         setCurrentUser(userData);
         setIsAdmin(userData.role === "admin");
-      } else {
-        // Fallback to API call
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/me`, {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-          },
-        });
+        return;
+      }
 
-        if (res.ok) {
-          const userData = await res.json();
-          setCurrentUser(userData);
-          setIsAdmin(userData.role === "admin");
-          localStorage.setItem("user", JSON.stringify(userData));
-        }
+      // Fallback: /users/me is the correct endpoint
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/users/me`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+      });
+
+      if (res.ok) {
+        const userData = await res.json();
+        setCurrentUser(userData);
+        setIsAdmin(userData.role === "admin");
+        localStorage.setItem("user", JSON.stringify(userData));
       }
     } catch (error) {
       console.error("Error fetching user data:", error);
-      // Default to non-admin if can't fetch user
       setIsAdmin(false);
     }
   };
@@ -330,7 +342,7 @@ export default function SalesHistory() {
       const res = await fetch(url, {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${getToken()}`,
         },
       });
 
@@ -374,6 +386,9 @@ export default function SalesHistory() {
       setLoading(false);
     }
   };
+
+  // Keep ref pointing to latest fetchSales so event listeners never use a stale closure
+  fetchSalesRef.current = fetchSales;
 
   // Update edited sales when sales change
   const updateEditedSales = (salesList: Sale[]) => {
@@ -477,7 +492,7 @@ export default function SalesHistory() {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/products?limit=0`, {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${getToken()}`,
         },
       });
 
@@ -1410,7 +1425,7 @@ export default function SalesHistory() {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            Authorization: `Bearer ${getToken()}`,
           },
           body: JSON.stringify(updateData),
         }
@@ -1432,7 +1447,7 @@ export default function SalesHistory() {
       } else {
         const errorData = await response.json();
         setError(
-          errorData.error ||
+          errorData.error || errorData.message ||
             `Failed to update sale: ${response.status} ${response.statusText}`
         );
       }
@@ -1466,7 +1481,7 @@ export default function SalesHistory() {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            Authorization: `Bearer ${getToken()}`,
           },
           body: JSON.stringify({
             reason: "Sale voided by admin",
@@ -1520,26 +1535,6 @@ export default function SalesHistory() {
                 {editedSales.length}
               </span>
             )}
-          </button>
-
-          {/* Export Button */}
-          <button
-            onClick={exportDetailedSalesToCSV}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-            title="Export sales data to CSV"
-          >
-            <Download className="w-4 h-4" />
-            Export CSV
-          </button>
-
-          {/* Export JSON Button */}
-          <button
-            onClick={exportToJSON}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
-            title="Export sales data to JSON"
-          >
-            <FileText className="w-4 h-4" />
-            Export JSON
           </button>
 
           <div className="relative">
