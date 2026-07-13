@@ -61,6 +61,7 @@ interface Sale {
   editedAt?: string;
   editHistory?: EditHistoryEntry[];
   type?: string;
+  isWalkIn?: boolean;
 }
 
 interface Product {
@@ -171,6 +172,7 @@ export default function SalesHistory() {
     items: [] as SaleItem[],
     paymentMethod: "cash",
     reason: "",
+    isWalkIn: false,
   });
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -929,7 +931,11 @@ export default function SalesHistory() {
       
       <div class="customer-info">
         <div class="customer-field">CLIENT: <strong>${sale.customer.name.toUpperCase()}</strong></div>
-        <div class="customer-field">TELEPHONE: <strong>${sale.customer.phone}</strong></div>
+        ${
+          sale.customer.phone
+            ? `<div class="customer-field">TELEPHONE: <strong>${sale.customer.phone}</strong></div>`
+            : ""
+        }
         ${
           sale.customer.email
             ? `<div class="customer-field">EMAIL: <strong>${sale.customer.email}</strong></div>`
@@ -1046,7 +1052,9 @@ export default function SalesHistory() {
     doc.text("Information sur le client:", 20, 85);
     doc.setFontSize(10);
     doc.text(`Nom: ${sale.customer.name}`, 20, 92);
-    doc.text(`Phone: ${sale.customer.phone}`, 20, 99);
+    if (sale.customer.phone) {
+      doc.text(`Phone: ${sale.customer.phone}`, 20, 99);
+    }
     if (sale.customer.email) {
       doc.text(`Email: ${sale.customer.email}`, 20, 106);
     }
@@ -1117,6 +1125,7 @@ export default function SalesHistory() {
       items: sale.items.map((item) => ({ ...item })),
       paymentMethod: sale.paymentMethod,
       reason: "",
+      isWalkIn: Boolean(sale.isWalkIn),
     });
     setShowEditModal(true);
     setError(null);
@@ -1135,8 +1144,19 @@ export default function SalesHistory() {
       items: [],
       paymentMethod: "cash",
       reason: "",
+      isWalkIn: false,
     });
     setError(null);
+  };
+
+  const toggleEditWalkIn = () => {
+    setEditForm((prev) => ({
+      ...prev,
+      isWalkIn: !prev.isWalkIn,
+      customer: prev.isWalkIn
+        ? prev.customer
+        : { name: "", phone: "", email: "" },
+    }));
   };
 
   const updateItemQuantity = (index: number, newQuantity: number) => {
@@ -1238,7 +1258,7 @@ export default function SalesHistory() {
       return;
     }
 
-    if (!editForm.customer.name || !editForm.customer.phone) {
+    if (!editForm.isWalkIn && (!editForm.customer.name || !editForm.customer.phone)) {
       setError("Customer name and phone are required");
       return;
     }
@@ -1256,7 +1276,10 @@ export default function SalesHistory() {
 
       // Make sure we're sending the correct data structure
       const updateData = {
-        customer: editForm.customer,
+        customer: editForm.isWalkIn
+          ? { name: "Client de passage", phone: "", email: "" }
+          : editForm.customer,
+        isWalkIn: editForm.isWalkIn,
         items: editForm.items.map((item) => ({
           productId: item.productId,
           name: item.name,
@@ -1806,8 +1829,13 @@ export default function SalesHistory() {
                         {sale.saleId}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                        <div className="text-sm text-gray-900 flex items-center gap-2">
                           {sale.customer.name}
+                          {sale.isWalkIn && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                              Passage
+                            </span>
+                          )}
                         </div>
                         <div className="text-sm text-gray-500">
                           {sale.customer.phone}
@@ -2031,6 +2059,11 @@ export default function SalesHistory() {
                 <h4 className="text-md font-medium text-gray-900 mb-3 flex items-center gap-2">
                   <User className="w-4 h-4" />
                   Information sur le client
+                  {selectedSale.isWalkIn && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                      Client de passage
+                    </span>
+                  )}
                 </h4>
                 <div className="bg-gray-50 rounded-lg p-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -2354,6 +2387,19 @@ export default function SalesHistory() {
                 <h4 className="text-md font-medium text-gray-900 mb-3">
                   Information sur le client
                 </h4>
+
+                <label className="flex items-center gap-2 mb-3 p-2 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer select-none w-fit">
+                  <input
+                    type="checkbox"
+                    checked={editForm.isWalkIn}
+                    onChange={toggleEditWalkIn}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium text-gray-700">
+                    Client de passage (sans coordonnées)
+                  </span>
+                </label>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2368,8 +2414,9 @@ export default function SalesHistory() {
                           customer: { ...prev.customer, name: e.target.value },
                         }))
                       }
-                      className="w-full p-2 border rounded"
-                      required
+                      className="w-full p-2 border rounded disabled:bg-gray-100 disabled:text-gray-400"
+                      disabled={editForm.isWalkIn}
+                      required={!editForm.isWalkIn}
                     />
                   </div>
                   <div>
@@ -2385,8 +2432,9 @@ export default function SalesHistory() {
                           customer: { ...prev.customer, phone: e.target.value },
                         }))
                       }
-                      className="w-full p-2 border rounded"
-                      required
+                      className="w-full p-2 border rounded disabled:bg-gray-100 disabled:text-gray-400"
+                      disabled={editForm.isWalkIn}
+                      required={!editForm.isWalkIn}
                     />
                   </div>
                   <div>
@@ -2402,7 +2450,8 @@ export default function SalesHistory() {
                           customer: { ...prev.customer, email: e.target.value },
                         }))
                       }
-                      className="w-full p-2 border rounded"
+                      className="w-full p-2 border rounded disabled:bg-gray-100 disabled:text-gray-400"
+                      disabled={editForm.isWalkIn}
                     />
                   </div>
                 </div>

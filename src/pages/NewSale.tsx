@@ -137,6 +137,7 @@ export default function NewSale() {
     customerName: "",
     customerPhone: "",
     customerEmail: "",
+    isWalkIn: true,
     paymentMethod: "cash" as UiPayment,
     currencyMode: "usd" as "usd" | "fc" // New field for currency mode
   });
@@ -304,13 +305,23 @@ export default function NewSale() {
 
   const isFormValid =
     cart.length > 0 &&
-    form.customerName.trim() !== "" &&
-    form.customerPhone.trim() !== "";
+    (form.isWalkIn ||
+      (form.customerName.trim() !== "" && form.customerPhone.trim() !== ""));
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+  }
+
+  function toggleWalkIn() {
+    setForm((f) => ({
+      ...f,
+      isWalkIn: !f.isWalkIn,
+      customerName: "",
+      customerPhone: "",
+      customerEmail: "",
+    }));
   }
 
   // Handle product selection from search
@@ -827,14 +838,18 @@ export default function NewSale() {
       
       <div class="customer-info">
         <div class="customer-field">CLIENT: <strong>${receiptData.customerName.toUpperCase()}</strong></div>
-        <div class="customer-field">TELEPHONE: <strong>${receiptData.customerPhone}</strong></div>
+        ${
+          receiptData.customerPhone
+            ? `<div class="customer-field">TELEPHONE: <strong>${receiptData.customerPhone}</strong></div>`
+            : ""
+        }
         ${
           receiptData.customerEmail
             ? `<div class="customer-field">EMAIL: <strong>${receiptData.customerEmail}</strong></div>`
             : ""
         }
       </div>
-      
+
       <div class="receipt-title">ARTICLES ACHETES</div>
       
       <div class="items-col-header">
@@ -1214,9 +1229,13 @@ export default function NewSale() {
       
       <div class="customer-info">
         <div class="customer-field">CLIENT: <strong>${receiptData.customerName.toUpperCase()}</strong></div>
-        <div class="customer-field">TELEPHONE: <strong>${receiptData.customerPhone}</strong></div>
+        ${
+          receiptData.customerPhone
+            ? `<div class="customer-field">TELEPHONE: <strong>${receiptData.customerPhone}</strong></div>`
+            : ""
+        }
       </div>
-      
+
       <div class="receipt-title">ARTICLES VENDUS</div>
       
       <div class="items-col-header">
@@ -1349,11 +1368,14 @@ export default function NewSale() {
 
     try {
       const body = {
-        customer: {
-          name: form.customerName,
-          phone: form.customerPhone,
-          email: form.customerEmail || "",
-        },
+        customer: form.isWalkIn
+          ? undefined
+          : {
+              name: form.customerName,
+              phone: form.customerPhone,
+              email: form.customerEmail || "",
+            },
+        isWalkIn: form.isWalkIn,
         items: cart.map((item) => ({
           productId: item.productId,
           name: item.name,
@@ -1394,9 +1416,9 @@ export default function NewSale() {
         shopNumber: shopSettings.shopNumber,
         shopRegistration: shopSettings.shopRegistration,
         receiptFooter: shopSettings.receiptFooter,
-        customerName: form.customerName,
-        customerPhone: form.customerPhone,
-        customerEmail: form.customerEmail,
+        customerName: form.isWalkIn ? "Client de passage" : form.customerName,
+        customerPhone: form.isWalkIn ? "" : form.customerPhone,
+        customerEmail: form.isWalkIn ? "" : form.customerEmail,
         items: cart,
         total: cartTotal,
         paymentMethod: form.paymentMethod,
@@ -1417,6 +1439,7 @@ export default function NewSale() {
         customerName: "",
         customerPhone: "",
         customerEmail: "",
+        isWalkIn: true,
         paymentMethod: form.paymentMethod,
         currencyMode: "usd"
       });
@@ -1700,32 +1723,49 @@ export default function NewSale() {
 
         <div className="bg-white shadow-lg rounded-xl p-6 border border-gray-200">
           <h3 className="text-lg font-semibold mb-4 text-gray-900">Informations du client</h3>
+
+          <label className="flex items-center gap-2 mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.isWalkIn}
+              onChange={toggleWalkIn}
+              className="w-4 h-4"
+            />
+            <span className="text-sm font-medium text-gray-700">
+              Client de passage (vente sans coordonnées client)
+            </span>
+          </label>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
-              <label className="block mb-2 font-medium text-gray-700">Nom du client *</label>
+              <label className="block mb-2 font-medium text-gray-700">
+                Nom du client {!form.isWalkIn && "*"}
+              </label>
               <input
                 type="text"
                 name="customerName"
                 value={form.customerName}
                 onChange={handleChange}
-                placeholder="Entrer le nom du client"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
+                placeholder={form.isWalkIn ? "Client de passage" : "Entrer le nom du client"}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400"
+                disabled={form.isWalkIn}
+                required={!form.isWalkIn}
               />
             </div>
 
             <div>
               <label className="block mb-2 font-medium text-gray-700">
-                Numéro de téléphone du client *
+                Numéro de téléphone du client {!form.isWalkIn && "*"}
               </label>
               <input
                 type="tel"
                 name="customerPhone"
                 value={form.customerPhone}
                 onChange={handleChange}
-                placeholder="Entrer le numéro de téléphone"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
+                placeholder={form.isWalkIn ? "—" : "Entrer le numéro de téléphone"}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400"
+                disabled={form.isWalkIn}
+                required={!form.isWalkIn}
               />
             </div>
 
@@ -1739,7 +1779,8 @@ export default function NewSale() {
                 value={form.customerEmail}
                 onChange={handleChange}
                 placeholder="Entrer l'email du client"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400"
+                disabled={form.isWalkIn}
               />
             </div>
 
