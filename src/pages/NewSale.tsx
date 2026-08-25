@@ -3,6 +3,11 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { formatNowGMT2, formatDateGMT2 } from "../utils/dateUtils";
 import { useAuth } from "../hooks/useAuth";
 import { DollarSign, RefreshCw, Calculator, Search } from "lucide-react";
+import {
+  createPriceSnapshot,
+  type PriceSnapshot,
+  type SaleCurrency,
+} from "../utils/salePricing";
 
 interface Product {
   _id: string;
@@ -12,10 +17,11 @@ interface Product {
   price?: number;
 }
 
-interface CartItem {
+interface CartItem extends PriceSnapshot {
   productId: string;
   name: string;
   quantity: number;
+  // USD remains the receipt/API compatibility currency.
   unitPrice: number;
   total: number;
 }
@@ -139,7 +145,8 @@ export default function NewSale() {
     customerEmail: "",
     isWalkIn: true,
     paymentMethod: "cash" as UiPayment,
-    currencyMode: "usd" as "usd" | "fc" // New field for currency mode
+    currencyMode: "usd" as "usd" | "fc",
+    priceSource: "USD" as SaleCurrency,
   });
 
   const [message, setMessage] = useState<string | null>(null);
@@ -274,34 +281,30 @@ export default function NewSale() {
     );
   }, [products, searchTerm]);
 
-  // Calculate USD price when FC price changes
-  useEffect(() => {
-    if (form.currencyMode === "fc" && form.priceInFC && exchangeRate) {
-      const fcPrice = parseFloat(form.priceInFC) || 0;
-      const usdPrice = fcPrice / exchangeRate.rate;
-      setForm(prev => ({
-        ...prev,
-        unitPrice: usdPrice.toFixed(2)
-      }));
-    }
-  }, [form.priceInFC, form.currencyMode, exchangeRate]);
-
-  // Calculate FC price when USD price changes
-  useEffect(() => {
-    if (form.currencyMode === "usd" && form.unitPrice && exchangeRate) {
-      const usdPrice = parseFloat(form.unitPrice) || 0;
-      const fcPrice = usdPrice * exchangeRate.rate;
-      setForm(prev => ({
-        ...prev,
-        priceInFC: Math.round(fcPrice).toString()
-      }));
-    }
-  }, [form.unitPrice, form.currencyMode, exchangeRate]);
-
   const quantity = parseInt(form.quantity) || 0;
-  const unitPrice = parseFloat(form.unitPrice) || 0;
-  const itemTotal = quantity * unitPrice;
+  const enteredPrice =
+    parseFloat(form.priceSource === "FC" ? form.priceInFC : form.unitPrice) || 0;
+  const currentPrice = useMemo<PriceSnapshot | null>(() => {
+    if (enteredPrice <= 0) return null;
+
+    try {
+      return createPriceSnapshot(
+        enteredPrice,
+        form.priceSource,
+        exchangeRate?.rate
+      );
+    } catch {
+      return null;
+    }
+  }, [enteredPrice, exchangeRate?.rate, form.priceSource]);
   const cartTotal = cart.reduce((sum, item) => sum + item.total, 0);
+  const cartOriginalTotals = cart.reduce(
+    (totals, item) => {
+      totals[item.enteredCurrency] += item.enteredPrice * item.quantity;
+      return totals;
+    },
+    { USD: 0, FC: 0 }
+  );
 
   const isFormValid =
     cart.length > 0 &&
@@ -330,7 +333,11 @@ export default function NewSale() {
       ...prev,
       productId: selectedProduct._id,
       unitPrice: selectedProduct.price ? selectedProduct.price.toString() : "",
-      priceInFC: ""
+      priceInFC:
+        selectedProduct.price && exchangeRate
+          ? Math.round(selectedProduct.price * exchangeRate.rate).toString()
+          : "",
+      priceSource: "USD",
     }));
     setSearchTerm(selectedProduct.name);
     setShowSearchResults(false);
@@ -364,10 +371,62 @@ export default function NewSale() {
     setForm(prev => ({
       ...prev,
       currencyMode: prev.currencyMode === "usd" ? "fc" : "usd",
-      unitPrice: "",
-      priceInFC: ""
     }));
   };
+
+  const handleUsdPriceChange = (value: string) => {
+    const usdPrice = parseFloat(value);
+    setForm((prev) => ({
+      ...prev,
+      unitPrice: value,
+      priceInFC:
+        exchangeRate && Number.isFinite(usdPrice)
+          ? Math.round(usdPrice * exchangeRate.rate).toString()
+          : "",
+      priceSource: "USD",
+    }));
+  };
+
+  const handleFcPriceChange = (value: string) => {
+    const fcPrice = parseFloat(value);
+    setForm((prev) => ({
+      ...prev,
+      priceInFC: value,
+      unitPrice:
+        exchangeRate && Number.isFinite(fcPrice)
+          ? (fcPrice / exchangeRate.rate).toString()
+          : "",
+      priceSource: "FC",
+    }));
+  };
+
+  // Populate a missing equivalent when the rate arrives without changing
+  // which manually entered currency owns the price.
+  useEffect(() => {
+    if (!exchangeRate) return;
+
+    setForm((prev) => {
+      if (prev.priceSource === "USD" && prev.unitPrice && !prev.priceInFC) {
+        return {
+          ...prev,
+          priceInFC: Math.round(
+            parseFloat(prev.unitPrice) * exchangeRate.rate
+          ).toString(),
+        };
+      }
+
+      if (prev.priceSource === "FC" && prev.priceInFC && !prev.unitPrice) {
+        return {
+          ...prev,
+          unitPrice: (
+            parseFloat(prev.priceInFC) / exchangeRate.rate
+          ).toString(),
+        };
+      }
+
+      return prev;
+    });
+  }, [exchangeRate]);
 
   // Function to display stock information based on user role
   const renderStockInfo = (product: Product) => {
@@ -464,7 +523,7 @@ export default function NewSale() {
       return;
     }
 
-    if (unitPrice <= 0) {
+    if (!currentPrice) {
       setError("Le prix unitaire doit être supérieur à zéro");
       return;
     }
@@ -478,9 +537,15 @@ export default function NewSale() {
     // Clear any previous errors
     setError(null);
 
+    const unitPrice = currentPrice.priceUSD;
+
     // Check if product with same ID AND same price already exists in cart
     const existingItemIndex = cart.findIndex(
-      (item) => item.productId === product._id && item.unitPrice === unitPrice
+      (item) =>
+        item.productId === product._id &&
+        item.enteredCurrency === currentPrice.enteredCurrency &&
+        item.enteredPrice === currentPrice.enteredPrice &&
+        item.exchangeRate === currentPrice.exchangeRate
     );
 
     if (existingItemIndex >= 0) {
@@ -489,7 +554,9 @@ export default function NewSale() {
       updatedCart[existingItemIndex] = {
         ...updatedCart[existingItemIndex],
         quantity: updatedCart[existingItemIndex].quantity + quantity,
-        total: (updatedCart[existingItemIndex].quantity + quantity) * unitPrice,
+        total:
+          (updatedCart[existingItemIndex].quantity + quantity) *
+          updatedCart[existingItemIndex].unitPrice,
       };
       setCart(updatedCart);
     } else {
@@ -501,7 +568,8 @@ export default function NewSale() {
           name: product.name,
           quantity,
           unitPrice,
-          total: itemTotal,
+          total: quantity * unitPrice,
+          ...currentPrice,
         },
       ]);
     }
@@ -519,7 +587,11 @@ export default function NewSale() {
       ...f,
       quantity: "",
       unitPrice: product.price ? product.price.toString() : "",
-      priceInFC: ""
+      priceInFC:
+        product.price && exchangeRate
+          ? Math.round(product.price * exchangeRate.rate).toString()
+          : "",
+      priceSource: "USD",
     }));
     setSearchTerm("");
   }
@@ -1381,11 +1453,17 @@ export default function NewSale() {
           name: item.name,
           quantity: item.quantity,
           price: item.unitPrice,
+          enteredPrice: item.enteredPrice,
+          enteredCurrency: item.enteredCurrency,
+          priceUSD: item.priceUSD,
+          priceFC: item.priceFC,
+          exchangeRate: item.exchangeRate,
         })),
         subtotal: cartTotal,
         total: cartTotal,
         paymentMethod: uiToModelPayment(form.paymentMethod),
         salesPerson: currentUser?.username || "unknown",
+        exchangeRate: cart[0]?.exchangeRate ?? exchangeRate?.rate,
       };
 
       const res = await fetch(`${API_BASE}/sales`, {
@@ -1441,7 +1519,8 @@ export default function NewSale() {
         customerEmail: "",
         isWalkIn: true,
         paymentMethod: form.paymentMethod,
-        currencyMode: "usd"
+        currencyMode: "usd",
+        priceSource: "USD",
       });
       setCart([]);
       setSearchTerm("");
@@ -1471,7 +1550,11 @@ export default function NewSale() {
   };
 
   // Check if the product can be added to cart (comprehensive validation)
-  const canAddToCart = product && quantity > 0 && unitPrice > 0 && checkStockAfterAdd(product._id, quantity);
+  const canAddToCart =
+    product &&
+    quantity > 0 &&
+    currentPrice !== null &&
+    checkStockAfterAdd(product._id, quantity);
 
   return (
     <div className="flex-1 p-6 overflow-auto">
@@ -1604,7 +1687,7 @@ export default function NewSale() {
                   step="0.01"
                   name="unitPrice"
                   value={form.unitPrice}
-                  onChange={(e) => canEditPrice && setForm({ ...form, unitPrice: e.target.value })}
+                  onChange={(e) => canEditPrice && handleUsdPriceChange(e.target.value)}
                   readOnly={!canEditPrice}
                   placeholder={product?.price ? `ex: ${product.price}` : "Entrer le prix en USD"}
                   className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${!canEditPrice ? "bg-gray-50 border-gray-200 cursor-not-allowed text-gray-500" : "border-gray-300"}`}
@@ -1615,7 +1698,7 @@ export default function NewSale() {
                   type="number"
                   name="priceInFC"
                   value={form.priceInFC}
-                  onChange={(e) => canEditPrice && setForm({ ...form, priceInFC: e.target.value })}
+                  onChange={(e) => canEditPrice && handleFcPriceChange(e.target.value)}
                   readOnly={!canEditPrice}
                   placeholder="Entrer le prix en FC"
                   className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${!canEditPrice ? "bg-gray-50 border-gray-200 cursor-not-allowed text-gray-500" : "border-gray-300"}`}
@@ -1673,20 +1756,32 @@ export default function NewSale() {
                         <td className="px-4 py-3 text-sm text-gray-900">{item.name}</td>
                         <td className="px-4 py-3 text-sm text-center text-gray-600">{item.quantity}</td>
                         <td className="px-4 py-3 text-sm text-right text-gray-900">
-                          {formatCurrency(item.unitPrice)}
-                          {exchangeRate && (
+                          {item.enteredCurrency === "FC"
+                            ? formatFc(item.enteredPrice)
+                            : formatCurrency(item.enteredPrice)}
+                          {item.enteredCurrency === "FC" ? (
                             <div className="text-xs text-gray-500">
-                              ≈ {formatFc(item.unitPrice * exchangeRate.rate)}
+                              ≈ {formatCurrency(item.priceUSD)}
                             </div>
-                          )}
+                          ) : item.priceFC !== undefined ? (
+                            <div className="text-xs text-gray-500">
+                              ≈ {formatFc(item.priceFC)}
+                            </div>
+                          ) : null}
                         </td>
                         <td className="px-4 py-3 text-sm text-right text-gray-900">
-                          {formatCurrency(item.total)}
-                          {exchangeRate && (
+                          {item.enteredCurrency === "FC"
+                            ? formatFc(item.enteredPrice * item.quantity)
+                            : formatCurrency(item.enteredPrice * item.quantity)}
+                          {item.enteredCurrency === "FC" ? (
                             <div className="text-xs text-gray-500">
-                              ≈ {formatFc(item.total * exchangeRate.rate)}
+                              ≈ {formatCurrency(item.total)}
                             </div>
-                          )}
+                          ) : item.priceFC !== undefined ? (
+                            <div className="text-xs text-gray-500">
+                              ≈ {formatFc(item.priceFC * item.quantity)}
+                            </div>
+                          ) : null}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <button
@@ -1705,10 +1800,15 @@ export default function NewSale() {
                         Total:
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                        {formatCurrency(cartTotal)}
-                        {exchangeRate && (
+                        {cartOriginalTotals.USD > 0 && (
+                          <div>{formatCurrency(cartOriginalTotals.USD)}</div>
+                        )}
+                        {cartOriginalTotals.FC > 0 && (
+                          <div>{formatFc(cartOriginalTotals.FC)}</div>
+                        )}
+                        {cartOriginalTotals.FC > 0 && (
                           <div className="text-xs text-gray-500">
-                            ≈ {formatFc(cartTotal * exchangeRate.rate)}
+                            Total reçu ≈ {formatCurrency(cartTotal)}
                           </div>
                         )}
                       </td>

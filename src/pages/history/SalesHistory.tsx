@@ -23,6 +23,14 @@ import {
   Shield,
 } from "lucide-react";
 import jsPDF from "jspdf";
+import {
+  getItemOriginalCurrency,
+  getItemOriginalTotal,
+  getItemOriginalUnitPrice,
+  getItemUsdTotal,
+  getItemUsdUnitPrice,
+  type SaleCurrency,
+} from "../../utils/salePricing";
 
 interface SaleItem {
   productId: string;
@@ -31,6 +39,11 @@ interface SaleItem {
   price: number;
   total: number;
   _id: string;
+  enteredPrice?: number;
+  enteredCurrency?: SaleCurrency;
+  priceUSD?: number;
+  priceFC?: number;
+  exchangeRate?: number;
 }
 
 interface EditHistoryEntry {
@@ -62,6 +75,7 @@ interface Sale {
   editHistory?: EditHistoryEntry[];
   type?: string;
   isWalkIn?: boolean;
+  exchangeRate?: number;
 }
 
 interface Product {
@@ -545,6 +559,22 @@ export default function SalesHistory() {
     }).format(amount);
   };
 
+  const formatFc = (amount: number) =>
+    `${new Intl.NumberFormat("fr-FR", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount)} FC`;
+
+  const formatOriginalItemUnitPrice = (item: SaleItem) =>
+    getItemOriginalCurrency(item) === "FC"
+      ? formatFc(getItemOriginalUnitPrice(item))
+      : formatCurrency(getItemOriginalUnitPrice(item));
+
+  const formatOriginalItemTotal = (item: SaleItem) =>
+    getItemOriginalCurrency(item) === "FC"
+      ? formatFc(getItemOriginalTotal(item))
+      : formatCurrency(getItemOriginalTotal(item));
+
   // Get human-readable timeframe description
   const getTimeframeDescription = () => {
     if (timeframeMetadata) {
@@ -959,8 +989,8 @@ export default function SalesHistory() {
         <div class="item-row">
           <div class="item-name"><strong>${item.name}</strong></div>
           <div class="item-quantity"><strong>${item.quantity}</strong></div>
-          <div class="item-unit-price"><strong>${item.price.toFixed(2)}</strong></div>
-          <div class="item-line-total"><strong>${item.total.toFixed(2)}</strong></div>
+          <div class="item-unit-price"><strong>${getItemUsdUnitPrice(item).toFixed(2)}</strong></div>
+          <div class="item-line-total"><strong>${getItemUsdTotal(item).toFixed(2)}</strong></div>
         </div>
       `
         )
@@ -1074,8 +1104,8 @@ export default function SalesHistory() {
       doc.text(`${index + 1}. ${item.name}`, 20, yPos);
       doc.text(
         `Qty: ${item.quantity} x ${formatCurrency(
-          item.price
-        )} = ${formatCurrency(item.total)}`,
+          getItemUsdUnitPrice(item)
+        )} = ${formatCurrency(getItemUsdTotal(item))}`,
         25,
         yPos + 6
       );
@@ -1186,8 +1216,18 @@ export default function SalesHistory() {
     if (newPrice < 0) return;
 
     const updatedItems = [...editForm.items];
-    updatedItems[index].price = newPrice;
-    updatedItems[index].total = newPrice * updatedItems[index].quantity;
+    const itemRate =
+      updatedItems[index].exchangeRate ?? editingSale?.exchangeRate;
+    updatedItems[index] = {
+      ...updatedItems[index],
+      price: newPrice,
+      total: newPrice * updatedItems[index].quantity,
+      enteredPrice: newPrice,
+      enteredCurrency: "USD",
+      priceUSD: newPrice,
+      priceFC: itemRate ? Math.round(newPrice * itemRate) : undefined,
+      exchangeRate: itemRate,
+    };
 
     setEditForm((prev) => ({
       ...prev,
@@ -1216,6 +1256,13 @@ export default function SalesHistory() {
       quantity: 1,
       price: defaultProduct.price,
       total: defaultProduct.price,
+      enteredPrice: defaultProduct.price,
+      enteredCurrency: "USD",
+      priceUSD: defaultProduct.price,
+      priceFC: editingSale?.exchangeRate
+        ? Math.round(defaultProduct.price * editingSale.exchangeRate)
+        : undefined,
+      exchangeRate: editingSale?.exchangeRate,
       _id: `temp-${Date.now()}`,
     };
 
@@ -1233,10 +1280,20 @@ export default function SalesHistory() {
     }
 
     const updatedItems = [...editForm.items];
-    updatedItems[index].productId = productId;
-    updatedItems[index].name = product.name;
-    updatedItems[index].price = product.price;
-    updatedItems[index].total = product.price * updatedItems[index].quantity;
+    const itemRate =
+      updatedItems[index].exchangeRate ?? editingSale?.exchangeRate;
+    updatedItems[index] = {
+      ...updatedItems[index],
+      productId,
+      name: product.name,
+      price: product.price,
+      total: product.price * updatedItems[index].quantity,
+      enteredPrice: product.price,
+      enteredCurrency: "USD",
+      priceUSD: product.price,
+      priceFC: itemRate ? Math.round(product.price * itemRate) : undefined,
+      exchangeRate: itemRate,
+    };
 
     setEditForm((prev) => ({
       ...prev,
@@ -1286,9 +1343,15 @@ export default function SalesHistory() {
           quantity: item.quantity,
           price: item.price,
           total: item.total,
+          enteredPrice: item.enteredPrice,
+          enteredCurrency: item.enteredCurrency,
+          priceUSD: item.priceUSD,
+          priceFC: item.priceFC,
+          exchangeRate: item.exchangeRate,
         })),
         subtotal: subtotal,
         total: total,
+        exchangeRate: editingSale.exchangeRate,
         paymentMethod: editForm.paymentMethod,
         reason: editForm.reason,
         // Include the original sale ID to ensure update, not create
@@ -2113,12 +2176,17 @@ export default function SalesHistory() {
                           </h5>
                           <p className="text-sm text-gray-600">
                             Nombre de pieces: {item.quantity} ×{" "}
-                            {formatCurrency(item.price)}
+                            {formatOriginalItemUnitPrice(item)}
                           </p>
                         </div>
                         <div className="text-right">
                           <p className="font-medium text-gray-900">
-                            {formatCurrency(item.total)}
+                            {formatOriginalItemTotal(item)}
+                            {item.enteredCurrency === "FC" && (
+                              <span className="block text-xs font-normal text-gray-500">
+                                Reçu: {formatCurrency(getItemUsdTotal(item))}
+                              </span>
+                            )}
                           </p>
                         </div>
                       </div>
