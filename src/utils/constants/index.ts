@@ -58,4 +58,12 @@ export const units = [
     "packs",
 ];
 
-export const serverUrl = import.meta.env.VITE_API_URL;
+const configuredServerUrl = import.meta.env.VITE_API_URL?.trim();
+
+if (!configuredServerUrl) {
+    throw new Error("VITE_API_URL is required");
+}
+
+// All API consumers use one normalized build-time URL. The configured value
+// includes /api because Express mounts every application route beneath it.
+export const serverUrl = configuredServerUrl.replace(/\/+$/, "");

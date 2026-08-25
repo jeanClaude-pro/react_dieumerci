@@ -2,14 +2,10 @@
 import type { LoginPayload, RegisterPayload, LoginResponse, User } from "../types/auth";
 import { serverUrl } from "../utils/constants";
 
-const API_BASE =
-  (import.meta as any).env?.VITE_API_URL?.replace(/\/$/, "") ||
-  `${serverUrl}`; // adjust if needed
-
 export async function apiFetch<T>(path: string, options: RequestInit = {}) {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${serverUrl}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",

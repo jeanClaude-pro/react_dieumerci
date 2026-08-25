@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { formatDateGMT2 } from "../utils/dateUtils";
 import { useAuth } from "../hooks/useAuth";
 import { Calculator, DollarSign, RefreshCw } from "lucide-react";
+import { serverUrl } from "../utils/constants";
 
 interface SortieForm {
   reason: string;
@@ -21,7 +22,7 @@ interface ExchangeRate {
   lastUpdated: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL;
+const API_BASE = serverUrl;
 
 async function readJsonSafe(res: Response) {
   const ct = res.headers.get("content-type") || "";

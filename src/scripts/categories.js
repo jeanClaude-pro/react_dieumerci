@@ -1,3 +1,5 @@
+import { serverUrl } from "../utils/constants";
+
 const categories = [
   {
     id: "1",
@@ -32,8 +34,6 @@ const categories = [
     description: "Car parts and automotive supplies",
   },
 ];
-
-const serverUrl = import.meta.env.VITE_API_URL;
 
 async function main() {
   try {

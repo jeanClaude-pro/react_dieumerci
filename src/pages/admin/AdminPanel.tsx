@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import { useAuth } from "../../hooks/useAuth";
+import { serverUrl } from "../../utils/constants";
 import {
   Users,
   UserPlus,
@@ -26,7 +27,7 @@ import {
   Pencil,
 } from "lucide-react";
 
-const API_BASE = import.meta.env.VITE_API_URL;
+const API_BASE = serverUrl;
 
 type AppRole =
   | "admin"

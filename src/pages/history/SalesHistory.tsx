@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { formatDateTimeGMT2, formatMonthNameGMT2 } from "../../utils/dateUtils";
+import { serverUrl } from "../../utils/constants";
 import {
   Search,
   FileText,
@@ -233,7 +234,7 @@ export default function SalesHistory() {
     fetchCurrentUser();
     fetchSales();
     fetchProducts();
-    fetch(`${import.meta.env.VITE_API_URL}/settings/receipt`, {
+    fetch(`${serverUrl}/settings/receipt`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then((r) => r.ok ? r.json() : null)
@@ -279,7 +280,7 @@ export default function SalesHistory() {
       }
 
       // Fallback: /users/me is the correct endpoint
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/users/me`, {
+      const res = await fetch(`${serverUrl}/users/me`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
@@ -351,7 +352,7 @@ export default function SalesHistory() {
       setError(null);
       
       const queryString = buildQueryString();
-      const url = `${import.meta.env.VITE_API_URL}/sales${queryString ? `?${queryString}` : ''}`;
+      const url = `${serverUrl}/sales${queryString ? `?${queryString}` : ''}`;
       
       console.log("Fetching sales from:", url);
       
@@ -505,7 +506,7 @@ export default function SalesHistory() {
   const fetchProducts = async () => {
     try {
       setLoadingProducts(true);
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/products?limit=0`, {
+      const res = await fetch(`${serverUrl}/products?limit=0`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
@@ -1360,7 +1361,7 @@ export default function SalesHistory() {
       };
 
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/sales/${editingSale._id}`,
+        `${serverUrl}/sales/${editingSale._id}`,
         {
           method: "PUT",
           headers: {
@@ -1416,7 +1417,7 @@ export default function SalesHistory() {
     try {
       setLoading(true);
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/sales/${sale._id}/void`,
+        `${serverUrl}/sales/${sale._id}/void`,
         {
           method: "PATCH",
           headers: {

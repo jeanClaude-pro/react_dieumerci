@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { serverUrl } from "../../utils/constants";
 import {
   Search,
   ShoppingCart,
@@ -52,9 +53,6 @@ interface Sale {
 
 type UiPayment = "cash" | "mpesa" | "card" | "bank" | "other";
 type ModelPayment = "cash" | "card" | "transfer" | "other";
-
-// ✅ Ensure we always have a base URL (prevents fetch to "undefined/products")
-const serverUrl = import.meta.env.VITE_API_URL;
 
 function uiToModelPayment(pm: UiPayment): ModelPayment {
   if (pm === "cash") return "cash";

@@ -3,6 +3,7 @@
 import type React from "react";
 import { formatDateGMT2, formatDateTimeGMT2 } from "../../utils/dateUtils";
 import { useState, useEffect } from "react";
+import { serverUrl } from "../../utils/constants";
 import {
   Users,
   Search,
@@ -30,8 +31,6 @@ interface Customer {
   createdAt: string;
   updatedAt: string;
 }
-
-const serverUrl = import.meta.env.VITE_API_URL;
 
 export default function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);

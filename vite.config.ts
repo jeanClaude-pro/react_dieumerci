@@ -1,11 +1,23 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [
+export default defineConfig(({ mode }) => {
+  const apiUrl = loadEnv(mode, '.', '').VITE_API_URL?.trim()
+  const usesLocalBackend = /^https?:\/\/(localhost|127\.0\.0\.1)(?::|\/|$)/i.test(
+    apiUrl || '',
+  )
+
+  if (mode === 'production' && (!apiUrl || usesLocalBackend)) {
+    throw new Error(
+      'Production VITE_API_URL must point to the deployed backend, not localhost.',
+    )
+  }
+
+  return {
+    plugins: [
     react(),
     tailwindcss(),
     VitePWA({
@@ -65,5 +77,6 @@ export default defineConfig({
         enabled: false,
       },
     }),
-  ],
+    ],
+  }
 })

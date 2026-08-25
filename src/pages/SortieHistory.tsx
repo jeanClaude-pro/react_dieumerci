@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { formatDateTimeGMT2, formatTimeGMT2, formatMonthNameGMT2 } from "../utils/dateUtils";
+import { serverUrl } from "../utils/constants";
 import {
   Search,
   FileText,
@@ -276,7 +277,7 @@ export default function SortieHistory() {
         setCurrentUser(userData);
       } else {
         // Fallback to API call
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/me`, {
+        const res = await fetch(`${serverUrl}/auth/me`, {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
@@ -296,7 +297,7 @@ export default function SortieHistory() {
 
   const fetchUserPermissions = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/expenses/permissions/me`, {
+      const res = await fetch(`${serverUrl}/expenses/permissions/me`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
@@ -318,7 +319,7 @@ export default function SortieHistory() {
       setError(null);
       
       const queryString = buildQueryString();
-      const url = `${import.meta.env.VITE_API_URL}/expenses${queryString ? `?${queryString}` : ''}`;
+      const url = `${serverUrl}/expenses${queryString ? `?${queryString}` : ''}`;
       
       console.log("Fetching expenses from:", url);
       
@@ -554,7 +555,7 @@ export default function SortieHistory() {
     try {
       setHistoryLoading(true);
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/expenses/${expenseId}/history`,
+        `${serverUrl}/expenses/${expenseId}/history`,
         {
           headers: {
             "Content-Type": "application/json",
@@ -587,7 +588,7 @@ export default function SortieHistory() {
     try {
       if (!isValid) {
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/expenses/${validatingExpense._id}`,
+          `${serverUrl}/expenses/${validatingExpense._id}`,
           {
             method: "DELETE",
             headers: {
@@ -612,7 +613,7 @@ export default function SortieHistory() {
         }
       } else {
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/expenses/${
+          `${serverUrl}/expenses/${
             validatingExpense._id
           }/validate`,
           {
@@ -660,7 +661,7 @@ export default function SortieHistory() {
       }
 
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/expenses/${editingExpense._id}`,
+        `${serverUrl}/expenses/${editingExpense._id}`,
         {
           method: "PUT",
           headers: {
@@ -715,11 +716,11 @@ export default function SortieHistory() {
     setError(null);
 
     try {
-      let endpoint = `${import.meta.env.VITE_API_URL}/expenses/${deletingExpense._id}`;
+      let endpoint = `${serverUrl}/expenses/${deletingExpense._id}`;
       
       // If expense is not pending and user is admin, use admin delete endpoint
       if (deletingExpense.status !== "pending" && userPermissions.isAdmin) {
-        endpoint = `${import.meta.env.VITE_API_URL}/expenses/${deletingExpense._id}/admin`;
+        endpoint = `${serverUrl}/expenses/${deletingExpense._id}/admin`;
       }
 
       const response = await fetch(endpoint, {

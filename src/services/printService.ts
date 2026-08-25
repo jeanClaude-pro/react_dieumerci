@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL;
+import { serverUrl } from "../utils/constants";
 
 export interface PrintReceiptData {
   shopName: string;
@@ -24,7 +24,7 @@ export interface PrintReceiptData {
 export class PrintService {
   static async printReceipt(receiptData: PrintReceiptData, type: 'sale' | 'reservation' = 'sale'): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE}/print/receipt`, {
+      const response = await fetch(`${serverUrl}/print/receipt`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -47,7 +47,7 @@ export class PrintService {
 
   static async printStub(receiptData: PrintReceiptData, type: 'sale' | 'reservation' = 'sale'): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE}/print/stub`, {
+      const response = await fetch(`${serverUrl}/print/stub`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from "react";
 import { formatDateGMT2, formatDateTimeGMT2, formatTimeGMT2, formatNowGMT2 } from "../utils/dateUtils";
+import { serverUrl } from "../utils/constants";
 import { 
   Search, 
   Eye, 
@@ -72,7 +73,7 @@ interface Product {
   sku?: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL;
+const API_BASE = serverUrl;
 
 export default function ReservationManagement() {
   const [reservations, setReservations] = useState<Reservation[]>([]);

@@ -22,6 +22,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { generateCompanyReport, type ReportSections } from "./reportGenerator";
+import { serverUrl } from "../../utils/constants";
 
 // Define interfaces for the data structures
 interface SaleItem {
@@ -137,8 +138,6 @@ interface TimeframeData {
   start: string;
   end: string;
 }
-
-const serverUrl = import.meta.env.VITE_API_URL;
 
 // Helper function to get today's date in correct format
 const getTodayDate = (): string => {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { formatDateTimeGMT2 } from "../utils/dateUtils";
+import { serverUrl } from "../utils/constants";
 import {
   Search,
   FileText,
@@ -191,7 +192,7 @@ export default function EntryHistory() {
   useEffect(() => {
     fetchCurrentUser();
     fetchEntries();
-    fetch(`${import.meta.env.VITE_API_URL}/settings/receipt`, {
+    fetch(`${serverUrl}/settings/receipt`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` },
     })
       .then((r) => r.ok ? r.json() : null)
@@ -232,7 +233,7 @@ export default function EntryHistory() {
         setIsAdmin(userData.role === "admin" || userData.role === "administrator");
       } else {
         // Fallback to API call
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/me`, {
+        const res = await fetch(`${serverUrl}/auth/me`, {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
@@ -279,7 +280,7 @@ export default function EntryHistory() {
       // Add status filter for edited entries view
       const statusParam = showEditedEntries ? "&status=all" : "&status=active";
       
-      const url = `${import.meta.env.VITE_API_URL}/entries?${timeframeParams}${statusParam}`;
+      const url = `${serverUrl}/entries?${timeframeParams}${statusParam}`;
       
       console.log("Fetching entries from:", url);
       
@@ -730,7 +731,7 @@ export default function EntryHistory() {
       console.log("Sending update data:", updateData);
 
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/entries/${editingEntry._id}`,
+        `${serverUrl}/entries/${editingEntry._id}`,
         {
           method: "PUT",
           headers: {
@@ -776,7 +777,7 @@ export default function EntryHistory() {
     try {
       setLoading(true);
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/entries/${entry._id}`,
+        `${serverUrl}/entries/${entry._id}`,
         {
           method: "DELETE",
           headers: {

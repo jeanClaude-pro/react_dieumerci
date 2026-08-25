@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { formatDateTimeGMT2 } from "../utils/dateUtils";
+import { serverUrl } from "../utils/constants";
 import { 
   DollarSign, 
   RefreshCw, 
@@ -41,7 +42,7 @@ interface HistoriqueTaux {
   createdAt: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL;
+const API_BASE = serverUrl;
 
 export default function TauxChange() {
   const [tauxActuel, setTauxActuel] = useState<TauxChange | null>(null);

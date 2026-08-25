@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { formatNowGMT2, formatDateGMT2, formatTimeGMT2 } from "../utils/dateUtils";
 import { useAuth } from "../hooks/useAuth";
 import { DollarSign, RefreshCw, Calculator, Search } from "lucide-react";
+import { serverUrl } from "../utils/constants";
 
 interface Product {
   _id: string;
@@ -26,7 +27,7 @@ interface ExchangeRate {
   lastUpdated: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL;
+const API_BASE = serverUrl;
 
 type UiPayment = "cash" | "mpesa" | "card" | "bank" | "other";
 type ModelPayment = "cash" | "card" | "transfer" | "other";
