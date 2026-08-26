@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import {
   BarChart3,
   TrendingUp,
@@ -23,70 +23,6 @@ import {
 } from "lucide-react";
 import { generateCompanyReport, type ReportSections } from "./reportGenerator";
 import { serverUrl } from "../../utils/constants";
-
-// Define interfaces for the data structures
-interface SaleItem {
-  productId?: string;
-  name?: string;
-  quantity?: number;
-  price?: number;
-  total?: number;
-}
-
-interface Sale {
-  _id?: string;
-  total: number;
-  status?: string;
-  createdAt?: string;
-  date?: string;
-  saleDate?: string;
-  items?: SaleItem[];
-  customerId?: string;
-  customerName?: string;
-  type?: string;
-  saleId?: string;
-  saleNumber?: string;
-  customer?: {
-    name?: string;
-    phone?: string;
-    email?: string;
-  };
-}
-
-interface Customer {
-  _id?: string;
-  id?: string;
-  name?: string;
-  totalSpent?: number;
-  totalPurchases?: number;
-  email?: string;
-}
-
-interface Expense {
-  _id?: string;
-  amount: number;
-  status: string;
-  createdAt?: string;
-  date?: string;
-  validatedAt?: string;
-  reason?: string;
-  expenseId?: string;
-  recipientName?: string;
-}
-
-interface Entry {
-  _id?: string;
-  amount: number;
-  status: string;
-  createdAt?: string;
-  date?: string;
-  source?: string;
-  category?: string;
-  entryId?: string;
-  receivedFrom?: {
-    name?: string;
-  };
-}
 
 interface AnalyticsData {
   totalSales: number;
@@ -227,31 +163,54 @@ const getTimeframeParams = (
   const today = new Date();
   
   switch (timeframe) {
-    case "day":
+    case "day": {
       params.set("date", selectedDate || getTodayDate());
       break;
+    }
       
-    case "week":
+    case "week": {
       const weekAgo = new Date();
       weekAgo.setDate(weekAgo.getDate() - 7);
       params.set("from", weekAgo.toISOString().split('T')[0]);
       params.set("to", today.toISOString().split('T')[0]);
       break;
+    }
       
-    case "month":
+    case "month": {
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
       const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
       params.set("from", firstDayOfMonth.toISOString().split('T')[0]);
       params.set("to", lastDayOfMonth.toISOString().split('T')[0]);
       break;
+    }
       
-    case "year":
+    case "year": {
       const year = selectedYear || today.getFullYear();
       params.set("year", year.toString());
       break;
+    }
   }
   
   return params.toString();
+};
+
+const describeTimeframe = (
+  timeframe: "day" | "week" | "month" | "year",
+  selectedDate: string,
+  selectedYear: number
+) => {
+  if (timeframe === "day") {
+    return new Date(selectedDate).toLocaleDateString("fr-FR", {
+      timeZone: "Africa/Lubumbashi",
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  }
+  if (timeframe === "week") return "Cette Semaine";
+  if (timeframe === "month") return "Ce Mois";
+  return `Année ${selectedYear}`;
 };
 
 export default function Analytics() {
@@ -341,13 +300,8 @@ export default function Analytics() {
       .catch(() => {});
   }, []);
 
-  // Main effect to fetch data when timeframe changes
-  useEffect(() => {
-    fetchAnalytics();
-  }, [timeframe, selectedYear, selectedDate]);
-
   // Fetch analytics data with server-side timeframe filtering
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     try {
       setLoading(true);
       const effectiveTimeframe = shouldSeeOnlyTodayData() ? "day" : timeframe;
@@ -361,6 +315,11 @@ export default function Analytics() {
       });
       if (!response.ok) throw new Error(`Failed to fetch analytics: ${response.status}`);
       const payload = await response.json();
+      if (payload.source !== "mongodb-aggregation" || payload.paginated !== false) {
+        throw new Error(
+          "Invalid analytics response: production must use the aggregation endpoint"
+        );
+      }
       const raw = payload.data;
       const chartRows = (raw.chartData || []).map((row: any, index: number) => {
         const date = new Date(row.date);
@@ -387,7 +346,11 @@ export default function Analytics() {
       };
       setAnalytics(normalized);
       setTimeframeData({
-        description: getTimeframeLabel(),
+        description: describeTimeframe(
+          effectiveTimeframe,
+          effectiveDate,
+          selectedYear
+        ),
         start: payload.timeframe.start,
         end: payload.timeframe.end,
       });
@@ -398,585 +361,12 @@ export default function Analytics() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedDate, selectedYear, timeframe]);
 
-  // Fetch only today's data for non-admin users
-  const fetchTodayDataOnly = async () => {
-    try {
-      const today = getTodayDate();
-      
-      // Build query with today's date
-      const timeframeParams = `date=${today}`;
-      
-      // Fetch sales, expenses, and entries for today
-      const [salesResponse, expensesResponse, entriesResponse] = await Promise.all([
-        fetch(`${serverUrl}/sales?${timeframeParams}`, {
-          headers: getHeaders(),
-        }),
-        fetch(`${serverUrl}/expenses?${timeframeParams}`, {
-          headers: getHeaders(),
-        }),
-        fetch(`${serverUrl}/entries?${timeframeParams}`, {
-          headers: getHeaders(),
-        })
-      ]);
-
-      if (!salesResponse.ok) {
-        throw new Error(`Failed to fetch sales: ${salesResponse.status}`);
-      }
-
-      const salesData = await salesResponse.json();
-      const expensesData = expensesResponse.ok ? await expensesResponse.json() : { data: [], summary: { totalAmount: 0 } };
-      const entriesData = entriesResponse.ok ? await entriesResponse.json() : { data: [], summary: { totalAmount: 0 } };
-
-      // Process the data for today
-      const processedAnalytics = processTodayData(
-        salesData,
-        expensesData,
-        entriesData
-      );
-      
-      setAnalytics(processedAnalytics);
-      setTimeframeData({ description: "Aujourd'hui", start: today, end: today });
-      
-    } catch (error) {
-      console.error("Error fetching today's data:", error);
-      throw error;
-    }
-  };
-  void fetchTodayDataOnly;
-
-  // Fetch data with timeframe filtering for admin users
-  const fetchDataWithTimeframe = async () => {
-    try {
-      // Build timeframe parameters
-      const timeframeParams = getTimeframeParams(timeframe, selectedYear, selectedDate);
-      
-      // Fetch sales, expenses, and entries with timeframe filtering
-      const [salesResponse, expensesResponse, entriesResponse, customersResponse] = await Promise.all([
-        fetch(`${serverUrl}/sales?${timeframeParams}`, {
-          headers: getHeaders(),
-        }),
-        fetch(`${serverUrl}/expenses?${timeframeParams}`, {
-          headers: getHeaders(),
-        }),
-        fetch(`${serverUrl}/entries?${timeframeParams}`, {
-          headers: getHeaders(),
-        }),
-        fetch(`${serverUrl}/customers?limit=0`, {
-          headers: getHeaders(),
-        })
-      ]);
-
-      if (!salesResponse.ok) {
-        throw new Error(`Failed to fetch sales: ${salesResponse.status}`);
-      }
-
-      const salesData = await salesResponse.json();
-      const expensesData = expensesResponse.ok ? await expensesResponse.json() : { data: [], summary: { totalAmount: 0 } };
-      const entriesData = entriesResponse.ok ? await entriesResponse.json() : { data: [], summary: { totalAmount: 0 } };
-      const customersData = customersResponse.ok ? await customersResponse.json() : [];
-
-      // Extract customers from response
-      const customers = Array.isArray(customersData) 
-        ? customersData 
-        : customersData.data || customersData.customers || [];
-
-      // Process the data with timeframe
-      const processedAnalytics = processAnalyticsData(
-        salesData,
-        expensesData,
-        entriesData,
-        customers
-      );
-      
-      setAnalytics(processedAnalytics);
-      setTimeframeData(salesData.timeframe);
-      
-      // Extract available years for year selection
-      if (salesData.timeframe) {
-        const years = extractAvailableYears();
-        setAvailableYears(years);
-        if (years.length > 0 && !years.includes(selectedYear)) {
-          setSelectedYear(years[0]);
-        }
-      }
-      
-    } catch (error) {
-      console.error("Error fetching analytics with timeframe:", error);
-      throw error;
-    }
-  };
-  void fetchDataWithTimeframe;
-
-  // Process today's data for non-admin users
-  const processTodayData = (
-    salesData: any,
-    expensesData: any,
-    entriesData: any
-  ): AnalyticsData => {
-    const sales = salesData.data || [];
-    const expenses = expensesData.data || [];
-    const entries = entriesData.data || [];
-
-    // Filter completed sales only (not voided, not corrected, not expense type)
-    const completedSales = sales.filter((sale: Sale) => 
-      sale.status !== "voided" && 
-      sale.status !== "refunded" && 
-      sale.status !== "corrected" &&
-      sale.type !== "expense" &&
-      (sale.status === "completed" || sale.status === "pending")
-    );
-
-    const totalSales = completedSales.length;
-    const totalRevenue = completedSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0);
-    
-    // Calculate entries (active entries only)
-    const activeEntries = entries.filter((entry: Entry) => entry.status === "active");
-    const totalEntries = activeEntries.reduce((sum: number, entry: Entry) => sum + entry.amount, 0);
-    
-    // Calculate validated expenses
-    const validatedExpenses = expenses.filter((expense: Expense) => expense.status === "validated");
-    const totalValidatedExpenses = validatedExpenses.reduce((sum: number, expense: Expense) => sum + expense.amount, 0);
-    
-    // Calculate net revenue
-    const netRevenue = (totalRevenue + totalEntries) - totalValidatedExpenses;
-
-    // Count unique products
-    const productIds = new Set();
-    completedSales.forEach((sale: Sale) => {
-      if (sale.items && Array.isArray(sale.items)) {
-        sale.items.forEach((item: SaleItem) => {
-          if (item.productId) {
-            productIds.add(item.productId);
-          }
-        });
-      }
-    });
-    const totalProducts = productIds.size;
-
-    // Count unique customers
-    const customerIds = new Set();
-    completedSales.forEach((sale: Sale) => {
-      if (sale.customerId) {
-        customerIds.add(sale.customerId);
-      } else if (sale.customer?.phone) {
-        customerIds.add(sale.customer.phone);
-      }
-    });
-    const totalCustomers = customerIds.size;
-
-    // Today's chart data
-    const today = new Date();
-    const salesByDay = [
-      {
-        date: today.toLocaleDateString("fr-FR", {
-          timeZone: "Africa/Lubumbashi",
-          day: "numeric",
-          month: "short",
-        }),
-        dayName: today.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", weekday: "long" }),
-        sales: totalSales,
-        revenue: totalRevenue,
-      },
-    ];
-
-    // Top products from today's sales
-    const productStats = new Map();
-    completedSales.forEach((sale: Sale) => {
-      if (sale.items && Array.isArray(sale.items)) {
-        sale.items.forEach((item: SaleItem) => {
-          const productName = item.name || "Unknown Product";
-          if (productStats.has(productName)) {
-            const existing = productStats.get(productName);
-            productStats.set(productName, {
-              quantity: existing.quantity + (item.quantity || 0),
-              revenue: existing.revenue + (item.total || 0),
-            });
-          } else {
-            productStats.set(productName, {
-              quantity: item.quantity || 0,
-              revenue: item.total || 0,
-            });
-          }
-        });
-      }
-    });
-
-    const topProducts = Array.from(productStats.entries())
-      .map(([name, stats]) => ({ name, ...stats }))
-      .sort((a, b) => b.quantity - a.quantity);
-
-    // Top customers from today's sales
-    const customerStats = new Map();
-    completedSales.forEach((sale: Sale) => {
-      const customerName = sale.customer?.name || sale.customerName || "Unknown Customer";
-      const key = customerName;
-      
-      if (customerStats.has(key)) {
-        const existing = customerStats.get(key);
-        customerStats.set(key, {
-          name: customerName,
-          purchases: existing.purchases + 1,
-          totalSpent: existing.totalSpent + sale.total,
-        });
-      } else {
-        customerStats.set(key, {
-          name: customerName,
-          purchases: 1,
-          totalSpent: sale.total,
-        });
-      }
-    });
-
-    const topCustomers = Array.from(customerStats.values())
-      .filter(customer => customer.purchases > 0 && customer.name !== "Unknown Customer")
-      .sort((a, b) => b.totalSpent - a.totalSpent)
-      .slice(0, 5);
-
-    // Simple growth trends (0 for today view)
-    const recentTrends = {
-      salesGrowth: 0,
-      revenueGrowth: 0,
-      customerGrowth: 0,
-    };
-
-    return {
-      totalSales,
-      totalRevenue,
-      totalCustomers,
-      totalProducts,
-      totalValidatedExpenses,
-      totalEntries,
-      netRevenue,
-      salesByDay,
-      salesByWeek: [],
-      salesByMonth: [],
-      salesByYear: [],
-      topProducts,
-      topCustomers,
-      recentTrends,
-    };
-  };
-
-  // Process analytics data with timeframe for admin users
-  const processAnalyticsData = (
-    salesData: any,
-    expensesData: any,
-    entriesData: any,
-    customers: Customer[]
-  ): AnalyticsData => {
-    const sales = salesData.data || [];
-    const expensesSummary = expensesData.summary || { totalAmount: 0 };
-    const entriesSummary = entriesData.summary || { totalAmount: 0 };
-
-    // Filter completed sales
-    const completedSales = sales.filter((sale: Sale) => 
-      sale.status !== "voided" && 
-      sale.status !== "refunded" && 
-      sale.status !== "corrected" &&
-      sale.type !== "expense" &&
-      (sale.status === "completed" || sale.status === "pending")
-    );
-
-    const totalSales = completedSales.length;
-    const totalRevenue = completedSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0);
-    const totalEntries = entriesSummary.totalAmount || 0;
-    const totalValidatedExpenses = expensesSummary.validated?.amount || 0;
-    const netRevenue = (totalRevenue + totalEntries) - totalValidatedExpenses;
-
-    // Count unique products
-    const productIds = new Set();
-    completedSales.forEach((sale: Sale) => {
-      if (sale.items && Array.isArray(sale.items)) {
-        sale.items.forEach((item: SaleItem) => {
-          if (item.productId) {
-            productIds.add(item.productId);
-          }
-        });
-      }
-    });
-    const totalProducts = productIds.size;
-
-    // Count unique customers
-    const customerIds = new Set();
-    completedSales.forEach((sale: Sale) => {
-      if (sale.customerId) {
-        customerIds.add(sale.customerId);
-      } else if (sale.customer?.phone) {
-        customerIds.add(sale.customer.phone);
-      }
-    });
-    const totalCustomers = customerIds.size;
-
-    // Generate chart data based on timeframe
-    const chartData = generateChartData(completedSales);
-
-    // Top products
-    const productStats = new Map();
-    completedSales.forEach((sale: Sale) => {
-      if (sale.items && Array.isArray(sale.items)) {
-        sale.items.forEach((item: SaleItem) => {
-          const productName = item.name || "Unknown Product";
-          if (productStats.has(productName)) {
-            const existing = productStats.get(productName);
-            productStats.set(productName, {
-              quantity: existing.quantity + (item.quantity || 0),
-              revenue: existing.revenue + (item.total || 0),
-            });
-          } else {
-            productStats.set(productName, {
-              quantity: item.quantity || 0,
-              revenue: item.total || 0,
-            });
-          }
-        });
-      }
-    });
-
-    const topProducts = Array.from(productStats.entries())
-      .map(([name, stats]) => ({ name, ...stats }))
-      .sort((a, b) => b.quantity - a.quantity);
-
-    // Top customers
-    const customerStats = new Map();
-    completedSales.forEach((sale: Sale) => {
-      const customerName = sale.customer?.name || sale.customerName || "Unknown Customer";
-      const key = customerName;
-      
-      if (customerStats.has(key)) {
-        const existing = customerStats.get(key);
-        customerStats.set(key, {
-          name: customerName,
-          purchases: existing.purchases + 1,
-          totalSpent: existing.totalSpent + sale.total,
-        });
-      } else {
-        customerStats.set(key, {
-          name: customerName,
-          purchases: 1,
-          totalSpent: sale.total,
-        });
-      }
-    });
-
-    // Also include customers from the customers list
-    customers.forEach((customer: Customer) => {
-      const key = customer.name || `Customer ${customer._id?.substring(0, 8)}...`;
-      if (!customerStats.has(key) && customer.totalSpent && customer.totalSpent > 0) {
-        customerStats.set(key, {
-          name: customer.name || `Customer ${customer._id?.substring(0, 8)}...`,
-          purchases: customer.totalPurchases || 0,
-          totalSpent: customer.totalSpent || 0,
-        });
-      }
-    });
-
-    const topCustomers = Array.from(customerStats.values())
-      .filter(customer => customer.purchases > 0 && customer.name !== "Unknown Customer")
-      .sort((a, b) => b.totalSpent - a.totalSpent)
-      .slice(0, 5);
-
-    // Calculate growth trends
-    const recentTrends = calculateGrowthTrends(completedSales, chartData);
-
-    return {
-      totalSales,
-      totalRevenue,
-      totalCustomers,
-      totalProducts,
-      totalValidatedExpenses,
-      totalEntries,
-      netRevenue,
-      ...chartData,
-      topProducts,
-      topCustomers,
-      recentTrends,
-    };
-  };
-
-  // Generate chart data based on timeframe
-  const generateChartData = (sales: Sale[]) => {
-    if (!sales.length) {
-      return {
-        salesByDay: [],
-        salesByWeek: [],
-        salesByMonth: [],
-        salesByYear: [],
-      };
-    }
-
-    const now = new Date();
-    
-    // For day view - last 7 days
-    const salesByDay = getLast7Days().map((date: Date) => {
-      const daySales = sales.filter((sale: Sale) => {
-        try {
-          const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || "");
-          return saleDate.toDateString() === date.toDateString();
-        } catch (error) {
-          return false;
-        }
-      });
-      return {
-        date: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", day: "numeric", month: "short" }),
-        dayName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", weekday: "long" }),
-        sales: daySales.length,
-        revenue: daySales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
-      };
-    });
-
-    // For week view - last 4 weeks
-    const salesByWeek = getLast4Weeks().map((week: { start: Date; end: Date }, index: number) => {
-      const weekSales = sales.filter((sale: Sale) => {
-        try {
-          const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || "");
-          return saleDate >= week.start && saleDate <= week.end;
-        } catch (error) {
-          return false;
-        }
-      });
-
-      const startDateStr = week.start.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", day: "numeric", month: "short" });
-      const endDateStr = week.end.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", day: "numeric", month: "short" });
-
-      return {
-        week: `Semaine ${index + 1}`,
-        startDate: startDateStr,
-        endDate: endDateStr,
-        sales: weekSales.length,
-        revenue: weekSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
-      };
-    });
-
-    // For month view - last 6 months
-    const salesByMonth = getLast6Months().map((month: any) => {
-      const monthSales = sales.filter((sale: Sale) => {
-        try {
-          const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || "");
-          return saleDate.getMonth() === month.month && saleDate.getFullYear() === month.year;
-        } catch (error) {
-          return false;
-        }
-      });
-      return {
-        month: month.shortName,
-        monthName: month.fullName,
-        sales: monthSales.length,
-        revenue: monthSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
-      };
-    });
-
-    // For year view - group by month for selected year
-    const currentYear = selectedYear || now.getFullYear();
-    const yearSales = sales.filter((sale: Sale) => {
-      try {
-        const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || "");
-        return saleDate.getFullYear() === currentYear;
-      } catch (error) {
-        return false;
-      }
-    });
-
-    const monthsData = Array.from({ length: 12 }, (_, i) => {
-      const monthSales = yearSales.filter((sale: Sale) => {
-        try {
-          const saleDate = new Date(sale.createdAt || sale.date || sale.saleDate || "");
-          return saleDate.getMonth() === i;
-        } catch (error) {
-          return false;
-        }
-      });
-      
-      const monthDate = new Date(currentYear, i, 1);
-      return {
-        month: String(i),
-        monthName: monthDate.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", month: "long" }),
-        sales: monthSales.length,
-        revenue: monthSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
-      };
-    }).filter(month => month.sales > 0);
-
-    const salesByYear = [{
-      year: currentYear.toString(),
-      months: monthsData,
-    }];
-
-    return {
-      salesByDay,
-      salesByWeek,
-      salesByMonth,
-      salesByYear,
-    };
-  };
-
-  // Helper functions for chart data
-  const getLast7Days = (): Date[] => {
-    const days = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      days.push(date);
-    }
-    return days;
-  };
-
-  const getLast4Weeks = (): { start: Date; end: Date }[] => {
-    const weeks = [];
-    for (let i = 3; i >= 0; i--) {
-      const end = new Date();
-      end.setDate(end.getDate() - i * 7);
-      const start = new Date(end);
-      start.setDate(start.getDate() - 6);
-      weeks.push({ start, end });
-    }
-    return weeks;
-  };
-
-  const getLast6Months = (): any[] => {
-    const months = [];
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date();
-      date.setMonth(date.getMonth() - i);
-      months.push({
-        month: date.getMonth(),
-        year: date.getFullYear(),
-        shortName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", month: "short" }),
-        fullName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", month: "long" }),
-      });
-    }
-    return months;
-  };
-
-  // Calculate growth trends
-  const calculateGrowthTrends = (_sales: Sale[], chartData: any) => {
-    const salesByMonth = chartData.salesByMonth || [];
-    
-    if (salesByMonth.length < 2) {
-      return {
-        salesGrowth: null,
-        revenueGrowth: null,
-        customerGrowth: null,
-      };
-    }
-
-    const currentMonth = salesByMonth[salesByMonth.length - 1];
-    const previousMonth = salesByMonth[salesByMonth.length - 2];
-
-    const salesGrowth = previousMonth.sales > 0 
-      ? Math.round(((currentMonth.sales - previousMonth.sales) / previousMonth.sales) * 100)
-      : currentMonth.sales > 0 ? 100 : 0;
-
-    const revenueGrowth = previousMonth.revenue > 0 
-      ? Math.round(((currentMonth.revenue - previousMonth.revenue) / previousMonth.revenue) * 100)
-      : currentMonth.revenue > 0 ? 100 : 0;
-
-    return {
-      salesGrowth,
-      revenueGrowth,
-      customerGrowth: null,
-    };
-  };
+  // Analytics has one request per selected period and never walks sales pages.
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
   // Extract available years from data
   const extractAvailableYears = (): number[] => {
@@ -1018,7 +408,7 @@ export default function Analytics() {
     }
     
     switch (timeframe) {
-      case "day":
+      case "day": {
         if (selectedDate) {
           const date = new Date(selectedDate);
           return date.toLocaleDateString("fr-FR", {
@@ -1030,6 +420,7 @@ export default function Analytics() {
           });
         }
         return "Aujourd'hui";
+      }
       case "week":
         return "Cette Semaine";
       case "month":
@@ -1269,11 +660,12 @@ export default function Analytics() {
         return analytics.salesByWeek;
       case "month":
         return analytics.salesByMonth;
-      case "year":
+      case "year": {
         const yearData = analytics.salesByYear.find(
           (y) => y.year === selectedYear.toString()
         );
         return yearData ? yearData.months : [];
+      }
       default:
         return analytics.salesByWeek;
     }
