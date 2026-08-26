@@ -18,9 +18,9 @@ interface ReportAnalytics {
   netRevenue: number;
   topProducts: TopProduct[];
   recentTrends: {
-    salesGrowth: number;
-    revenueGrowth: number;
-    customerGrowth: number;
+    salesGrowth: number | null;
+    revenueGrowth: number | null;
+    customerGrowth: number | null;
   };
 }
 
@@ -437,7 +437,7 @@ export function generateCompanyReport(config: ReportConfig): void {
         { label: "Revenu total", value: formatCurrency(analytics.totalRevenue), note: "Revenu des ventes" },
         { label: "Entrees caisse", value: formatCurrency(analytics.totalEntries), note: "Montant recu" },
         { label: "Depenses", value: formatCurrency(analytics.totalValidatedExpenses), note: "Montant valide" },
-        { label: "Revenu net", value: formatCurrency(analytics.netRevenue), note: "Ventes + entrees - depenses" },
+        { label: "Tresorerie nette", value: formatCurrency(analytics.netRevenue), note: "Ventes + entrees - depenses validees" },
         { label: "Clients uniques", value: String(analytics.totalCustomers), note: "Sur la periode" },
       ],
       Y,
@@ -453,7 +453,7 @@ export function generateCompanyReport(config: ReportConfig): void {
     Y = infoPanel(
       doc,
       "Performance commerciale",
-      `Ventes: ${analytics.totalSales} | Revenu: ${formatCurrency(analytics.totalRevenue)} | Clients: ${analytics.totalCustomers} | Tendance: ${trend >= 0 ? "+" : ""}${trend}%`,
+      `Ventes: ${analytics.totalSales} | Revenu: ${formatCurrency(analytics.totalRevenue)} | Clients: ${analytics.totalCustomers} | Tendance: ${trend === null ? "N/A" : `${trend >= 0 ? "+" : ""}${trend.toFixed(1)}%`}`,
       Y,
     );
   }
@@ -494,7 +494,7 @@ export function generateCompanyReport(config: ReportConfig): void {
     Y = infoPanel(
       doc,
       "Activite client",
-      `Clients actifs: ${analytics.totalCustomers} | Tendance: ${trend >= 0 ? "+" : ""}${trend}%`,
+      `Clients actifs: ${analytics.totalCustomers} | Tendance: ${trend === null ? "N/A" : `${trend >= 0 ? "+" : ""}${trend.toFixed(1)}%`}`,
       Y,
     );
   }

@@ -116,6 +116,14 @@ interface TimeframeMetadata {
 interface SalesResponse {
   success: boolean;
   data: Sale[];
+  pagination: {
+    page: number;
+    limit: number;
+    totalRecords: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
   timeframe: TimeframeMetadata;
   summary: {
     totalRecords: number;
@@ -228,6 +236,8 @@ export default function SalesHistory() {
   // UI state
   const [showFilters, setShowFilters] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<SalesResponse["pagination"] | null>(null);
 
   // Fetch current user on component mount
   useEffect(() => {
@@ -266,7 +276,11 @@ export default function SalesHistory() {
     if (Object.keys(queryParams).length > 0) {
       fetchSales();
     }
-  }, [queryParams]);
+  }, [queryParams, currentPage, searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [queryParams, searchTerm]);
 
   // Fetch current user from localStorage (with API fallback)
   const fetchCurrentUser = async () => {
@@ -316,6 +330,9 @@ export default function SalesHistory() {
   // Build query string from queryParams
   const buildQueryString = () => {
     const params = new URLSearchParams();
+    params.set("page", String(currentPage));
+    params.set("limit", "50");
+    params.set("type", "sale");
     
     // Add timeframe parameters based on timeframeType
     switch(timeframeType) {
@@ -339,9 +356,9 @@ export default function SalesHistory() {
     }
     
     // Add additional filters
-    if (queryParams.type) params.append("type", queryParams.type);
     if (queryParams.status) params.append("status", queryParams.status);
     if (queryParams.customerPhone) params.append("customerPhone", queryParams.customerPhone);
+    if (searchTerm.trim()) params.append("search", searchTerm.trim());
     
     return params.toString();
   };
@@ -379,6 +396,7 @@ export default function SalesHistory() {
           
           // Update sales state
           setSales(validSales);
+          setPagination(data.pagination || null);
           
           // Update metadata
           setTimeframeMetadata(data.timeframe);
@@ -990,9 +1008,10 @@ export default function SalesHistory() {
         <div class="item-row">
           <div class="item-name"><strong>${item.name}</strong></div>
           <div class="item-quantity"><strong>${item.quantity}</strong></div>
-          <div class="item-unit-price"><strong>${getItemUsdUnitPrice(item).toFixed(2)}</strong></div>
-          <div class="item-line-total"><strong>${getItemUsdTotal(item).toFixed(2)}</strong></div>
+          <div class="item-unit-price"><strong>${getItemOriginalCurrency(item) === "FC" ? `${getItemOriginalUnitPrice(item).toLocaleString("fr-FR")} FC` : `$${getItemOriginalUnitPrice(item).toFixed(2)}`}</strong></div>
+          <div class="item-line-total"><strong>${getItemOriginalCurrency(item) === "FC" ? `${getItemOriginalTotal(item).toLocaleString("fr-FR")} FC` : `$${getItemOriginalTotal(item).toFixed(2)}`}</strong></div>
         </div>
+        ${getItemOriginalCurrency(item) === "FC" ? `<div class="item-name">Équiv. USD: $${getItemUsdTotal(item).toFixed(2)}</div>` : ""}
       `
         )
         .join("")}
@@ -2025,6 +2044,32 @@ export default function SalesHistory() {
           )}
         </div>
       </div>
+
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-3">
+          <span className="text-sm text-gray-600">
+            Page {pagination.page} sur {pagination.totalPages} · {pagination.totalRecords} ventes
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={!pagination.hasPreviousPage}
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              className="rounded border px-3 py-1.5 text-sm disabled:opacity-40"
+            >
+              Précédent
+            </button>
+            <button
+              type="button"
+              disabled={!pagination.hasNextPage}
+              onClick={() => setCurrentPage((page) => page + 1)}
+              className="rounded border px-3 py-1.5 text-sm disabled:opacity-40"
+            >
+              Suivant
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Sale Details Modal */}
       {showModal && selectedSale && (

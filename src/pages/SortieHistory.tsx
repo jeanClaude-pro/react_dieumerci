@@ -32,6 +32,11 @@ interface ExpenseItem {
   recipientName: string;
   recipientPhone: string;
   amount: number;
+  enteredAmount?: number;
+  enteredCurrency?: "USD" | "FC";
+  amountUSD?: number;
+  amountFC?: number;
+  exchangeRate?: number;
   paymentMethod: string;
   status: string;
   recordedBy: string;
@@ -45,6 +50,14 @@ interface ExpenseItem {
 interface ExpensesResponse {
   success: boolean;
   data: ExpenseItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    totalRecords: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
   timeframe: {
     description: string;
     start: string;
@@ -178,6 +191,8 @@ export default function SortieHistory() {
   const [timeframeDescription, setTimeframeDescription] = useState<string>("Today");
   const [showFilters, setShowFilters] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<ExpensesResponse["pagination"] | null>(null);
 
   // User permissions
   const [userPermissions, setUserPermissions] = useState<UserPermissions>({
@@ -192,6 +207,8 @@ export default function SortieHistory() {
   // Build query string from queryParams
   const buildQueryString = () => {
     const params = new URLSearchParams();
+    params.set("page", String(currentPage));
+    params.set("limit", "50");
     
     // Add timeframe parameters based on timeframeType
     switch(timeframeType) {
@@ -218,7 +235,7 @@ export default function SortieHistory() {
     if (queryParams.status) params.append("status", queryParams.status);
     if (queryParams.paymentMethod) params.append("paymentMethod", queryParams.paymentMethod);
     if (queryParams.recordedBy) params.append("recordedBy", queryParams.recordedBy);
-    if (queryParams.search) params.append("search", queryParams.search);
+    if (searchTerm.trim()) params.append("search", searchTerm.trim());
     
     return params.toString();
   };
@@ -235,7 +252,11 @@ export default function SortieHistory() {
     if (Object.keys(queryParams).length > 0) {
       fetchExpenses();
     }
-  }, [queryParams]);
+  }, [queryParams, currentPage, searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [queryParams, searchTerm]);
 
   // Effect to automatically set to today's date when timeframe changes to "day"
   useEffect(() => {
@@ -347,6 +368,7 @@ export default function SortieHistory() {
 
           setExpenses(sortedExpenses);
           setAllExpenses(sortedExpenses);
+          setPagination(data.pagination || null);
           
           // Update metadata
           setTimeframeDescription(data.timeframe.description);
@@ -474,6 +496,11 @@ export default function SortieHistory() {
       currency: "USD",
     }).format(amount);
   };
+
+  const formatOriginalAmount = (expense: ExpenseItem) =>
+    expense.enteredCurrency === "FC"
+      ? `${(expense.enteredAmount ?? expense.amountFC ?? 0).toLocaleString("fr-FR")} FC (Équiv. ${formatCurrency(expense.amountUSD ?? expense.amount)})`
+      : formatCurrency(expense.enteredAmount ?? expense.amount);
 
   const filteredExpenses = expenses.filter(
     (expense) =>
@@ -762,10 +789,12 @@ export default function SortieHistory() {
     const printWindow = window.open("", "_blank", "width=320,height=600");
     if (printWindow) {
       // Format the amount directly for the print window
-      const formattedAmount = new Intl.NumberFormat("fr-FR", {
-        style: "currency",
-        currency: "USD",
-      }).format(expense.amount);
+      const formattedAmount = expense.enteredCurrency === "FC"
+        ? `${(expense.enteredAmount ?? expense.amountFC ?? 0).toLocaleString("fr-FR")} FC (Équiv. $${(expense.amountUSD ?? expense.amount).toFixed(2)})`
+        : new Intl.NumberFormat("fr-FR", {
+            style: "currency",
+            currency: "USD",
+          }).format(expense.enteredAmount ?? expense.amount);
 
       const formattedDate = formatDateTimeGMT2(expense.createdAt);
       const validatedDate = expense.validatedAt
@@ -1626,7 +1655,7 @@ export default function SortieHistory() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {formatCurrency(expense.amount)}
+                      {formatOriginalAmount(expense)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -1741,6 +1770,18 @@ export default function SortieHistory() {
           )}
         </div>
       </div>
+
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-3">
+          <span className="text-sm text-gray-600">
+            Page {pagination.page} sur {pagination.totalPages} · {pagination.totalRecords} dépenses
+          </span>
+          <div className="flex gap-2">
+            <button disabled={!pagination.hasPreviousPage} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} className="rounded border px-3 py-1.5 disabled:opacity-40">Précédent</button>
+            <button disabled={!pagination.hasNextPage} onClick={() => setCurrentPage((page) => page + 1)} className="rounded border px-3 py-1.5 disabled:opacity-40">Suivant</button>
+          </div>
+        </div>
+      )}
 
       {/* Expense Details Modal */}
       {showModal && selectedExpense && (

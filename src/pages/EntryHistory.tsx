@@ -35,6 +35,11 @@ interface Entry {
   _id: string;
   entryId: string;
   amount: number;
+  enteredAmount?: number;
+  enteredCurrency?: "USD" | "FC";
+  amountUSD?: number;
+  amountFC?: number;
+  exchangeRate?: number;
   source: string;
   category: string;
   paymentMethod: string;
@@ -65,6 +70,30 @@ interface User {
   role: string;
   username?: string;
   permissions?: string[];
+}
+
+interface PaginationMetadata {
+  page: number;
+  limit: number;
+  totalRecords: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+interface EntrySummaryGroup {
+  count: number;
+  amount: number;
+}
+
+interface EntrySummary {
+  totalRecords: number;
+  totalAmount: number;
+  active: EntrySummaryGroup;
+  deleted: EntrySummaryGroup;
+  paymentMethods: Record<string, EntrySummaryGroup>;
+  categories: Record<string, EntrySummaryGroup>;
+  sources: Record<string, EntrySummaryGroup>;
 }
 
 // Helper function to get today's date in correct format
@@ -156,7 +185,9 @@ export default function EntryHistory() {
   const [editedEntries, setEditedEntries] = useState<Entry[]>([]);
   const [selectedEditedEntry, setSelectedEditedEntry] = useState<Entry | null>(null);
   const [showEditedDetailsModal, setShowEditedDetailsModal] = useState(false);
-  const [summary, setSummary] = useState<any>(null);
+  const [summary, setSummary] = useState<EntrySummary | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationMetadata | null>(null);
 
   // Sources and categories (same as Entry.tsx)
   const sources = [
@@ -215,7 +246,11 @@ export default function EntryHistory() {
     if (currentUser !== null) { // Only fetch entries after user data is loaded
       fetchEntries();
     }
-  }, [timeframe, selectedYear, selectedDate, showEditedEntries, currentUser]);
+  }, [timeframe, selectedYear, selectedDate, showEditedEntries, currentUser, currentPage, searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [timeframe, selectedYear, selectedDate, showEditedEntries, searchTerm]);
 
   // Update edited entries when entries change
   useEffect(() => {
@@ -279,8 +314,10 @@ export default function EntryHistory() {
       
       // Add status filter for edited entries view
       const statusParam = showEditedEntries ? "&status=all" : "&status=active";
+      const pageParam = `&page=${currentPage}&limit=50`;
+      const searchParam = searchTerm.trim() ? `&search=${encodeURIComponent(searchTerm.trim())}` : "";
       
-      const url = `${serverUrl}/entries?${timeframeParams}${statusParam}`;
+      const url = `${serverUrl}/entries?${timeframeParams}${statusParam}${pageParam}${searchParam}`;
       
       console.log("Fetching entries from:", url);
       
@@ -300,6 +337,7 @@ export default function EntryHistory() {
           // Set entries
           const fetchedEntries: Entry[] = data.data;
           setEntries(fetchedEntries);
+          setPagination(data.pagination || null);
           
           // Set timeframe description
           setTimeframeDescription(data.timeframe?.description || "");
@@ -406,6 +444,11 @@ export default function EntryHistory() {
       currency: "USD",
     }).format(amount);
   };
+
+  const formatOriginalAmount = (entry: Entry) =>
+    entry.enteredCurrency === "FC"
+      ? `${(entry.enteredAmount ?? entry.amountFC ?? 0).toLocaleString("fr-FR")} FC (Équiv. ${formatCurrency(entry.amountUSD ?? entry.amount)})`
+      : formatCurrency(entry.enteredAmount ?? entry.amount);
 
   // Function to view edited entry details
   const viewEditedEntryDetails = (entry: Entry) => {
@@ -572,7 +615,7 @@ export default function EntryHistory() {
       <div class="amount-section">
         <div class="amount-row">
           <div><strong>MONTANT REÇU:</strong></div>
-          <div><strong>$${entry.amount.toFixed(2)}</strong></div>
+          <div><strong>${formatOriginalAmount(entry)}</strong></div>
         </div>
       </div>
       
@@ -645,7 +688,7 @@ export default function EntryHistory() {
     let yPos = 120;
     doc.text(`Source: ${entry.source}`, 20, yPos); yPos += 7;
     doc.text(`Catégorie: ${entry.category}`, 20, yPos); yPos += 7;
-    doc.text(`Montant: ${formatCurrency(entry.amount)}`, 20, yPos); yPos += 7;
+    doc.text(`Montant: ${formatOriginalAmount(entry)}`, 20, yPos); yPos += 7;
     
     if (entry.description) {
       yPos += 3;
@@ -1140,7 +1183,7 @@ export default function EntryHistory() {
                       {entry.category}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {formatCurrency(entry.amount)}
+                      {formatOriginalAmount(entry)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -1236,6 +1279,18 @@ export default function EntryHistory() {
           )}
         </div>
       </div>
+
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-3">
+          <span className="text-sm text-gray-600">
+            Page {pagination.page} sur {pagination.totalPages} · {pagination.totalRecords} entrées
+          </span>
+          <div className="flex gap-2">
+            <button disabled={!pagination.hasPreviousPage} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} className="rounded border px-3 py-1.5 disabled:opacity-40">Précédent</button>
+            <button disabled={!pagination.hasNextPage} onClick={() => setCurrentPage((page) => page + 1)} className="rounded border px-3 py-1.5 disabled:opacity-40">Suivant</button>
+          </div>
+        </div>
+      )}
 
       {/* Entry Details Modal */}
       {showModal && selectedEntry && (

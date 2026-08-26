@@ -8,6 +8,14 @@ export interface PriceSnapshot {
   exchangeRate?: number;
 }
 
+export interface AmountSnapshot {
+  enteredAmount: number;
+  enteredCurrency: SaleCurrency;
+  amountUSD: number;
+  amountFC?: number;
+  exchangeRate?: number;
+}
+
 export interface StoredSaleItemPrice {
   price: number;
   quantity: number;
@@ -56,6 +64,21 @@ export function createPriceSnapshot(
   };
 }
 
+export function createAmountSnapshot(
+  enteredAmount: number,
+  enteredCurrency: SaleCurrency,
+  exchangeRate?: number
+): AmountSnapshot {
+  const price = createPriceSnapshot(enteredAmount, enteredCurrency, exchangeRate);
+  return {
+    enteredAmount: price.enteredPrice,
+    enteredCurrency: price.enteredCurrency,
+    amountUSD: price.priceUSD,
+    amountFC: price.priceFC,
+    exchangeRate: price.exchangeRate,
+  };
+}
+
 export function getItemUsdUnitPrice(item: StoredSaleItemPrice): number {
   return item.priceUSD ?? item.price;
 }
@@ -76,4 +99,12 @@ export function getItemOriginalCurrency(
   item: StoredSaleItemPrice
 ): SaleCurrency {
   return item.enteredCurrency ?? "USD";
+}
+
+export function canAddCartQuantity(
+  backendStock: number,
+  quantityAlreadyInCart: number,
+  quantityToAdd: number
+): boolean {
+  return backendStock - quantityAlreadyInCart >= quantityToAdd;
 }

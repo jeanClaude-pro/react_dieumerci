@@ -4,8 +4,8 @@
  * Do NOT use these for business logic, API params, or stored values.
  */
 
-// UTC+2, no DST — matches Africa/Lubumbashi (Eastern DRC) / Africa/Harare
-const GMT2_TZ = 'Africa/Harare';
+// UTC+2, no DST — official business timezone for Lubumbashi.
+const GMT2_TZ = "Africa/Lubumbashi";
 
 /** Short date: "12 janv. 2025" */
 export const formatDateGMT2 = (input: string | Date | null | undefined): string => {

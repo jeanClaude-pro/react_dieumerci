@@ -5,6 +5,7 @@ import { useAuth } from "../hooks/useAuth";
 import { DollarSign, RefreshCw, Calculator, Search } from "lucide-react";
 import { serverUrl } from "../utils/constants";
 import {
+  canAddCartQuantity,
   createPriceSnapshot,
   type PriceSnapshot,
   type SaleCurrency,
@@ -363,8 +364,11 @@ export default function NewSale() {
       .filter(item => item.productId === productId)
       .reduce((sum, item) => sum + item.quantity, 0);
     
-    const availableStock = productToCheck.stock - currentCartQuantity;
-    return availableStock >= quantityToAdd;
+    return canAddCartQuantity(
+      productToCheck.stock,
+      currentCartQuantity,
+      quantityToAdd
+    );
   };
 
   // Toggle between USD and FC input modes
@@ -575,14 +579,6 @@ export default function NewSale() {
       ]);
     }
 
-    // Update local product stock (for display purposes only)
-    // The actual stock validation is done in checkStockAfterAdd
-    setProducts((prevProducts) =>
-      prevProducts.map((p) =>
-        p._id === product._id ? { ...p, stock: p.stock - quantity } : p
-      )
-    );
-
     // Reset form fields
     setForm((f) => ({
       ...f,
@@ -598,19 +594,10 @@ export default function NewSale() {
   }
 
   function removeFromCart(index: number) {
-    const itemToRemove = cart[index];
     const newCart = [...cart];
     newCart.splice(index, 1);
     setCart(newCart);
 
-    // Restore stock when item is removed from cart
-    setProducts((prevProducts) =>
-      prevProducts.map((p) =>
-        p._id === itemToRemove.productId
-          ? { ...p, stock: p.stock + itemToRemove.quantity }
-          : p
-      )
-    );
   }
 
   function authHeader(): Record<string, string> {
@@ -939,9 +926,10 @@ export default function NewSale() {
         <div class="item-row">
           <div class="item-name"><strong>${item.name}</strong></div>
           <div class="item-quantity"><strong>${item.quantity}</strong></div>
-          <div class="item-unit-price"><strong>${item.unitPrice.toFixed(2)}</strong></div>
-          <div class="item-line-total"><strong>${item.total.toFixed(2)}</strong></div>
+          <div class="item-unit-price"><strong>${item.enteredCurrency === "FC" ? `${item.enteredPrice.toLocaleString("fr-FR")} FC` : `$${item.enteredPrice.toFixed(2)}`}</strong></div>
+          <div class="item-line-total"><strong>${item.enteredCurrency === "FC" ? `${(item.enteredPrice * item.quantity).toLocaleString("fr-FR")} FC` : `$${(item.enteredPrice * item.quantity).toFixed(2)}`}</strong></div>
         </div>
+        ${item.enteredCurrency === "FC" ? `<div class="item-name">Équiv. USD: $${(item.priceUSD * item.quantity).toFixed(2)}</div>` : ""}
       `
         )
         .join("")}

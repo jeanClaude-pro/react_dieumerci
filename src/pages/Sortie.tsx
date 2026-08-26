@@ -4,6 +4,7 @@ import { formatDateGMT2 } from "../utils/dateUtils";
 import { useAuth } from "../hooks/useAuth";
 import { Calculator, DollarSign, RefreshCw } from "lucide-react";
 import { serverUrl } from "../utils/constants";
+import { createAmountSnapshot } from "../utils/salePricing";
 
 interface SortieForm {
   reason: string;
@@ -154,11 +155,17 @@ export default function Sortie() {
     setError(null);
 
     try {
+      const amountSnapshot = createAmountSnapshot(
+        parseFloat(form.currencyMode === "fc" ? form.amountInFC : form.amount),
+        form.currencyMode === "fc" ? "FC" : "USD",
+        exchangeRate?.rate
+      );
       const body = {
         reason: form.reason,
         recipientName: form.recipientName,
         recipientPhone: form.recipientPhone,
-        amount: parseFloat(form.amount),
+        amount: amountSnapshot.amountUSD,
+        ...amountSnapshot,
         paymentMethod: form.paymentMethod,
         notes: form.notes || "",
         recordedBy: currentUser?.username || "unknown",

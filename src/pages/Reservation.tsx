@@ -4,6 +4,12 @@ import { formatNowGMT2, formatDateGMT2, formatTimeGMT2 } from "../utils/dateUtil
 import { useAuth } from "../hooks/useAuth";
 import { DollarSign, RefreshCw, Calculator, Search } from "lucide-react";
 import { serverUrl } from "../utils/constants";
+import {
+  canAddCartQuantity,
+  createPriceSnapshot,
+  type PriceSnapshot,
+  type SaleCurrency,
+} from "../utils/salePricing";
 
 interface Product {
   _id: string;
@@ -13,7 +19,7 @@ interface Product {
   price?: number;
 }
 
-interface CartItem {
+interface CartItem extends PriceSnapshot {
   productId: string;
   name: string;
   quantity: number;
@@ -122,6 +128,7 @@ export default function Reservation() {
     paymentMethod: "cash" as UiPayment,
     notes: "",
     currencyMode: "usd" as "usd" | "fc" // New field for currency mode
+    ,priceSource: "USD" as SaleCurrency
   });
 
   const [message, setMessage] = useState<string | null>(null);
@@ -234,32 +241,18 @@ export default function Reservation() {
     );
   }, [products, searchTerm]);
 
-  // Calculate USD price when FC price changes
-  useEffect(() => {
-    if (form.currencyMode === "fc" && form.priceInFC && exchangeRate) {
-      const fcPrice = parseFloat(form.priceInFC) || 0;
-      const usdPrice = fcPrice / exchangeRate.rate;
-      setForm(prev => ({
-        ...prev,
-        unitPrice: usdPrice.toFixed(2)
-      }));
-    }
-  }, [form.priceInFC, form.currencyMode, exchangeRate]);
-
-  // Calculate FC price when USD price changes
-  useEffect(() => {
-    if (form.currencyMode === "usd" && form.unitPrice && exchangeRate) {
-      const usdPrice = parseFloat(form.unitPrice) || 0;
-      const fcPrice = usdPrice * exchangeRate.rate;
-      setForm(prev => ({
-        ...prev,
-        priceInFC: Math.round(fcPrice).toString()
-      }));
-    }
-  }, [form.unitPrice, form.currencyMode, exchangeRate]);
-
   const quantity = parseInt(form.quantity) || 0;
-  const unitPrice = parseFloat(form.unitPrice) || 0;
+  const enteredPrice =
+    parseFloat(form.priceSource === "FC" ? form.priceInFC : form.unitPrice) || 0;
+  const currentPrice = useMemo<PriceSnapshot | null>(() => {
+    if (enteredPrice <= 0) return null;
+    try {
+      return createPriceSnapshot(enteredPrice, form.priceSource, exchangeRate?.rate);
+    } catch {
+      return null;
+    }
+  }, [enteredPrice, form.priceSource, exchangeRate?.rate]);
+  const unitPrice = currentPrice?.priceUSD || 0;
   const itemTotal = quantity * unitPrice;
   const cartTotal = cart.reduce((sum, item) => sum + item.total, 0);
 
@@ -282,7 +275,10 @@ export default function Reservation() {
       ...prev,
       productId: selectedProduct._id,
       unitPrice: selectedProduct.price ? selectedProduct.price.toString() : "",
-      priceInFC: ""
+      priceInFC: selectedProduct.price && exchangeRate
+        ? Math.round(selectedProduct.price * exchangeRate.rate).toString()
+        : "",
+      priceSource: "USD",
     }));
     setSearchTerm(selectedProduct.name);
     setShowSearchResults(false);
@@ -307,8 +303,11 @@ export default function Reservation() {
       .filter(item => item.productId === productId)
       .reduce((sum, item) => sum + item.quantity, 0);
     
-    const availableStock = productToCheck.stock - currentCartQuantity;
-    return availableStock >= quantityToAdd;
+    return canAddCartQuantity(
+      productToCheck.stock,
+      currentCartQuantity,
+      quantityToAdd
+    );
   };
 
   // Toggle between USD and FC input modes
@@ -316,8 +315,6 @@ export default function Reservation() {
     setForm(prev => ({
       ...prev,
       currencyMode: prev.currencyMode === "usd" ? "fc" : "usd",
-      unitPrice: "",
-      priceInFC: ""
     }));
   };
 
@@ -416,7 +413,7 @@ export default function Reservation() {
       return;
     }
 
-    if (unitPrice <= 0) {
+    if (!currentPrice) {
       setError("Le prix unitaire doit être supérieur à zéro");
       return;
     }
@@ -454,42 +451,29 @@ export default function Reservation() {
           quantity,
           unitPrice,
           total: itemTotal,
+          ...currentPrice,
         },
       ]);
     }
-
-    // Update local product stock (for display purposes only)
-    // The actual stock validation is done in checkStockAfterAdd
-    setProducts((prevProducts) =>
-      prevProducts.map((p) =>
-        p._id === product._id ? { ...p, stock: p.stock - quantity } : p
-      )
-    );
 
     // Reset form fields
     setForm((f) => ({
       ...f,
       quantity: "",
       unitPrice: product.price ? product.price.toString() : "",
-      priceInFC: ""
+      priceInFC: product.price && exchangeRate
+        ? Math.round(product.price * exchangeRate.rate).toString()
+        : "",
+      priceSource: "USD",
     }));
     setSearchTerm("");
   }
 
   function removeFromCart(index: number) {
-    const itemToRemove = cart[index];
     const newCart = [...cart];
     newCart.splice(index, 1);
     setCart(newCart);
 
-    // Restore stock when item is removed from cart
-    setProducts((prevProducts) =>
-      prevProducts.map((p) =>
-        p._id === itemToRemove.productId
-          ? { ...p, stock: p.stock + itemToRemove.quantity }
-          : p
-      )
-    );
   }
 
   function authHeader(): Record<string, string> {
@@ -792,7 +776,8 @@ export default function Reservation() {
         <div class="item-row">
           <div class="item-name"><strong>${item.name}</strong></div>
           <div class="item-details">
-            <strong>${item.quantity}PcsX$${item.unitPrice.toFixed(2)}</strong>
+            <strong>${item.quantity}Pcs X ${item.enteredCurrency === "FC" ? `${item.enteredPrice.toLocaleString("fr-FR")} FC = ${(item.enteredPrice * item.quantity).toLocaleString("fr-FR")} FC` : `$${item.enteredPrice.toFixed(2)}`}</strong>
+            ${item.enteredCurrency === "FC" ? `<br/>Équiv. USD: $${(item.priceUSD * item.quantity).toFixed(2)}` : ""}
           </div>
         </div>
       `
@@ -1271,7 +1256,7 @@ export default function Reservation() {
     try {
       // Get current date and time for reservation
       const now = new Date();
-      const reservationDate = now.toLocaleDateString("fr-FR", { timeZone: 'Africa/Harare' });
+      const reservationDate = now.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi" });
       const reservationTime = formatTimeGMT2(now);
 
       const body = {
@@ -1285,6 +1270,11 @@ export default function Reservation() {
           name: item.name,
           quantity: item.quantity,
           price: item.unitPrice,
+          enteredPrice: item.enteredPrice,
+          enteredCurrency: item.enteredCurrency,
+          priceUSD: item.priceUSD,
+          priceFC: item.priceFC,
+          exchangeRate: item.exchangeRate,
         })),
         subtotal: cartTotal,
         total: cartTotal,
@@ -1294,6 +1284,7 @@ export default function Reservation() {
         reservationTime: reservationTime,
         notes: form.notes || "",
         type: "reservation",
+        exchangeRate: cart[0]?.exchangeRate ?? exchangeRate?.rate,
       };
 
       // Use the sales endpoint to create the reservation (money recorded immediately)
@@ -1388,6 +1379,7 @@ export default function Reservation() {
         paymentMethod: form.paymentMethod,
         notes: "",
         currencyMode: "usd"
+        ,priceSource: "USD"
       });
       setCart([]);
       setSearchTerm("");
@@ -1528,7 +1520,18 @@ export default function Reservation() {
                   step="0.01"
                   name="unitPrice"
                   value={form.unitPrice}
-                  onChange={(e) => setForm({ ...form, unitPrice: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    const numeric = Number.parseFloat(value);
+                    setForm({
+                      ...form,
+                      unitPrice: value,
+                      priceInFC: exchangeRate && Number.isFinite(numeric)
+                        ? Math.round(numeric * exchangeRate.rate).toString()
+                        : "",
+                      priceSource: "USD",
+                    });
+                  }}
                   placeholder={product?.price ? `ex: ${product.price}` : "Entrer le prix en USD"}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   min={0.01}
@@ -1538,7 +1541,18 @@ export default function Reservation() {
                   type="number"
                   name="priceInFC"
                   value={form.priceInFC}
-                  onChange={(e) => setForm({ ...form, priceInFC: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    const numeric = Number.parseFloat(value);
+                    setForm({
+                      ...form,
+                      priceInFC: value,
+                      unitPrice: exchangeRate && Number.isFinite(numeric)
+                        ? (numeric / exchangeRate.rate).toString()
+                        : "",
+                      priceSource: "FC",
+                    });
+                  }}
                   placeholder="Entrer le prix en FC"
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   min={1}

@@ -127,9 +127,9 @@ interface AnalyticsData {
   topProducts: { name: string; quantity: number; revenue: number }[];
   topCustomers: { name: string; purchases: number; totalSpent: number }[];
   recentTrends: {
-    salesGrowth: number;
-    revenueGrowth: number;
-    customerGrowth: number;
+    salesGrowth: number | null;
+    revenueGrowth: number | null;
+    customerGrowth: number | null;
   };
 }
 
@@ -137,6 +137,26 @@ interface TimeframeData {
   description: string;
   start: string;
   end: string;
+}
+
+function TrendIndicator({ value }: { value: number | null }) {
+  if (value === null) {
+    return <span className="mt-1 text-xs text-gray-500">Pas assez de données</span>;
+  }
+
+  const positive = value >= 0;
+  return (
+    <div className="flex items-center mt-1">
+      {positive ? (
+        <ArrowUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-500" />
+      ) : (
+        <ArrowDown className="w-3 h-3 sm:w-4 sm:h-4 text-red-500" />
+      )}
+      <span className={`text-xs sm:text-sm ml-1 ${positive ? "text-green-500" : "text-red-500"}`}>
+        {Math.abs(value).toFixed(1)}%
+      </span>
+    </div>
+  );
 }
 
 // Helper function to get today's date in correct format
@@ -330,15 +350,48 @@ export default function Analytics() {
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
-
-      // For non-admin users, only fetch today's data
-      if (shouldSeeOnlyTodayData()) {
-        await fetchTodayDataOnly();
-        return;
-      }
-
-      // For admin, fetch data with timeframe filtering
-      await fetchDataWithTimeframe();
+      const effectiveTimeframe = shouldSeeOnlyTodayData() ? "day" : timeframe;
+      const effectiveDate = shouldSeeOnlyTodayData() ? getTodayDate() : selectedDate;
+      const params = new URLSearchParams(
+        getTimeframeParams(effectiveTimeframe, selectedYear, effectiveDate)
+      );
+      params.set("timeframe", effectiveTimeframe);
+      const response = await fetch(`${serverUrl}/analytics/summary?${params}`, {
+        headers: getHeaders(),
+      });
+      if (!response.ok) throw new Error(`Failed to fetch analytics: ${response.status}`);
+      const payload = await response.json();
+      const raw = payload.data;
+      const chartRows = (raw.chartData || []).map((row: any, index: number) => {
+        const date = new Date(row.date);
+        return {
+          date: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", day: "numeric", month: "short" }),
+          dayName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", weekday: "long" }),
+          week: `Semaine ${index + 1}`,
+          startDate: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", day: "numeric", month: "short" }),
+          endDate: "",
+          month: String(date.getUTCMonth()),
+          monthName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", month: "long" }),
+          sales: row.sales,
+          revenue: row.revenue,
+        };
+      });
+      const normalized: AnalyticsData = {
+        ...raw,
+        salesByDay: effectiveTimeframe === "day" ? chartRows : [],
+        salesByWeek: effectiveTimeframe === "week" ? chartRows : [],
+        salesByMonth: effectiveTimeframe === "month" ? chartRows : [],
+        salesByYear: effectiveTimeframe === "year"
+          ? [{ year: selectedYear.toString(), months: chartRows }]
+          : [],
+      };
+      setAnalytics(normalized);
+      setTimeframeData({
+        description: getTimeframeLabel(),
+        start: payload.timeframe.start,
+        end: payload.timeframe.end,
+      });
+      setAvailableYears(extractAvailableYears());
     } catch (error) {
       console.error("Error fetching analytics:", error);
       setAnalytics(null);
@@ -391,6 +444,7 @@ export default function Analytics() {
       throw error;
     }
   };
+  void fetchTodayDataOnly;
 
   // Fetch data with timeframe filtering for admin users
   const fetchDataWithTimeframe = async () => {
@@ -453,6 +507,7 @@ export default function Analytics() {
       throw error;
     }
   };
+  void fetchDataWithTimeframe;
 
   // Process today's data for non-admin users
   const processTodayData = (
@@ -516,11 +571,11 @@ export default function Analytics() {
     const salesByDay = [
       {
         date: today.toLocaleDateString("fr-FR", {
-          timeZone: "Africa/Harare",
+          timeZone: "Africa/Lubumbashi",
           day: "numeric",
           month: "short",
         }),
-        dayName: today.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", weekday: "long" }),
+        dayName: today.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", weekday: "long" }),
         sales: totalSales,
         revenue: totalRevenue,
       },
@@ -627,7 +682,7 @@ export default function Analytics() {
     const totalSales = completedSales.length;
     const totalRevenue = completedSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0);
     const totalEntries = entriesSummary.totalAmount || 0;
-    const totalValidatedExpenses = expensesSummary.totalAmount || 0;
+    const totalValidatedExpenses = expensesSummary.validated?.amount || 0;
     const netRevenue = (totalRevenue + totalEntries) - totalValidatedExpenses;
 
     // Count unique products
@@ -764,8 +819,8 @@ export default function Analytics() {
         }
       });
       return {
-        date: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", day: "numeric", month: "short" }),
-        dayName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", weekday: "long" }),
+        date: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", day: "numeric", month: "short" }),
+        dayName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", weekday: "long" }),
         sales: daySales.length,
         revenue: daySales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
       };
@@ -782,8 +837,8 @@ export default function Analytics() {
         }
       });
 
-      const startDateStr = week.start.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", day: "numeric", month: "short" });
-      const endDateStr = week.end.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", day: "numeric", month: "short" });
+      const startDateStr = week.start.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", day: "numeric", month: "short" });
+      const endDateStr = week.end.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", day: "numeric", month: "short" });
 
       return {
         week: `Semaine ${index + 1}`,
@@ -836,7 +891,7 @@ export default function Analytics() {
       const monthDate = new Date(currentYear, i, 1);
       return {
         month: String(i),
-        monthName: monthDate.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", month: "long" }),
+        monthName: monthDate.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", month: "long" }),
         sales: monthSales.length,
         revenue: monthSales.reduce((sum: number, sale: Sale) => sum + sale.total, 0),
       };
@@ -886,22 +941,22 @@ export default function Analytics() {
       months.push({
         month: date.getMonth(),
         year: date.getFullYear(),
-        shortName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", month: "short" }),
-        fullName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Harare", month: "long" }),
+        shortName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", month: "short" }),
+        fullName: date.toLocaleDateString("fr-FR", { timeZone: "Africa/Lubumbashi", month: "long" }),
       });
     }
     return months;
   };
 
   // Calculate growth trends
-  const calculateGrowthTrends = (sales: Sale[], chartData: any) => {
+  const calculateGrowthTrends = (_sales: Sale[], chartData: any) => {
     const salesByMonth = chartData.salesByMonth || [];
     
     if (salesByMonth.length < 2) {
       return {
-        salesGrowth: sales.length > 0 ? 5 : 0,
-        revenueGrowth: sales.length > 0 ? 8 : 0,
-        customerGrowth: sales.length > 0 ? 3 : 0,
+        salesGrowth: null,
+        revenueGrowth: null,
+        customerGrowth: null,
       };
     }
 
@@ -919,7 +974,7 @@ export default function Analytics() {
     return {
       salesGrowth,
       revenueGrowth,
-      customerGrowth: Math.round(salesGrowth * 0.8), // Rough estimate
+      customerGrowth: null,
     };
   };
 
@@ -967,7 +1022,7 @@ export default function Analytics() {
         if (selectedDate) {
           const date = new Date(selectedDate);
           return date.toLocaleDateString("fr-FR", {
-            timeZone: "Africa/Harare",
+            timeZone: "Africa/Lubumbashi",
             weekday: "long",
             year: "numeric",
             month: "long",
@@ -1347,22 +1402,7 @@ export default function Analytics() {
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {analytics.totalSales}
                 </p>
-                <div className="flex items-center mt-1">
-                  {analytics.recentTrends.salesGrowth >= 0 ? (
-                    <ArrowUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-500" />
-                  ) : (
-                    <ArrowDown className="w-3 h-3 sm:w-4 sm:h-4 text-red-500" />
-                  )}
-                  <span
-                    className={`text-xs sm:text-sm ml-1 ${
-                      analytics.recentTrends.salesGrowth >= 0
-                        ? "text-green-500"
-                        : "text-red-500"
-                    }`}
-                  >
-                    {Math.abs(analytics.recentTrends.salesGrowth)}%
-                  </span>
-                </div>
+                <TrendIndicator value={analytics.recentTrends.salesGrowth} />
               </div>
               <div className="metric-icon p-2 sm:p-3 rounded-full">
                 <BarChart3 className="w-4 h-4 sm:w-6 sm:h-6 text-blue-600" />
@@ -1377,22 +1417,7 @@ export default function Analytics() {
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {formatCurrency(analytics.totalRevenue)}
                 </p>
-                <div className="flex items-center mt-1">
-                  {analytics.recentTrends.revenueGrowth >= 0 ? (
-                    <ArrowUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-500" />
-                  ) : (
-                    <ArrowDown className="w-3 h-3 sm:w-4 sm:h-4 text-red-500" />
-                  )}
-                  <span
-                    className={`text-xs sm:text-sm ml-1 ${
-                      analytics.recentTrends.revenueGrowth >= 0
-                        ? "text-green-500"
-                        : "text-red-500"
-                    }`}
-                  >
-                    {Math.abs(analytics.recentTrends.revenueGrowth)}%
-                  </span>
-                </div>
+                <TrendIndicator value={analytics.recentTrends.revenueGrowth} />
               </div>
               <div className="metric-icon p-2 sm:p-3 rounded-full">
                 <DollarSign className="w-4 h-4 sm:w-6 sm:h-6 text-green-600" />
@@ -1440,7 +1465,7 @@ export default function Analytics() {
           <div className="metric-card bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-gray-600">Revenu Net</p>
+                <p className="text-xs sm:text-sm text-gray-600">Trésorerie Nette</p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {formatCurrency(analytics.netRevenue)}
                 </p>
@@ -1461,12 +1486,7 @@ export default function Analytics() {
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {analytics.totalCustomers}
                 </p>
-                <div className="flex items-center mt-1">
-                  <ArrowUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-500" />
-                  <span className="text-xs sm:text-sm ml-1 text-green-500">
-                    {analytics.recentTrends.customerGrowth}%
-                  </span>
-                </div>
+                <TrendIndicator value={analytics.recentTrends.customerGrowth} />
               </div>
               <div className="metric-icon p-2 sm:p-3 rounded-full">
                 <Users className="w-4 h-4 sm:w-6 sm:h-6 text-orange-600" />

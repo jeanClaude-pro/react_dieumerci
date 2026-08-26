@@ -4,6 +4,7 @@ import { formatNowGMT2, formatDateGMT2 } from "../utils/dateUtils";
 import { useAuth } from "../hooks/useAuth";
 import { DollarSign, RefreshCw, FileText, User, Calculator } from "lucide-react";
 import { serverUrl } from "../utils/constants";
+import { createAmountSnapshot } from "../utils/salePricing";
 
 interface Entry {
   _id: string;
@@ -486,13 +487,13 @@ export default function Entry() {
       <div class="amount-section">
         <div class="amount-row">
           <div><strong>MONTANT REÇU:</strong></div>
-          <div><strong>$${receiptData.amount.toFixed(2)}</strong></div>
+          <div><strong>${receiptData.enteredCurrency === "FC" ? `${receiptData.enteredAmount.toLocaleString("fr-FR")} FC` : `$${receiptData.enteredAmount.toFixed(2)}`}</strong></div>
         </div>
         ${
-          receiptData.exchangeRate 
+          receiptData.enteredCurrency === "FC"
             ? `<div class="amount-row">
                  <div><strong>ÉQUIVALENT FC:</strong></div>
-                 <div><strong>${new Intl.NumberFormat('fr-FR').format(receiptData.amount * receiptData.exchangeRate)} FC</strong></div>
+                 <div><strong>$${receiptData.amountUSD.toFixed(2)}</strong></div>
                </div>`
             : ''
         }
@@ -818,7 +819,7 @@ export default function Entry() {
       <div class="amount-section">
         <div class="amount-row">
           <div><strong>MONTANT REÇU:</strong></div>
-          <div><strong>$${receiptData.amount.toFixed(2)}</strong></div>
+          <div><strong>${receiptData.enteredCurrency === "FC" ? `${receiptData.enteredAmount.toLocaleString("fr-FR")} FC` : `$${receiptData.enteredAmount.toFixed(2)}`}</strong></div>
         </div>
       </div>
       
@@ -833,7 +834,7 @@ export default function Entry() {
         <div class="warning">Reçu #: <strong>${receiptData.receiptNumber}</strong></div>
         <div class="warning">Date: <strong>${receiptData.date}</strong></div>
         <div class="warning">Source: <strong>${receiptData.source}</strong></div>
-        <div class="warning">Montant: <strong>$${receiptData.amount.toFixed(2)}</strong></div>
+        <div class="warning">Montant: <strong>${receiptData.enteredCurrency === "FC" ? `${receiptData.enteredAmount.toLocaleString("fr-FR")} FC` : `$${receiptData.enteredAmount.toFixed(2)}`}</strong></div>
       </div>
       
       <!-- PAPER CUT INDICATOR -->
@@ -893,9 +894,15 @@ export default function Entry() {
     try {
       // Convert payment method to match backend model
       const normalizedPaymentMethod = uiToModelPayment(form.paymentMethod);
+      const amountSnapshot = createAmountSnapshot(
+        parseFloat(form.currencyMode === "fc" ? form.amountInFC : form.amount),
+        form.currencyMode === "fc" ? "FC" : "USD",
+        exchangeRate?.rate
+      );
 
       const body = {
-        amount: parseFloat(form.amount),
+        amount: amountSnapshot.amountUSD,
+        ...amountSnapshot,
         source: form.source,
         category: form.category,
         paymentMethod: normalizedPaymentMethod,
@@ -937,7 +944,8 @@ export default function Entry() {
         shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
         shopNumber: "+243 977 771 421 / +243 853 549 102",
         shopRegistration: "RCCM: 14-A-017885",
-        amount: parseFloat(form.amount),
+        amount: amountSnapshot.amountUSD,
+        ...amountSnapshot,
         source: form.source,
         category: form.category,
         paymentMethod: form.paymentMethod, // Keep UI payment method for display

@@ -27,6 +27,11 @@ interface ReservationItem {
   price: number;
   total: number;
   _id: string;
+  enteredPrice?: number;
+  enteredCurrency?: "USD" | "FC";
+  priceUSD?: number;
+  priceFC?: number;
+  exchangeRate?: number;
 }
 
 interface EditHistoryEntry {
@@ -73,6 +78,23 @@ interface Product {
   sku?: string;
 }
 
+interface PaginationMetadata {
+  page: number;
+  limit: number;
+  totalRecords: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+interface ReservationSummary {
+  totalReservations: number;
+  pending: number;
+  completed: number;
+  revenue: number;
+  itemQuantity: number;
+}
+
 const API_BASE = serverUrl;
 
 export default function ReservationManagement() {
@@ -88,6 +110,9 @@ export default function ReservationManagement() {
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed'>('all');
   const [userRole, setUserRole] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationMetadata | null>(null);
+  const [summary, setSummary] = useState<ReservationSummary | null>(null);
 
   // Edit modal states
   const [showEditModal, setShowEditModal] = useState(false);
@@ -104,13 +129,28 @@ export default function ReservationManagement() {
   const [loadingProducts, setLoadingProducts] = useState(false);
 
   useEffect(() => {
-    fetchReservations();
     fetchProducts();
     // Get user role from localStorage or auth context
-    const role = localStorage.getItem('userRole') || 'admin'; // Default to admin for testing
+    const storedUser = localStorage.getItem("user");
+    let role = "";
+    try {
+      role = storedUser ? JSON.parse(storedUser)?.role || "" : "";
+    } catch {
+      role = "";
+    }
     console.log('🔑 User Role:', role);
     setUserRole(role);
   }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => fetchReservations(), 250);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, searchTerm, filterStatus]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterStatus]);
 
   const fetchReservations = async () => {
     try {
@@ -120,7 +160,13 @@ export default function ReservationManagement() {
       console.log('🔍 Fetching reservations from API...');
       
       // Use the sales endpoint for reservations
-      const response = await fetch(`${API_BASE}/sales/reservations/all`, {
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: "50",
+      });
+      if (searchTerm.trim()) params.set("search", searchTerm.trim());
+      if (filterStatus !== "all") params.set("status", filterStatus);
+      const response = await fetch(`${API_BASE}/sales/reservations/all?${params}`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
@@ -131,9 +177,11 @@ export default function ReservationManagement() {
         const data = await response.json();
         console.log("📦 Reservations API Response:", data);
         
-        if (Array.isArray(data)) {
+        if (data?.success && Array.isArray(data.data)) {
           console.log(`✅ Found ${data.length} reservations`);
-          setReservations(data);
+          setReservations(data.data);
+          setPagination(data.pagination || null);
+          setSummary(data.summary || null);
         } else {
           console.warn("❌ Invalid data format from API");
           setError("Format de données invalide reçu de l'API");
@@ -355,6 +403,11 @@ export default function ReservationManagement() {
 
     const updatedItems = [...editForm.items];
     updatedItems[index].price = newPrice;
+    updatedItems[index].enteredPrice = newPrice;
+    updatedItems[index].enteredCurrency = "USD";
+    updatedItems[index].priceUSD = newPrice;
+    updatedItems[index].priceFC = undefined;
+    updatedItems[index].exchangeRate = undefined;
     updatedItems[index].total = newPrice * updatedItems[index].quantity;
 
     setEditForm((prev) => ({
@@ -385,6 +438,9 @@ export default function ReservationManagement() {
       price: defaultProduct.price,
       total: defaultProduct.price,
       _id: `temp-${Date.now()}`,
+      enteredPrice: defaultProduct.price,
+      enteredCurrency: "USD",
+      priceUSD: defaultProduct.price,
     };
 
     setEditForm((prev) => ({
@@ -404,6 +460,11 @@ export default function ReservationManagement() {
     updatedItems[index].productId = productId;
     updatedItems[index].name = product.name;
     updatedItems[index].price = product.price;
+    updatedItems[index].enteredPrice = product.price;
+    updatedItems[index].enteredCurrency = "USD";
+    updatedItems[index].priceUSD = product.price;
+    updatedItems[index].priceFC = undefined;
+    updatedItems[index].exchangeRate = undefined;
     updatedItems[index].total = product.price * updatedItems[index].quantity;
 
     setEditForm((prev) => ({
@@ -450,6 +511,11 @@ export default function ReservationManagement() {
           quantity: item.quantity,
           price: item.price,
           total: item.total,
+          enteredPrice: item.enteredPrice,
+          enteredCurrency: item.enteredCurrency,
+          priceUSD: item.priceUSD,
+          priceFC: item.priceFC,
+          exchangeRate: item.exchangeRate,
         })),
         subtotal: subtotal,
         total: total,
@@ -828,13 +894,13 @@ export default function ReservationManagement() {
         <div class="item-row">
           <div class="item-name"><strong>${item.name}</strong></div>
           <div class="item-details">
-            <strong>${item.quantity}Pcs × $${item.price.toFixed(2)}</strong>
+            <strong>${item.quantity}Pcs × ${item.enteredCurrency === "FC" && item.enteredPrice !== undefined ? `${item.enteredPrice.toLocaleString("fr-FR")} FC` : `$${(item.enteredPrice ?? item.price).toFixed(2)}`}</strong>
           </div>
         </div>
         <div class="item-row">
           <div class="item-name"><strong>Sous-total</strong></div>
           <div class="item-details">
-            <strong>$${item.total.toFixed(2)}</strong>
+            <strong>${item.enteredCurrency === "FC" && item.enteredPrice !== undefined ? `${(item.enteredPrice * item.quantity).toLocaleString("fr-FR")} FC<br/>Équiv. USD: $${((item.priceUSD ?? item.price) * item.quantity).toFixed(2)}` : `$${item.total.toFixed(2)}`}</strong>
           </div>
         </div>
       `
@@ -1019,7 +1085,7 @@ export default function ReservationManagement() {
         <div className="flex gap-3 items-center">
           <div className="bg-blue-50 px-4 py-2 rounded-lg border border-blue-200">
             <div className="text-sm text-blue-600 font-medium">
-              En attente: <span className="font-bold">{pendingReservations.length}</span>
+              En attente: <span className="font-bold">{summary?.pending ?? pendingReservations.length}</span>
             </div>
           </div>
           <div className="bg-green-50 px-4 py-2 rounded-lg border border-green-200">
@@ -1033,20 +1099,26 @@ export default function ReservationManagement() {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-lg shadow border">
-          <div className="text-2xl font-bold text-blue-600">{reservations.length}</div>
+          <div className="text-2xl font-bold text-blue-600">{summary?.totalReservations ?? reservations.length}</div>
           <div className="text-sm text-gray-600">Total Réservations</div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow border">
-          <div className="text-2xl font-bold text-orange-600">{pendingReservations.length}</div>
+          <div className="text-2xl font-bold text-orange-600">{summary?.pending ?? pendingReservations.length}</div>
           <div className="text-sm text-gray-600">En Attente</div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow border">
-          <div className="text-2xl font-bold text-green-600">{completedReservations.length}</div>
+          <div className="text-2xl font-bold text-green-600">{summary?.completed ?? completedReservations.length}</div>
           <div className="text-sm text-gray-600">Complétées</div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow border">
           <div className="text-2xl font-bold text-purple-600">
-            {reservations.reduce((sum, r) => sum + r.items.length, 0)}
+            {summary?.itemQuantity ?? reservations.reduce(
+              (sum, reservation) => sum + reservation.items.reduce(
+                (itemSum, item) => itemSum + item.quantity,
+                0
+              ),
+              0
+            )}
           </div>
           <div className="text-sm text-gray-600">Articles Réservés</div>
         </div>
@@ -1280,6 +1352,32 @@ export default function ReservationManagement() {
           )}
         </div>
       </div>
+
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-3">
+          <span className="text-sm text-gray-600">
+            Page {pagination.page} sur {pagination.totalPages} · {pagination.totalRecords} résultats
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={!pagination.hasPreviousPage}
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              className="rounded border px-3 py-1.5 text-sm disabled:opacity-40"
+            >
+              Précédent
+            </button>
+            <button
+              type="button"
+              disabled={!pagination.hasNextPage}
+              onClick={() => setCurrentPage((page) => page + 1)}
+              className="rounded border px-3 py-1.5 text-sm disabled:opacity-40"
+            >
+              Suivant
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Completion Confirmation Dialog */}
       {showCompletionDialog && reservationToComplete && (
