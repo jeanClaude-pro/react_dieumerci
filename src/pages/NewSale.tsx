@@ -4,6 +4,7 @@ import { formatNowGMT2, formatDateGMT2 } from "../utils/dateUtils";
 import { useAuth } from "../hooks/useAuth";
 import { DollarSign, RefreshCw, Calculator, Search } from "lucide-react";
 import { serverUrl } from "../utils/constants";
+import QRCode from "qrcode";
 import {
   canAddCartQuantity,
   createPriceSnapshot,
@@ -144,8 +145,7 @@ export default function NewSale() {
     priceInFC: "",
     customerName: "",
     customerPhone: "",
-    customerEmail: "",
-    isWalkIn: true,
+    isWalkIn: false,
     paymentMethod: "cash" as UiPayment,
     currencyMode: "usd" as "usd" | "fc",
     priceSource: "USD" as SaleCurrency,
@@ -325,7 +325,6 @@ export default function NewSale() {
       isWalkIn: !f.isWalkIn,
       customerName: "",
       customerPhone: "",
-      customerEmail: "",
     }));
   }
 
@@ -801,6 +800,17 @@ export default function NewSale() {
         border: 1px solid #ccc;
         border-radius: 2px;
       }
+      .receipt-qr {
+        text-align: center;
+        margin: 3mm auto;
+        padding: 2mm;
+        background: #fff;
+      }
+      .receipt-qr img {
+        width: 42mm;
+        height: 42mm;
+        image-rendering: pixelated;
+      }
       .customer-info {
         margin: 2mm 0;
         padding: 1mm 2mm;
@@ -903,11 +913,6 @@ export default function NewSale() {
             ? `<div class="customer-field">TELEPHONE: <strong>${receiptData.customerPhone}</strong></div>`
             : ""
         }
-        ${
-          receiptData.customerEmail
-            ? `<div class="customer-field">EMAIL: <strong>${receiptData.customerEmail}</strong></div>`
-            : ""
-        }
       </div>
 
       <div class="receipt-title">ARTICLES ACHETES</div>
@@ -953,6 +958,8 @@ export default function NewSale() {
       <div class="sales-person">
         Agent: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
       </div>
+
+      ${receiptData.qrDataUrl ? `<div class="receipt-qr"><img src="${receiptData.qrDataUrl}" alt="QR de contrôle du paiement" /><div><strong>SCAN CONTROLE PAIEMENT</strong></div></div>` : ""}
       
       <div class="footer">
         <div class="thank-you"><strong>${receiptData.receiptFooter || "MERCI POUR VOTRE ACHAT !"}</strong></div>
@@ -1335,6 +1342,8 @@ export default function NewSale() {
       <div class="sales-person">
         Agent: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
       </div>
+
+      ${receiptData.qrDataUrl ? `<div style="text-align:center;margin:3mm auto;padding:2mm;background:#fff"><img src="${receiptData.qrDataUrl}" alt="QR de contrôle du paiement" style="width:42mm;height:42mm;image-rendering:pixelated" /><div><strong>SCAN CONTROLE PAIEMENT</strong></div></div>` : ""}
       
       <div class="stub-footer">
         <div class="thank-you"><strong>SOUCHE DE CAISSE</strong></div>
@@ -1434,7 +1443,7 @@ export default function NewSale() {
           : {
               name: form.customerName,
               phone: form.customerPhone,
-              email: form.customerEmail || "",
+              email: "",
             },
         isWalkIn: form.isWalkIn,
         items: cart.map((item) => ({
@@ -1473,6 +1482,16 @@ export default function NewSale() {
         throw new Error(msg);
       }
 
+      if (!data.receiptToken) {
+        throw new Error("Le serveur n'a pas retourné le QR sécurisé du reçu");
+      }
+      const qrDataUrl = await QRCode.toDataURL(data.receiptToken, {
+        errorCorrectionLevel: "M",
+        margin: 4,
+        width: 320,
+        color: { dark: "#000000", light: "#ffffff" },
+      });
+
       // Get the sale ID from the API response
       const saleId = data.saleId || data._id;
       
@@ -1485,7 +1504,6 @@ export default function NewSale() {
         receiptFooter: shopSettings.receiptFooter,
         customerName: form.isWalkIn ? "Client de passage" : form.customerName,
         customerPhone: form.isWalkIn ? "" : form.customerPhone,
-        customerEmail: form.isWalkIn ? "" : form.customerEmail,
         items: cart,
         total: cartTotal,
         paymentMethod: form.paymentMethod,
@@ -1493,6 +1511,8 @@ export default function NewSale() {
         date: formatNowGMT2(),
         receiptNumber: saleId, // Use actual sale ID from API
         stubNumber: saleId, // Use actual sale ID from API for stub as well
+        qrToken: data.receiptToken,
+        qrDataUrl,
       };
 
       setReceiptData(newReceiptData);
@@ -1505,8 +1525,7 @@ export default function NewSale() {
         priceInFC: "",
         customerName: "",
         customerPhone: "",
-        customerEmail: "",
-        isWalkIn: true,
+        isWalkIn: false,
         paymentMethod: form.paymentMethod,
         currencyMode: "usd",
         priceSource: "USD",
@@ -1852,22 +1871,6 @@ export default function NewSale() {
                 value={form.customerPhone}
                 onChange={handleChange}
                 placeholder={form.isWalkIn ? "—" : "Entrer le numéro de téléphone"}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400"
-                disabled={form.isWalkIn}
-                required={!form.isWalkIn}
-              />
-            </div>
-
-            <div>
-              <label className="block mb-2 font-medium text-gray-700">
-                Email du client (optionnel)
-              </label>
-              <input
-                type="email"
-                name="customerEmail"
-                value={form.customerEmail}
-                onChange={handleChange}
-                placeholder="Entrer l'email du client"
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400"
                 disabled={form.isWalkIn}
               />

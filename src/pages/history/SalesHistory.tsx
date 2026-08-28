@@ -24,6 +24,7 @@ import {
   Shield,
 } from "lucide-react";
 import jsPDF from "jspdf";
+import QRCode from "qrcode";
 import {
   getItemOriginalCurrency,
   getItemOriginalTotal,
@@ -77,6 +78,12 @@ interface Sale {
   type?: string;
   isWalkIn?: boolean;
   exchangeRate?: number;
+  receiptToken?: string;
+  receiptVerification?: {
+    version: number;
+    paymentStatus: "pending" | "approved" | "rejected";
+    approvedAt?: string | null;
+  };
 }
 
 interface Product {
@@ -96,6 +103,7 @@ interface User {
   email: string;
   role: string;
   permissions?: string[];
+  actionPermissions?: string[];
 }
 
 // Timeframe metadata interface
@@ -204,6 +212,8 @@ export default function SalesHistory() {
   // User state for role checking
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const canReprint = currentUser?.role === "admin" ||
+    Boolean(currentUser?.actionPermissions?.includes("reprint_receipts"));
 
   // Timeframe state - Updated to match backend query parameters
   const [timeframeType, setTimeframeType] = useState<
@@ -688,8 +698,40 @@ export default function SalesHistory() {
     );
   };
 
+  const getReceiptQr = async (sale: Sale): Promise<{ receiptToken: string; qrDataUrl: string }> => {
+    let receiptToken = sale.receiptToken;
+    if (!receiptToken) {
+      const response = await fetch(`${serverUrl}/sales/${sale._id}/receipt-token`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.receiptToken) {
+        throw new Error(data.message || "QR du reçu indisponible");
+      }
+      receiptToken = data.receiptToken;
+    }
+    if (!receiptToken) throw new Error("QR du reçu indisponible");
+    const qrDataUrl = await (QRCode.toDataURL(receiptToken, {
+      errorCorrectionLevel: "M",
+      margin: 4,
+      width: 320,
+      color: { dark: "#000000", light: "#ffffff" },
+    }) as Promise<string>);
+    return {
+      receiptToken,
+      qrDataUrl,
+    };
+  };
+
   // Print function for ESC/POS receipt - opens print dialog
-  const printESC_POSReceipt = (sale: Sale) => {
+  const printESC_POSReceipt = async (sale: Sale) => {
+    let qrDataUrl: string;
+    try {
+      ({ qrDataUrl } = await getReceiptQr(sale));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "QR du reçu indisponible");
+      return;
+    }
     const printWindow = window.open("", "_blank", "width=320,height=600");
     if (printWindow) {
       printWindow.document.write(`
@@ -883,6 +925,8 @@ export default function SalesHistory() {
         border: 1px solid #ccc;
         border-radius: 2px;
       }
+      .receipt-qr { text-align: center; margin: 3mm auto; padding: 2mm; background: #fff; }
+      .receipt-qr img { width: 42mm; height: 42mm; image-rendering: pixelated; }
       .customer-info {
         margin: 2mm 0;
         padding: 1mm 2mm;
@@ -1036,6 +1080,8 @@ export default function SalesHistory() {
         Agent: <strong>${(sale.salesPerson || 'Non spécifié').toUpperCase()}</strong>
       </div>
       
+      <div class="receipt-qr"><img src="${qrDataUrl}" alt="QR de contrôle du paiement" /><div><strong>SCAN CONTROLE PAIEMENT</strong></div></div>
+
       <div class="footer">
         <div class="thank-you"><strong>${shopSettings.receiptFooter || "MERCI POUR VOTRE ACHAT !"}</strong></div>
         <div class="warning"><strong>Article non echangeable</strong></div>
@@ -1067,7 +1113,14 @@ export default function SalesHistory() {
     }
   };
 
-  const generateReceiptPDF = (sale: Sale) => {
+  const generateReceiptPDF = async (sale: Sale) => {
+    let qrDataUrl: string;
+    try {
+      ({ qrDataUrl } = await getReceiptQr(sale));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "QR du reçu indisponible");
+      return;
+    }
     const doc = new jsPDF();
 
     // Header
@@ -1136,6 +1189,8 @@ export default function SalesHistory() {
     yPos += 7;
     doc.text(`Sous-total: ${formatCurrency(sale.subtotal)}`, 20, yPos);
     doc.text(`Total: ${formatCurrency(sale.total)}`, 20, yPos + 5);
+    doc.addImage(qrDataUrl, "PNG", 84, yPos + 10, 42, 42);
+    yPos += 48;
 
     // Footer
     doc.setFontSize(10);
@@ -2006,20 +2061,24 @@ export default function SalesHistory() {
                               >
                                 <Edit className="w-4 h-4" />
                               </button>
-                              <button
-                                onClick={() => generateReceiptPDF(sale)}
-                                className="text-green-600 hover:text-green-900 p-1 rounded"
-                                title="Download PDF Receipt"
-                              >
-                                <Download className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => printESC_POSReceipt(sale)}
-                                className="text-purple-600 hover:text-purple-900 p-1 rounded"
-                                title="Print ESC/POS Receipt"
-                              >
-                                <Printer className="w-4 h-4" />
-                              </button>
+                              {canReprint && (
+                                <>
+                                  <button
+                                    onClick={() => generateReceiptPDF(sale)}
+                                    className="text-green-600 hover:text-green-900 p-1 rounded"
+                                    title="Download PDF Receipt"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => printESC_POSReceipt(sale)}
+                                    className="text-purple-600 hover:text-purple-900 p-1 rounded"
+                                    title="Print ESC/POS Receipt"
+                                  >
+                                    <Printer className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
                               <button
                                 onClick={() => handleVoidSale(sale)}
                                 disabled={sale.status === "voided"}
@@ -2247,6 +2306,22 @@ export default function SalesHistory() {
               )}
 
               {/* Totals */}
+              {selectedSale.receiptVerification && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <div className="flex justify-between">
+                    <span>Version du reçu</span>
+                    <strong>v{selectedSale.receiptVerification.version}</strong>
+                  </div>
+                  <div className="mt-1 flex justify-between">
+                    <span>Validation paiement</span>
+                    <strong className={selectedSale.receiptVerification.paymentStatus === "approved" ? "text-emerald-700" : "text-amber-700"}>
+                      {selectedSale.receiptVerification.paymentStatus === "approved" ? "APPROUVÉ" : "EN ATTENTE"}
+                    </strong>
+                  </div>
+                </div>
+              )}
+
+              {/* Totals */}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm text-gray-600">Sous-total:</span>
@@ -2264,20 +2339,20 @@ export default function SalesHistory() {
 
               {/* Actions */}
               <div className="flex gap-3 pt-4">
-                <button
+                {canReprint && <button
                   onClick={() => generateReceiptPDF(selectedSale)}
                   className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" />
                   Télécharger PDF
-                </button>
-                <button
+                </button>}
+                {canReprint && <button
                   onClick={() => printESC_POSReceipt(selectedSale)}
                   className="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <Printer className="w-4 h-4" />
                   Imprimer Reçu
-                </button>
+                </button>}
                 <button
                   onClick={() => openEditModal(selectedSale)}
                   disabled={

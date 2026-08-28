@@ -15,6 +15,9 @@ export default defineConfig(({ mode }) => {
       'Production VITE_API_URL must point to the deployed backend, not localhost.',
     )
   }
+  if (mode === 'production' && !apiUrl?.startsWith('https://')) {
+    throw new Error('Production VITE_API_URL must use HTTPS.')
+  }
 
   return {
     plugins: [

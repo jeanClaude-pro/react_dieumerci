@@ -7,6 +7,8 @@ import { serverUrl } from "../utils/constants";
 import { createAmountSnapshot } from "../utils/salePricing";
 
 interface SortieForm {
+  expenseType: "normal" | "repayment";
+  creditorId: string;
   reason: string;
   recipientName: string;
   recipientPhone: string;
@@ -33,6 +35,7 @@ async function readJsonSafe(res: Response) {
 }
 
 export default function Sortie() {
+  const [creditors, setCreditors] = useState<Array<{_id:string; name:string; type:string; phone?:string}>>([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +46,8 @@ export default function Sortie() {
   const { user: currentUser } = useAuth();
 
   const [form, setForm] = useState<SortieForm>({
+    expenseType: "normal",
+    creditorId: "",
     reason: "",
     recipientName: "",
     recipientPhone: "",
@@ -78,6 +83,7 @@ export default function Sortie() {
 
   useEffect(() => {
     loadExchangeRate();
+    fetch(`${API_BASE}/creditors/selector`, { headers: authHeader() }).then(r => r.ok ? r.json() : []).then(setCreditors).catch(() => setCreditors([]));
   }, []);
 
   // Calculate USD amount when FC amount changes
@@ -105,9 +111,10 @@ export default function Sortie() {
   }, [form.amount, form.currencyMode, exchangeRate]);
 
   const isFormValid =
+    (form.expenseType === "normal" || form.creditorId !== "") &&
     form.reason.trim() !== "" &&
     form.recipientName.trim() !== "" &&
-    form.recipientPhone.trim() !== "" &&
+    (form.expenseType === "repayment" || form.recipientPhone.trim() !== "") &&
     parseFloat(form.amount) > 0;
 
   function handleChange(
@@ -161,6 +168,8 @@ export default function Sortie() {
         exchangeRate?.rate
       );
       const body = {
+        expenseType: form.expenseType,
+        creditorId: form.expenseType === "repayment" ? form.creditorId : undefined,
         reason: form.reason,
         recipientName: form.recipientName,
         recipientPhone: form.recipientPhone,
@@ -192,6 +201,8 @@ export default function Sortie() {
 
       // Reset form on success
       setForm({
+        expenseType: "normal",
+        creditorId: "",
         reason: "",
         recipientName: "",
         recipientPhone: "",
@@ -267,6 +278,10 @@ export default function Sortie() {
           </div>
 
           <form onSubmit={handleSortie} className="p-6 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><label className="block mb-2 font-medium text-gray-700">Type de sortie *</label><select value={form.expenseType} onChange={(e) => setForm({...form, expenseType: e.target.value as "normal" | "repayment", creditorId: ""})} className="w-full p-3 border rounded-lg"><option value="normal">Dépense normale</option><option value="repayment">Remboursement de dette</option></select></div>
+              {form.expenseType === "repayment" && <div><label className="block mb-2 font-medium text-gray-700">Créancier actif *</label><select required value={form.creditorId} onChange={(e) => { const c=creditors.find(x=>x._id===e.target.value); setForm({...form, creditorId:e.target.value, reason:c?`Remboursement dette — ${c.name}`:form.reason, recipientName:c?.name||form.recipientName, recipientPhone:c?.phone||form.recipientPhone}); }} className="w-full p-3 border rounded-lg"><option value="">Sélectionner...</option>{creditors.map(c=><option key={c._id} value={c._id}>{c.name} ({c.type})</option>)}</select><p className="text-xs text-gray-500 mt-1">Le solde de dette reste confidentiel et sera vérifié par le serveur.</p></div>}
+            </div>
             {/* Reason for Expense */}
             <div>
               <label className="block mb-2 font-medium text-gray-700">

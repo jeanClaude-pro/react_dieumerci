@@ -24,6 +24,9 @@ import {
   Menu,
   X,
   Shield,
+  ScanLine,
+  BadgeCheck,
+  Landmark,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -126,6 +129,25 @@ const sidebarSections: SidebarSection[] = [
     ],
   },
   {
+    title: "Contrôle paiement",
+    items: [
+      {
+        id: "payment-approval",
+        label: "Validation paiement",
+        icon: ScanLine,
+        path: "/payment-approval",
+        roles: ["admin", "cashier_supervisor"]
+      },
+      {
+        id: "payment-verification",
+        label: "Contrôle paiement",
+        icon: BadgeCheck,
+        path: "/payment-verification",
+        roles: ["admin", "inventory_manager"]
+      },
+    ],
+  },
+  {
     title: "Gestion",
     items: [
       {
@@ -134,6 +156,13 @@ const sidebarSections: SidebarSection[] = [
         icon: Users,
         path: "/customers",
         roles: ["admin", "manager", "cashier_supervisor"]
+      },
+      {
+        id: "remboursements",
+        label: "Remboursements",
+        icon: Landmark,
+        path: "/remboursements",
+        roles: ["admin"]
       },
       {
         id: "admin",
@@ -240,6 +269,9 @@ export default function Sidebar() {
     if (!user?.role) return false;
     // Admin panel is always admin-only, never overridden by custom permissions
     if (item.path === "/admin") return user.role === "admin";
+    if (["/payment-approval", "/payment-verification"].includes(item.path)) {
+      return item.roles.includes(user.role);
+    }
     // If user has custom permissions, use path-based check
     if (user.permissions && user.permissions.length > 0) {
       return user.permissions.includes(item.path);

@@ -19,6 +19,7 @@ export interface PrintReceiptData {
   date: string;
   receiptNumber: number;
   stubNumber: number;
+  qrToken?: string;
 }
 
 export class PrintService {

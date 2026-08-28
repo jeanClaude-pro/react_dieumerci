@@ -32,6 +32,12 @@ interface AnalyticsData {
   totalValidatedExpenses: number;
   totalEntries: number;
   netRevenue: number;
+  reimbursement?: {
+    borrowedDuringPeriod: number;
+    repaidDuringPeriod: number;
+    repaymentCount: number;
+    currentOutstanding: number;
+  };
   salesByDay: {
     date: string;
     dayName: string;
@@ -851,6 +857,17 @@ export default function Analytics() {
             </div>
           </div>
         </div>
+
+        {analytics.reimbursement && (
+          <section className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
+            <h2 className="font-bold text-lg mb-4">Dettes et remboursements</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="rounded-lg bg-blue-50 p-4"><p className="text-sm text-gray-600">Emprunté sur la période</p><p className="text-xl font-bold">{formatCurrency(analytics.reimbursement.borrowedDuringPeriod)}</p></div>
+              <div className="rounded-lg bg-emerald-50 p-4"><p className="text-sm text-gray-600">Remboursé sur la période</p><p className="text-xl font-bold">{formatCurrency(analytics.reimbursement.repaidDuringPeriod)}</p><p className="text-xs text-gray-500">{analytics.reimbursement.repaymentCount} remboursement(s)</p></div>
+              <div className="rounded-lg bg-orange-50 p-4"><p className="text-sm text-gray-600">Dette actuelle</p><p className="text-xl font-bold">{formatCurrency(analytics.reimbursement.currentOutstanding)}</p></div>
+            </div>
+          </section>
+        )}
 
         {/* Additional Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">

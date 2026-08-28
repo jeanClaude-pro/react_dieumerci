@@ -27,6 +27,9 @@ import EntryHistory from "./pages/EntryHistory";
 import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider } from "./context/AuthProvider";
 import AdminPanel from "./pages/admin/AdminPanel";
+import { RequireRole } from "./components/RequireRole";
+import ReceiptScannerPage from "./components/ReceiptScannerPage";
+import Remboursements from "./pages/Remboursements";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -165,6 +168,30 @@ export default function App() {
                       <Customers />
                     </RequireAuth>
                   }
+                />
+                <Route
+                  path="/payment-approval"
+                  element={
+                    <RequireAuth>
+                      <RequireRole roles={["cashier_supervisor", "admin"]}>
+                        <ReceiptScannerPage mode="approve" />
+                      </RequireRole>
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/payment-verification"
+                  element={
+                    <RequireAuth>
+                      <RequireRole roles={["inventory_manager", "admin"]}>
+                        <ReceiptScannerPage mode="verify" />
+                      </RequireRole>
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/remboursements"
+                  element={<RequireAuth><RequireRole roles={["admin"]}><Remboursements /></RequireRole></RequireAuth>}
                 />
                 <Route
                   path="/admin"

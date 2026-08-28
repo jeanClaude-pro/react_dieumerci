@@ -45,6 +45,8 @@ interface ExpenseItem {
   notes?: string;
   validatedBy?: string;
   validatedAt?: string;
+  expenseType?: "normal" | "repayment";
+  creditorSnapshot?: { name?: string; type?: string };
 }
 
 interface ExpensesResponse {
@@ -1645,6 +1647,7 @@ export default function SortieHistory() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {expense.reason}
+                      {expense.expenseType === "repayment" && <div><span className="inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Remboursement · {expense.creditorSnapshot?.name || "Créancier"}</span></div>}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
