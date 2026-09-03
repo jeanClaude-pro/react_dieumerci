@@ -14,6 +14,9 @@ interface ScanResult {
   amount?: number;
   approvedBy?: string | null;
   approvedAt?: string | null;
+  exitVerified?: boolean;
+  verifiedBy?: string | null;
+  verifiedAt?: string | null;
 }
 
 export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
@@ -35,7 +38,7 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
   }, []);
 
   const submitToken = useCallback(async (rawToken: string) => {
-    const token = rawToken;
+    const token = rawToken.replace(/[\r\n]+$/g, "");
     if (processingRef.current) return;
     if (token.length !== 48 || !RECEIPT_TOKEN_PATTERN.test(token)) {
       setResult({ code: "INVALID", message: "REÇU INVALIDE" });
@@ -71,6 +74,9 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
         amount: data.amount,
         approvedBy: data.approvedBy,
         approvedAt: data.approvedAt,
+        exitVerified: data.exitVerified,
+        verifiedBy: data.verifiedBy,
+        verifiedAt: data.verifiedAt,
       });
     } catch {
       setResult({ code: "ERROR", message: "CONNEXION AU SERVEUR IMPOSSIBLE" });
@@ -143,7 +149,7 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
     focusScanner();
   };
 
-  const resultColor = result?.code === "APPROVED" || result?.code === "ALREADY_APPROVED"
+  const resultColor = ["APPROVED", "ALREADY_APPROVED", "ALREADY_VERIFIED"].includes(result?.code || "")
     ? "border-emerald-500 bg-emerald-50 text-emerald-950"
     : result?.code === "PENDING"
       ? "border-amber-500 bg-amber-50 text-amber-950"
@@ -211,12 +217,20 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
         {result && (
           <section className={`rounded-2xl border-2 p-6 shadow-sm ${resultColor}`} aria-live="assertive">
             <h2 className="text-xl font-black">{result.message}</h2>
+            {mode === "verify" && result.code === "APPROVED" && (
+              <p className="mt-2 text-lg font-black">SORTIE AUTORISÉE</p>
+            )}
+            {mode === "verify" && result.code === "PENDING" && (
+              <p className="mt-2 text-lg font-black">SORTIE NON AUTORISÉE</p>
+            )}
             {result.detail && <p className="mt-2 font-medium">{result.detail}</p>}
             <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
               {result.receiptNumber && <><dt>Reçu</dt><dd className="font-bold">{result.receiptNumber}</dd></>}
               {typeof result.amount === "number" && <><dt>Montant</dt><dd className="font-bold">${result.amount.toFixed(2)}</dd></>}
               {result.approvedBy && <><dt>Confirmé par</dt><dd className="font-bold">{result.approvedBy}</dd></>}
               {result.approvedAt && <><dt>Heure</dt><dd className="font-bold">{new Date(result.approvedAt).toLocaleString("fr-FR")}</dd></>}
+              {result.verifiedBy && <><dt>Sortie contrôlée par</dt><dd className="font-bold">{result.verifiedBy}</dd></>}
+              {result.verifiedAt && <><dt>Contrôle sortie</dt><dd className="font-bold">{new Date(result.verifiedAt).toLocaleString("fr-FR")}</dd></>}
             </dl>
           </section>
         )}

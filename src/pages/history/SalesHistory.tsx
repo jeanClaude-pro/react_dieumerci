@@ -83,6 +83,12 @@ interface Sale {
     version: number;
     paymentStatus: "pending" | "approved" | "rejected";
     approvedAt?: string | null;
+    approvedBy?: { username: string } | null;
+    exitVerification?: {
+      verified: boolean;
+      verifiedAt?: string | null;
+      verifiedBy?: { username: string } | null;
+    };
   };
 }
 
@@ -229,7 +235,8 @@ export default function SalesHistory() {
     month: getCurrentMonth().split('-')[1],
     type: "",
     status: "",
-    customerPhone: ""
+    customerPhone: "",
+    controlStatus: ""
   });
 
   // NEW: Edited sales filter state
@@ -323,12 +330,11 @@ export default function SalesHistory() {
     }
   };
 
-  // Filter out expenses and voided sales - ONLY show completed sales
+  // Keep invalidated normal sales visible so their receipt-control state is explicit.
   const filterValidSales = (sales: Sale[]): Sale[] => {
     return sales.filter((sale: Sale) => {
-      // Filter out voided, cancelled, refunded sales and expenses
-      const invalidStatuses = ['voided', 'cancelled', 'refunded', 'expense', 'depense'];
-      const isValidStatus = !invalidStatuses.includes(sale.status?.toLowerCase());
+      const nonSaleStatuses = ['expense', 'depense'];
+      const isValidStatus = !nonSaleStatuses.includes(sale.status?.toLowerCase());
       
       // Also check if it's a sale (has saleId and customer structure)
       const isSaleStructure = sale.saleId && sale.customer && sale.items;
@@ -368,6 +374,7 @@ export default function SalesHistory() {
     // Add additional filters
     if (queryParams.status) params.append("status", queryParams.status);
     if (queryParams.customerPhone) params.append("customerPhone", queryParams.customerPhone);
+    if (queryParams.controlStatus) params.append("controlStatus", queryParams.controlStatus);
     if (searchTerm.trim()) params.append("search", searchTerm.trim());
     
     return params.toString();
@@ -524,7 +531,8 @@ export default function SalesHistory() {
       month: getCurrentMonth().split('-')[1],
       type: "",
       status: "",
-      customerPhone: ""
+      customerPhone: "",
+      controlStatus: ""
     });
     setTimeframeType("today");
     setShowEditedSales(false);
@@ -1811,7 +1819,24 @@ export default function SalesHistory() {
               </button>
 
               {showAdvancedFilters && (
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Contrôle du reçu
+                    </label>
+                    <select
+                      value={queryParams.controlStatus}
+                      onChange={(e) => handleQueryParamChange("controlStatus", e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    >
+                      <option value="">Tous</option>
+                      <option value="payment_pending">Paiement en attente</option>
+                      <option value="payment_approved">Paiement approuvé</option>
+                      <option value="exit_unverified">Sortie non contrôlée</option>
+                      <option value="exit_verified">Sortie vérifiée</option>
+                    </select>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Sale Type
@@ -1947,6 +1972,12 @@ export default function SalesHistory() {
                       Payement
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Paiement approuvé
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Contrôle sortie
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Statut
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1992,6 +2023,22 @@ export default function SalesHistory() {
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                           {sale.paymentMethod}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs">
+                        <span className={`inline-flex rounded-full px-2.5 py-0.5 font-medium ${["voided", "corrected", "refunded"].includes(sale.status) ? "bg-red-100 text-red-800" : sale.receiptVerification?.paymentStatus === "approved" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                          {["voided", "corrected", "refunded"].includes(sale.status) ? "INVALIDÉ" : sale.receiptVerification?.paymentStatus === "approved" ? "APPROUVÉ" : "EN ATTENTE"}
+                        </span>
+                        {sale.receiptVerification?.approvedBy?.username && (
+                          <div className="mt-1 text-gray-500">{sale.receiptVerification.approvedBy.username}{sale.receiptVerification.approvedAt ? ` · ${formatDate(sale.receiptVerification.approvedAt)}` : ""}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs">
+                        <span className={`inline-flex rounded-full px-2.5 py-0.5 font-medium ${["voided", "corrected", "refunded"].includes(sale.status) ? "bg-red-100 text-red-800" : sale.receiptVerification?.exitVerification?.verified ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-700"}`}>
+                          {["voided", "corrected", "refunded"].includes(sale.status) ? "NON AUTORISÉE" : sale.receiptVerification?.exitVerification?.verified ? "VÉRIFIÉ" : "NON EFFECTUÉ"}
+                        </span>
+                        {sale.receiptVerification?.exitVerification?.verifiedBy?.username && (
+                          <div className="mt-1 text-gray-500">{sale.receiptVerification.exitVerification.verifiedBy.username}{sale.receiptVerification.exitVerification.verifiedAt ? ` · ${formatDate(sale.receiptVerification.exitVerification.verifiedAt)}` : ""}</div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
@@ -2318,6 +2365,18 @@ export default function SalesHistory() {
                       {selectedSale.receiptVerification.paymentStatus === "approved" ? "APPROUVÉ" : "EN ATTENTE"}
                     </strong>
                   </div>
+                  {selectedSale.receiptVerification.approvedBy?.username && (
+                    <div className="mt-1 flex justify-between"><span>Validé par</span><strong>{selectedSale.receiptVerification.approvedBy.username}{selectedSale.receiptVerification.approvedAt ? ` · ${formatDate(selectedSale.receiptVerification.approvedAt)}` : ""}</strong></div>
+                  )}
+                  <div className="mt-1 flex justify-between">
+                    <span>Contrôle sortie</span>
+                    <strong className={selectedSale.receiptVerification.exitVerification?.verified ? "text-blue-700" : "text-slate-600"}>
+                      {selectedSale.receiptVerification.exitVerification?.verified ? "VÉRIFIÉ" : "NON EFFECTUÉ"}
+                    </strong>
+                  </div>
+                  {selectedSale.receiptVerification.exitVerification?.verifiedBy?.username && (
+                    <div className="mt-1 flex justify-between"><span>Sortie vérifiée par</span><strong>{selectedSale.receiptVerification.exitVerification.verifiedBy.username}{selectedSale.receiptVerification.exitVerification.verifiedAt ? ` · ${formatDate(selectedSale.receiptVerification.exitVerification.verifiedAt)}` : ""}</strong></div>
+                  )}
                 </div>
               )}
 
