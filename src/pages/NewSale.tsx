@@ -8,9 +8,26 @@ import QRCode from "qrcode";
 import {
   canAddCartQuantity,
   createPriceSnapshot,
+  getItemFcTotal,
+  getItemFcUnitPrice,
+  getSaleFcTotal,
   type PriceSnapshot,
   type SaleCurrency,
 } from "../utils/salePricing";
+
+const compactFc = (value: number) => `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(value)}FC`;
+const compactDualUnit = (item: CartItem, rate?: number) => {
+  const fc = getItemFcUnitPrice(item, rate);
+  return `${item.priceUSD.toFixed(2)}$${fc === undefined ? "" : ` / ${compactFc(fc)}`}`;
+};
+const compactDualTotal = (item: CartItem, rate?: number) => {
+  const fc = getItemFcTotal(item, rate);
+  return `${(item.priceUSD * item.quantity).toFixed(2)}$${fc === undefined ? "" : ` / ${compactFc(fc)}`}`;
+};
+const compactDualSaleTotal = (total: number, items: CartItem[], rate?: number) => {
+  const fc = getSaleFcTotal(total, items, rate);
+  return `${total.toFixed(2)}$${fc === undefined ? "" : ` / ${compactFc(fc)}`}`;
+};
 
 interface Product {
   _id: string;
@@ -920,21 +937,17 @@ export default function NewSale() {
       <div class="items-col-header">
         <span class="col-article">Article</span>
         <span class="col-qte">Qte</span>
-        <span class="col-pu">PU($)</span>
-        <span class="col-pt">PT($)</span>
       </div>
       
       <div class="items-section">
       ${receiptData.items
         .map(
           (item: CartItem) => `
-        <div class="item-row">
+        <div class="item-row" style="flex-wrap:wrap">
           <div class="item-name"><strong>${item.name}</strong></div>
           <div class="item-quantity"><strong>${item.quantity}</strong></div>
-          <div class="item-unit-price"><strong>${item.enteredCurrency === "FC" ? `${item.enteredPrice.toLocaleString("fr-FR")} FC` : `$${item.enteredPrice.toFixed(2)}`}</strong></div>
-          <div class="item-line-total"><strong>${item.enteredCurrency === "FC" ? `${(item.enteredPrice * item.quantity).toLocaleString("fr-FR")} FC` : `$${(item.enteredPrice * item.quantity).toFixed(2)}`}</strong></div>
+          <div style="width:100%;text-align:left;padding-left:2mm"><strong>${item.quantity} x ${compactDualUnit(item, receiptData.exchangeRate)} = ${compactDualTotal(item, receiptData.exchangeRate)}</strong></div>
         </div>
-        ${item.enteredCurrency === "FC" ? `<div class="item-name">Équiv. USD: $${(item.priceUSD * item.quantity).toFixed(2)}</div>` : ""}
       `
         )
         .join("")}
@@ -943,11 +956,11 @@ export default function NewSale() {
       <div class="total-section">
         <div class="total-row">
           <div><strong>SOUS-TOTAL:</strong></div>
-          <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
+          <div><strong>${compactDualSaleTotal(receiptData.total, receiptData.items, receiptData.exchangeRate)}</strong></div>
         </div>
         <div class="total-row">
           <div><strong>TOTAL:</strong></div>
-          <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
+          <div><strong>${compactDualSaleTotal(receiptData.total, receiptData.items, receiptData.exchangeRate)}</strong></div>
         </div>
         <div class="total-row">
           <div><strong>PAIEMENT:</strong></div>
@@ -1309,19 +1322,16 @@ export default function NewSale() {
       <div class="items-col-header">
         <span class="col-article">Article</span>
         <span class="col-qte">Qte</span>
-        <span class="col-pu">PU($)</span>
-        <span class="col-pt">PT($)</span>
       </div>
       
       <div class="items-section">
       ${receiptData.items
         .map(
           (item: CartItem) => `
-        <div class="item-row">
+        <div class="item-row" style="flex-wrap:wrap">
           <div class="item-name"><strong>${item.name}</strong></div>
           <div class="item-quantity"><strong>${item.quantity}</strong></div>
-          <div class="item-unit-price"><strong>${item.unitPrice.toFixed(2)}</strong></div>
-          <div class="item-line-total"><strong>${item.total.toFixed(2)}</strong></div>
+          <div style="width:100%;text-align:left;padding-left:2mm"><strong>${item.quantity} x ${compactDualUnit(item, receiptData.exchangeRate)} = ${compactDualTotal(item, receiptData.exchangeRate)}</strong></div>
         </div>
       `
         )
@@ -1331,7 +1341,7 @@ export default function NewSale() {
       <div class="total-section">
         <div class="total-row">
           <div><strong>TOTAL VENTE:</strong></div>
-          <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
+          <div><strong>${compactDualSaleTotal(receiptData.total, receiptData.items, receiptData.exchangeRate)}</strong></div>
         </div>
         <div class="total-row">
           <div><strong>PAIEMENT:</strong></div>

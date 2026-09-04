@@ -22,6 +22,8 @@ import {
   Filter,
   ChevronDown,
   Shield,
+  BadgeCheck,
+  ScanLine,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
@@ -29,6 +31,9 @@ import {
   getItemOriginalCurrency,
   getItemOriginalTotal,
   getItemOriginalUnitPrice,
+  getItemFcTotal,
+  getItemFcUnitPrice,
+  getSaleFcTotal,
   getItemUsdTotal,
   getItemUsdUnitPrice,
   type SaleCurrency,
@@ -155,6 +160,14 @@ interface SalesResponse {
   performanceNote: string | null;
 }
 
+interface ScanStats {
+  total: number;
+  paymentApproved: number;
+  paymentPending: number;
+  exitControlled: number;
+  awaitingExitControl: number;
+}
+
 // Helper function to get today's date in correct format
 const getTodayDate = (): string => {
   const today = new Date();
@@ -177,6 +190,14 @@ const getCurrentYear = (): number => {
   return new Date().getFullYear();
 };
 
+// 2026-09-04 00:00 in Africa/Lubumbashi (UTC+02:00).
+const RECEIPT_SCANNER_CUTOFF = new Date("2026-09-03T22:00:00.000Z").getTime();
+const isLegacyReceiptSale = (sale: Sale) => new Date(sale.createdAt).getTime() < RECEIPT_SCANNER_CUTOFF;
+const isPaymentApprovedForDisplay = (sale: Sale) =>
+  isLegacyReceiptSale(sale) || sale.receiptVerification?.paymentStatus === "approved";
+const isExitControlledForDisplay = (sale: Sale) =>
+  isLegacyReceiptSale(sale) || sale.receiptVerification?.exitVerification?.verified === true;
+
 export default function SalesHistory() {
   const { token: authToken } = useAuth();
 
@@ -188,6 +209,7 @@ export default function SalesHistory() {
 
   // Ref always points to the latest fetchSales — prevents stale closure in event listener
   const fetchSalesRef = useRef<() => void>(() => {});
+  const fetchScanStatsRef = useRef<() => void>(() => {});
 
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -255,6 +277,8 @@ export default function SalesHistory() {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<SalesResponse["pagination"] | null>(null);
+  const [scanStats, setScanStats] = useState<ScanStats | null>(null);
+  const [scanStatsError, setScanStatsError] = useState(false);
 
   // Fetch current user on component mount
   useEffect(() => {
@@ -279,6 +303,7 @@ export default function SalesHistory() {
       .catch(() => {});
     const handleSalesUpdate = () => {
       fetchSalesRef.current();
+      fetchScanStatsRef.current();
     };
 
     window.addEventListener("salesUpdated", handleSalesUpdate);
@@ -294,6 +319,11 @@ export default function SalesHistory() {
       fetchSales();
     }
   }, [queryParams, currentPage, searchTerm]);
+
+  // Scan totals depend on the complete matching period, never on pagination.
+  useEffect(() => {
+    fetchScanStats();
+  }, [queryParams, searchTerm]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -602,6 +632,21 @@ export default function SalesHistory() {
       maximumFractionDigits: 0,
     }).format(amount)} FC`;
 
+  const compactDualUnit = (item: SaleItem, saleRate?: number) => {
+    const fc = getItemFcUnitPrice(item, saleRate);
+    return `${getItemUsdUnitPrice(item).toFixed(2)}$${fc === undefined ? "" : ` / ${formatFc(fc)}`}`;
+  };
+
+  const compactDualTotal = (item: SaleItem, saleRate?: number) => {
+    const fc = getItemFcTotal(item, saleRate);
+    return `${getItemUsdTotal(item).toFixed(2)}$${fc === undefined ? "" : ` / ${formatFc(fc)}`}`;
+  };
+
+  const compactDualSaleTotal = (total: number, items: SaleItem[], saleRate?: number) => {
+    const fc = getSaleFcTotal(total, items, saleRate);
+    return `${total.toFixed(2)}$${fc === undefined ? "" : ` / ${formatFc(fc)}`}`;
+  };
+
   const formatOriginalItemUnitPrice = (item: SaleItem) =>
     getItemOriginalCurrency(item) === "FC"
       ? formatFc(getItemOriginalUnitPrice(item))
@@ -730,6 +775,48 @@ export default function SalesHistory() {
       qrDataUrl,
     };
   };
+
+  const buildScanStatsQueryString = () => {
+    const params = new URLSearchParams();
+    switch (timeframeType) {
+      case "custom":
+        if (queryParams.from) params.set("from", queryParams.from);
+        if (queryParams.to) params.set("to", queryParams.to);
+        break;
+      case "day":
+        if (queryParams.date) params.set("date", queryParams.date);
+        break;
+      case "month":
+        if (queryParams.year) params.set("year", queryParams.year);
+        if (queryParams.month) params.set("month", queryParams.month);
+        break;
+      case "year":
+        if (queryParams.year) params.set("year", queryParams.year);
+        break;
+      case "today":
+        break;
+    }
+    if (queryParams.customerPhone) params.set("customerPhone", queryParams.customerPhone);
+    if (searchTerm.trim()) params.set("search", searchTerm.trim());
+    return params.toString();
+  };
+
+  const fetchScanStats = async () => {
+    try {
+      setScanStatsError(false);
+      const query = buildScanStatsQueryString();
+      const response = await fetch(`${serverUrl}/sales/scan-stats${query ? `?${query}` : ""}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!response.ok) throw new Error(`Scan statistics request failed (${response.status})`);
+      setScanStats(await response.json() as ScanStats);
+    } catch (fetchError) {
+      console.error("Error loading receipt-control statistics:", fetchError);
+      setScanStatsError(true);
+    }
+  };
+
+  fetchScanStatsRef.current = fetchScanStats;
 
   // Print function for ESC/POS receipt - opens print dialog
   const printESC_POSReceipt = async (sale: Sale) => {
@@ -1049,21 +1136,17 @@ export default function SalesHistory() {
       <div class="items-col-header">
         <span class="col-article">Article</span>
         <span class="col-qte">Qte</span>
-        <span class="col-pu">PU($)</span>
-        <span class="col-pt">PT($)</span>
       </div>
 
       <div class="items-section">
       ${sale.items
         .map(
           (item) => `
-        <div class="item-row">
+        <div class="item-row" style="flex-wrap:wrap">
           <div class="item-name"><strong>${item.name}</strong></div>
           <div class="item-quantity"><strong>${item.quantity}</strong></div>
-          <div class="item-unit-price"><strong>${getItemOriginalCurrency(item) === "FC" ? `${getItemOriginalUnitPrice(item).toLocaleString("fr-FR")} FC` : `$${getItemOriginalUnitPrice(item).toFixed(2)}`}</strong></div>
-          <div class="item-line-total"><strong>${getItemOriginalCurrency(item) === "FC" ? `${getItemOriginalTotal(item).toLocaleString("fr-FR")} FC` : `$${getItemOriginalTotal(item).toFixed(2)}`}</strong></div>
+          <div style="width:100%;text-align:left;padding-left:2mm"><strong>${item.quantity} x ${compactDualUnit(item, sale.exchangeRate)} = ${compactDualTotal(item, sale.exchangeRate)}</strong></div>
         </div>
-        ${getItemOriginalCurrency(item) === "FC" ? `<div class="item-name">Équiv. USD: $${getItemUsdTotal(item).toFixed(2)}</div>` : ""}
       `
         )
         .join("")}
@@ -1072,11 +1155,11 @@ export default function SalesHistory() {
       <div class="total-section">
         <div class="total-row">
           <div><strong>SOUS-TOTAL:</strong></div>
-          <div><strong>$${sale.subtotal.toFixed(2)}</strong></div>
+          <div><strong>${compactDualSaleTotal(sale.subtotal, sale.items, sale.exchangeRate)}</strong></div>
         </div>
         <div class="total-row">
           <div><strong>TOTAL:</strong></div>
-          <div><strong>$${sale.total.toFixed(2)}</strong></div>
+          <div><strong>${compactDualSaleTotal(sale.total, sale.items, sale.exchangeRate)}</strong></div>
         </div>
         <div class="total-row">
           <div><strong>PAIEMENT:</strong></div>
@@ -1184,9 +1267,7 @@ export default function SalesHistory() {
 
       doc.text(`${index + 1}. ${item.name}`, 20, yPos);
       doc.text(
-        `Qty: ${item.quantity} x ${formatCurrency(
-          getItemUsdUnitPrice(item)
-        )} = ${formatCurrency(getItemUsdTotal(item))}`,
+        `Qté: ${item.quantity} x ${compactDualUnit(item, sale.exchangeRate)} = ${compactDualTotal(item, sale.exchangeRate)}`,
         25,
         yPos + 6
       );
@@ -1195,8 +1276,8 @@ export default function SalesHistory() {
 
     // Totals
     yPos += 7;
-    doc.text(`Sous-total: ${formatCurrency(sale.subtotal)}`, 20, yPos);
-    doc.text(`Total: ${formatCurrency(sale.total)}`, 20, yPos + 5);
+    doc.text(`Sous-total: ${compactDualSaleTotal(sale.subtotal, sale.items, sale.exchangeRate)}`, 20, yPos);
+    doc.text(`Total: ${compactDualSaleTotal(sale.total, sale.items, sale.exchangeRate)}`, 20, yPos + 5);
     doc.addImage(qrDataUrl, "PNG", 84, yPos + 10, 42, 42);
     yPos += 48;
 
@@ -1655,6 +1736,28 @@ export default function SalesHistory() {
         </div>
       )}
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-emerald-800">Paiements validés</p>
+              <p className="mt-1 text-2xl font-bold text-emerald-950">{scanStatsError ? "—" : (scanStats?.paymentApproved ?? "…")}</p>
+            </div>
+            <BadgeCheck className="h-8 w-8 text-emerald-600" />
+          </div>
+        </div>
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-blue-800">Sorties contrôlées</p>
+              <p className="mt-1 text-2xl font-bold text-blue-950">{scanStatsError ? "—" : (scanStats?.exitControlled ?? "…")}</p>
+            </div>
+            <ScanLine className="h-8 w-8 text-blue-600" />
+          </div>
+        </div>
+        {scanStatsError && <p className="text-sm text-amber-700 sm:col-span-2">Statistiques de contrôle temporairement indisponibles.</p>}
+      </div>
+
       {/* Timeframe Filter Section */}
       <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
@@ -2025,16 +2128,16 @@ export default function SalesHistory() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-xs">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 font-medium ${["voided", "corrected", "refunded"].includes(sale.status) ? "bg-red-100 text-red-800" : sale.receiptVerification?.paymentStatus === "approved" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
-                          {["voided", "corrected", "refunded"].includes(sale.status) ? "INVALIDÉ" : sale.receiptVerification?.paymentStatus === "approved" ? "APPROUVÉ" : "EN ATTENTE"}
+                        <span className={`inline-flex rounded-full px-2.5 py-0.5 font-medium ${["voided", "corrected", "refunded"].includes(sale.status) ? "bg-red-100 text-red-800" : isPaymentApprovedForDisplay(sale) ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                          {["voided", "corrected", "refunded"].includes(sale.status) ? "INVALIDÉ" : isPaymentApprovedForDisplay(sale) ? (isLegacyReceiptSale(sale) ? "VALIDÉ (HIST.)" : "APPROUVÉ") : "EN ATTENTE"}
                         </span>
                         {sale.receiptVerification?.approvedBy?.username && (
                           <div className="mt-1 text-gray-500">{sale.receiptVerification.approvedBy.username}{sale.receiptVerification.approvedAt ? ` · ${formatDate(sale.receiptVerification.approvedAt)}` : ""}</div>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-xs">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 font-medium ${["voided", "corrected", "refunded"].includes(sale.status) ? "bg-red-100 text-red-800" : sale.receiptVerification?.exitVerification?.verified ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-700"}`}>
-                          {["voided", "corrected", "refunded"].includes(sale.status) ? "NON AUTORISÉE" : sale.receiptVerification?.exitVerification?.verified ? "VÉRIFIÉ" : "NON EFFECTUÉ"}
+                        <span className={`inline-flex rounded-full px-2.5 py-0.5 font-medium ${["voided", "corrected", "refunded"].includes(sale.status) ? "bg-red-100 text-red-800" : isExitControlledForDisplay(sale) ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-700"}`}>
+                          {["voided", "corrected", "refunded"].includes(sale.status) ? "NON AUTORISÉE" : isExitControlledForDisplay(sale) ? (isLegacyReceiptSale(sale) ? "CONTRÔLÉ (HIST.)" : "VÉRIFIÉ") : "NON EFFECTUÉ"}
                         </span>
                         {sale.receiptVerification?.exitVerification?.verifiedBy?.username && (
                           <div className="mt-1 text-gray-500">{sale.receiptVerification.exitVerification.verifiedBy.username}{sale.receiptVerification.exitVerification.verifiedAt ? ` · ${formatDate(sale.receiptVerification.exitVerification.verifiedAt)}` : ""}</div>
@@ -2353,28 +2456,28 @@ export default function SalesHistory() {
               )}
 
               {/* Totals */}
-              {selectedSale.receiptVerification && (
+              {selectedSale.type !== "expense" && (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                   <div className="flex justify-between">
                     <span>Version du reçu</span>
-                    <strong>v{selectedSale.receiptVerification.version}</strong>
+                    <strong>{selectedSale.receiptVerification?.version ? `v${selectedSale.receiptVerification.version}` : "Historique"}</strong>
                   </div>
                   <div className="mt-1 flex justify-between">
                     <span>Validation paiement</span>
-                    <strong className={selectedSale.receiptVerification.paymentStatus === "approved" ? "text-emerald-700" : "text-amber-700"}>
-                      {selectedSale.receiptVerification.paymentStatus === "approved" ? "APPROUVÉ" : "EN ATTENTE"}
+                    <strong className={isPaymentApprovedForDisplay(selectedSale) ? "text-emerald-700" : "text-amber-700"}>
+                      {isPaymentApprovedForDisplay(selectedSale) ? (isLegacyReceiptSale(selectedSale) ? "VALIDÉ (HISTORIQUE)" : "APPROUVÉ") : "EN ATTENTE"}
                     </strong>
                   </div>
-                  {selectedSale.receiptVerification.approvedBy?.username && (
+                  {selectedSale.receiptVerification?.approvedBy?.username && (
                     <div className="mt-1 flex justify-between"><span>Validé par</span><strong>{selectedSale.receiptVerification.approvedBy.username}{selectedSale.receiptVerification.approvedAt ? ` · ${formatDate(selectedSale.receiptVerification.approvedAt)}` : ""}</strong></div>
                   )}
                   <div className="mt-1 flex justify-between">
                     <span>Contrôle sortie</span>
-                    <strong className={selectedSale.receiptVerification.exitVerification?.verified ? "text-blue-700" : "text-slate-600"}>
-                      {selectedSale.receiptVerification.exitVerification?.verified ? "VÉRIFIÉ" : "NON EFFECTUÉ"}
+                    <strong className={isExitControlledForDisplay(selectedSale) ? "text-blue-700" : "text-slate-600"}>
+                      {isExitControlledForDisplay(selectedSale) ? (isLegacyReceiptSale(selectedSale) ? "CONTRÔLÉ (HISTORIQUE)" : "VÉRIFIÉ") : "NON EFFECTUÉ"}
                     </strong>
                   </div>
-                  {selectedSale.receiptVerification.exitVerification?.verifiedBy?.username && (
+                  {selectedSale.receiptVerification?.exitVerification?.verifiedBy?.username && (
                     <div className="mt-1 flex justify-between"><span>Sortie vérifiée par</span><strong>{selectedSale.receiptVerification.exitVerification.verifiedBy.username}{selectedSale.receiptVerification.exitVerification.verifiedAt ? ` · ${formatDate(selectedSale.receiptVerification.exitVerification.verifiedAt)}` : ""}</strong></div>
                   )}
                 </div>

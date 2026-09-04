@@ -7,9 +7,21 @@ import { serverUrl } from "../utils/constants";
 import {
   canAddCartQuantity,
   createPriceSnapshot,
+  getItemFcUnitPrice,
+  getSaleFcTotal,
   type PriceSnapshot,
   type SaleCurrency,
 } from "../utils/salePricing";
+
+const compactReservationFc = (value: number) => `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(value)}FC`;
+const compactReservationUnit = (item: CartItem, rate?: number) => {
+  const fc = getItemFcUnitPrice(item, rate);
+  return `${item.priceUSD.toFixed(2)}$${fc === undefined ? "" : ` / ${compactReservationFc(fc)}`}`;
+};
+const compactReservationTotal = (total: number, items: CartItem[], rate?: number) => {
+  const fc = getSaleFcTotal(total, items, rate);
+  return `${total.toFixed(2)}$${fc === undefined ? "" : ` / ${compactReservationFc(fc)}`}`;
+};
 
 interface Product {
   _id: string;
@@ -776,8 +788,7 @@ export default function Reservation() {
         <div class="item-row">
           <div class="item-name"><strong>${item.name}</strong></div>
           <div class="item-details">
-            <strong>${item.quantity}Pcs X ${item.enteredCurrency === "FC" ? `${item.enteredPrice.toLocaleString("fr-FR")} FC = ${(item.enteredPrice * item.quantity).toLocaleString("fr-FR")} FC` : `$${item.enteredPrice.toFixed(2)}`}</strong>
-            ${item.enteredCurrency === "FC" ? `<br/>Équiv. USD: $${(item.priceUSD * item.quantity).toFixed(2)}` : ""}
+            <strong>${item.quantity} x ${compactReservationUnit(item, receiptData.exchangeRate)}</strong>
           </div>
         </div>
       `
@@ -788,11 +799,11 @@ export default function Reservation() {
       <div class="total-section">
         <div class="total-row">
           <div><strong>SOUS-TOTAL:</strong></div>
-          <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
+          <div><strong>${compactReservationTotal(receiptData.total, receiptData.items, receiptData.exchangeRate)}</strong></div>
         </div>
         <div class="total-row">
           <div><strong>ACOMPTE TOTAL:</strong></div>
-          <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
+          <div><strong>${compactReservationTotal(receiptData.total, receiptData.items, receiptData.exchangeRate)}</strong></div>
         </div>
         <div class="total-row">
           <div><strong>PAIEMENT:</strong></div>
@@ -1124,7 +1135,7 @@ export default function Reservation() {
         <div class="item-row">
           <div class="item-name"><strong>${item.name}</strong></div>
           <div class="item-details">
-            <strong>${item.quantity}PcsX$${item.unitPrice.toFixed(2)}</strong>
+            <strong>${item.quantity} x ${compactReservationUnit(item, receiptData.exchangeRate)}</strong>
           </div>
         </div>
       `
@@ -1135,7 +1146,7 @@ export default function Reservation() {
       <div class="total-section">
         <div class="total-row">
           <div><strong>ACOMPTE PERÇU:</strong></div>
-          <div><strong>$${receiptData.total.toFixed(2)}</strong></div>
+          <div><strong>${compactReservationTotal(receiptData.total, receiptData.items, receiptData.exchangeRate)}</strong></div>
         </div>
         <div class="total-row">
           <div><strong>PAIEMENT:</strong></div>

@@ -17,7 +17,8 @@ export interface AmountSnapshot {
 }
 
 export interface StoredSaleItemPrice {
-  price: number;
+  price?: number;
+  unitPrice?: number;
   quantity: number;
   total: number;
   enteredPrice?: number;
@@ -80,7 +81,7 @@ export function createAmountSnapshot(
 }
 
 export function getItemUsdUnitPrice(item: StoredSaleItemPrice): number {
-  return item.priceUSD ?? item.price;
+  return item.priceUSD ?? item.price ?? item.unitPrice ?? 0;
 }
 
 export function getItemUsdTotal(item: StoredSaleItemPrice): number {
@@ -88,7 +89,7 @@ export function getItemUsdTotal(item: StoredSaleItemPrice): number {
 }
 
 export function getItemOriginalUnitPrice(item: StoredSaleItemPrice): number {
-  return item.enteredPrice ?? item.price;
+  return item.enteredPrice ?? item.price ?? item.unitPrice ?? 0;
 }
 
 export function getItemOriginalTotal(item: StoredSaleItemPrice): number {
@@ -99,6 +100,26 @@ export function getItemOriginalCurrency(
   item: StoredSaleItemPrice
 ): SaleCurrency {
   return item.enteredCurrency ?? "USD";
+}
+
+export function getItemFcUnitPrice(item: StoredSaleItemPrice, saleRate?: number): number | undefined {
+  if (item.enteredCurrency === "FC" && item.enteredPrice !== undefined) return item.enteredPrice;
+  if (item.priceFC !== undefined) return item.priceFC;
+  const rate = item.exchangeRate ?? saleRate;
+  return rate ? Math.round(getItemUsdUnitPrice(item) * rate) : undefined;
+}
+
+export function getItemFcTotal(item: StoredSaleItemPrice, saleRate?: number): number | undefined {
+  const unit = getItemFcUnitPrice(item, saleRate);
+  return unit === undefined ? undefined : unit * item.quantity;
+}
+
+export function getSaleFcTotal(totalUSD: number, items: StoredSaleItemPrice[], saleRate?: number): number | undefined {
+  const itemTotals = items.map((item) => getItemFcTotal(item, saleRate));
+  if (itemTotals.length && itemTotals.every((value) => value !== undefined)) {
+    return itemTotals.reduce((sum, value) => sum + (value ?? 0), 0);
+  }
+  return saleRate ? Math.round(totalUSD * saleRate) : undefined;
 }
 
 export function canAddCartQuantity(
