@@ -30,7 +30,6 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
   const processingRef = useRef(false);
   const lastTokenRef = useRef<{ token: string; at: number } | null>(null);
   const cameraDecodeLockedRef = useRef(false);
-  const cameraResumeTimerRef = useRef<number | null>(null);
   const sessionInvalidRef = useRef(false);
 
   const focusScanner = useCallback(() => {
@@ -91,7 +90,6 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
     focusScanner();
     return () => {
       controlsRef.current?.stop();
-      if (cameraResumeTimerRef.current) window.clearTimeout(cameraResumeTimerRef.current);
     };
   }, [focusScanner]);
 
@@ -118,14 +116,11 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
         (decoded) => {
           if (!decoded || cameraDecodeLockedRef.current) return;
           cameraDecodeLockedRef.current = true;
-          controlsRef.current?.stop();
-          controlsRef.current = null;
-          setCameraActive(false);
           void submitToken(decoded.getText()).finally(() => {
-            cameraResumeTimerRef.current = window.setTimeout(() => {
+            // Keep the stream alive; only suppress duplicate video frames briefly.
+            window.setTimeout(() => {
               cameraDecodeLockedRef.current = false;
-              if (!sessionInvalidRef.current) void startCamera();
-            }, 6500);
+            }, 750);
           });
         }
       );
@@ -142,7 +137,6 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
 
   const stopCamera = () => {
     controlsRef.current?.stop();
-    if (cameraResumeTimerRef.current) window.clearTimeout(cameraResumeTimerRef.current);
     cameraDecodeLockedRef.current = false;
     controlsRef.current = null;
     setCameraActive(false);
@@ -202,7 +196,8 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
-                cameraActive ? stopCamera() : void startCamera();
+                if (cameraActive) stopCamera();
+                else void startCamera();
               }}
               className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white"
             >

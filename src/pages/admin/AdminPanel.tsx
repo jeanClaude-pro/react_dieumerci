@@ -438,8 +438,8 @@ export default function AdminPanel() {
       toast.error("Les mots de passe ne correspondent pas");
       return;
     }
-    if (createForm.password.length < 6) {
-      toast.error("Le mot de passe doit comporter au moins 6 caractères");
+    if (createForm.password.length < 10 || createForm.password.length > 128) {
+      toast.error("Le mot de passe doit comporter entre 10 et 128 caractères");
       return;
     }
     setCreating(true);
@@ -458,9 +458,10 @@ export default function AdminPanel() {
         const d = await res.json();
         throw new Error(d.message || "Échec de la création");
       }
-      toast.success(`Utilisateur "${createForm.username}" créé avec succès`);
+      const createdUser = (await res.json()) as AppUser;
+      setUsers((previousUsers) => [createdUser, ...previousUsers]);
+      toast.success(`Utilisateur "${createdUser.username}" créé avec succès`);
       setCreateForm({ username: "", email: "", password: "", confirmPassword: "", role: "staff" });
-      fetchUsers();
       setTab("users");
     } catch (err: any) {
       toast.error(err.message);
@@ -938,10 +939,11 @@ export default function AdminPanel() {
                       type={showPassword ? "text" : "password"}
                       value={createForm.password}
                       onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
-                      placeholder="Minimum 6 caractères"
+                      placeholder="10 à 128 caractères"
                       className="w-full px-4 py-3 pr-11 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                       required
-                      minLength={6}
+                      minLength={10}
+                      maxLength={128}
                     />
                     <button type="button" onClick={() => setShowPassword((s) => !s)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -961,6 +963,8 @@ export default function AdminPanel() {
                     placeholder="Répétez le mot de passe"
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     required
+                    minLength={10}
+                    maxLength={128}
                   />
                 </div>
 
