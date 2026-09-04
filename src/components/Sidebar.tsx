@@ -136,12 +136,14 @@ const sidebarSections: SidebarSection[] = [
         label: "Validation paiement",
         icon: ScanLine,
         path: "/payment-approval",
+        roles: ["admin", "cashier_supervisor"]
       },
       {
         id: "payment-verification",
         label: "Contrôle paiement",
         icon: BadgeCheck,
         path: "/payment-verification",
+        roles: ["admin", "inventory_manager"]
       },
     ],
   },
@@ -267,6 +269,10 @@ export default function Sidebar() {
     if (!user?.role) return false;
     // Admin panel is always admin-only, never overridden by custom permissions
     if (item.path === "/admin") return user.role === "admin";
+    // These operational duties cannot be overridden by custom page permissions.
+    if (["/payment-approval", "/payment-verification"].includes(item.path)) {
+      return item.roles?.includes(user.role) ?? false;
+    }
     // If user has custom permissions, use path-based check
     if (user.permissions && user.permissions.length > 0) {
       return user.permissions.includes(item.path);

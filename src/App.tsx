@@ -173,7 +173,9 @@ export default function App() {
                   path="/payment-approval"
                   element={
                     <RequireAuth>
-                      <ReceiptScannerPage mode="approve" />
+                      <RequireRole roles={["cashier_supervisor", "admin"]}>
+                        <ReceiptScannerPage mode="approve" />
+                      </RequireRole>
                     </RequireAuth>
                   }
                 />
@@ -181,7 +183,9 @@ export default function App() {
                   path="/payment-verification"
                   element={
                     <RequireAuth>
-                      <ReceiptScannerPage mode="verify" />
+                      <RequireRole roles={["inventory_manager", "admin"]}>
+                        <ReceiptScannerPage mode="verify" />
+                      </RequireRole>
                     </RequireAuth>
                   }
                 />
