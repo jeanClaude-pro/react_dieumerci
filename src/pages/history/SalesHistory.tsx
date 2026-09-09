@@ -280,6 +280,10 @@ export default function SalesHistory() {
   const [scanStats, setScanStats] = useState<ScanStats | null>(null);
   const [scanStatsError, setScanStatsError] = useState(false);
 
+  // Admin-only manual receipt-control override (row selection + bulk submit)
+  const [selectedOverrideIds, setSelectedOverrideIds] = useState<Set<string>>(new Set());
+  const [overrideSubmitting, setOverrideSubmitting] = useState(false);
+
   // Fetch current user on component mount
   useEffect(() => {
     fetchCurrentUser();
@@ -567,6 +571,70 @@ export default function SalesHistory() {
     setTimeframeType("today");
     setShowEditedSales(false);
     setSearchTerm("");
+  };
+
+  // A sale can be manually overridden only if it is a real, still-valid, non-legacy
+  // receipt sale that is genuinely missing payment approval and/or exit control —
+  // mirrors the eligibility checks the backend independently re-verifies.
+  const isOverrideEligible = (sale: Sale): boolean =>
+    (sale.type ?? "sale") === "sale" &&
+    !["voided", "corrected", "refunded"].includes(sale.status) &&
+    !isLegacyReceiptSale(sale) &&
+    (!isPaymentApprovedForDisplay(sale) || !isExitControlledForDisplay(sale));
+
+  const toggleOverrideSelection = (saleId: string) => {
+    setSelectedOverrideIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(saleId)) next.delete(saleId);
+      else next.add(saleId);
+      return next;
+    });
+  };
+
+  const selectAllVisibleEligible = () => {
+    setSelectedOverrideIds((prev) => {
+      const next = new Set(prev);
+      filteredSales.filter(isOverrideEligible).forEach((sale) => next.add(sale._id));
+      return next;
+    });
+  };
+
+  const clearOverrideSelection = () => setSelectedOverrideIds(new Set());
+
+  const submitAdminOverride = async () => {
+    if (selectedOverrideIds.size === 0) return;
+    setOverrideSubmitting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(`${serverUrl}/sales/receipt-control/admin-mark-complete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          saleIds: Array.from(selectedOverrideIds),
+          reason: "Admin bulk override (SalesHistory)",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Échec de la mise à jour manuelle des reçus");
+        return;
+      }
+      setMessage(
+        `Reçus mis à jour : ${data.updated} · Déjà complets : ${data.alreadyComplete} · Rejetés : ${data.rejected}`
+      );
+      clearOverrideSelection();
+      fetchSalesRef.current();
+      fetchScanStatsRef.current();
+    } catch (err) {
+      console.error("Admin override error:", err);
+      setError("Connexion au serveur impossible");
+    } finally {
+      setOverrideSubmitting(false);
+    }
   };
 
   const fetchProducts = async () => {
@@ -1736,26 +1804,60 @@ export default function SalesHistory() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <button
+          type="button"
+          onClick={() => handleQueryParamChange("controlStatus", "")}
+          className={`rounded-lg border p-4 text-left transition-colors ${queryParams.controlStatus === "" ? "border-gray-400 bg-gray-100 ring-2 ring-gray-300" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+        >
+          <p className="text-sm font-medium text-gray-700">Tous</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900">{scanStatsError ? "—" : (scanStats?.total ?? "…")}</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleQueryParamChange("controlStatus", "payment_pending")}
+          title="Ventes dont le paiement n'a pas encore été scanné/validé"
+          className={`rounded-lg border p-4 text-left transition-colors ${queryParams.controlStatus === "payment_pending" ? "border-amber-400 bg-amber-100 ring-2 ring-amber-300" : "border-amber-200 bg-amber-50 hover:bg-amber-100"}`}
+        >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-emerald-800">Paiements validés</p>
-              <p className="mt-1 text-2xl font-bold text-emerald-950">{scanStatsError ? "—" : (scanStats?.paymentApproved ?? "…")}</p>
+              <p className="text-sm font-medium text-amber-800">Non validés</p>
+              <p className="mt-1 text-2xl font-bold text-amber-950">{scanStatsError ? "—" : (scanStats?.paymentPending ?? "…")}</p>
             </div>
-            <BadgeCheck className="h-8 w-8 text-emerald-600" />
+            <BadgeCheck className="h-7 w-7 text-amber-600" />
           </div>
-        </div>
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+        </button>
+        <button
+          type="button"
+          onClick={() => handleQueryParamChange("controlStatus", "exit_unverified")}
+          title="Paiement approuvé mais sortie pas encore contrôlée"
+          className={`rounded-lg border p-4 text-left transition-colors ${queryParams.controlStatus === "exit_unverified" ? "border-orange-400 bg-orange-100 ring-2 ring-orange-300" : "border-orange-200 bg-orange-50 hover:bg-orange-100"}`}
+        >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-blue-800">Sorties contrôlées</p>
-              <p className="mt-1 text-2xl font-bold text-blue-950">{scanStatsError ? "—" : (scanStats?.exitControlled ?? "…")}</p>
+              <p className="text-sm font-medium text-orange-800">Non contrôlés</p>
+              <p className="mt-1 text-2xl font-bold text-orange-950">{scanStatsError ? "—" : (scanStats?.awaitingExitControl ?? "…")}</p>
             </div>
-            <ScanLine className="h-8 w-8 text-blue-600" />
+            <ScanLine className="h-7 w-7 text-orange-600" />
           </div>
-        </div>
-        {scanStatsError && <p className="text-sm text-amber-700 sm:col-span-2">Statistiques de contrôle temporairement indisponibles.</p>}
+        </button>
+        <button
+          type="button"
+          onClick={() => handleQueryParamChange("controlStatus", "payment_approved")}
+          className={`rounded-lg border p-4 text-left transition-colors ${queryParams.controlStatus === "payment_approved" ? "border-emerald-400 bg-emerald-100 ring-2 ring-emerald-300" : "border-emerald-200 bg-emerald-50 hover:bg-emerald-100"}`}
+        >
+          <p className="text-sm font-medium text-emerald-800">Validés</p>
+          <p className="mt-1 text-2xl font-bold text-emerald-950">{scanStatsError ? "—" : (scanStats?.paymentApproved ?? "…")}</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleQueryParamChange("controlStatus", "exit_verified")}
+          className={`rounded-lg border p-4 text-left transition-colors ${queryParams.controlStatus === "exit_verified" ? "border-blue-400 bg-blue-100 ring-2 ring-blue-300" : "border-blue-200 bg-blue-50 hover:bg-blue-100"}`}
+        >
+          <p className="text-sm font-medium text-blue-800">Contrôlés</p>
+          <p className="mt-1 text-2xl font-bold text-blue-950">{scanStatsError ? "—" : (scanStats?.exitControlled ?? "…")}</p>
+        </button>
+        {scanStatsError && <p className="text-sm text-amber-700 col-span-2 lg:col-span-5">Statistiques de contrôle temporairement indisponibles.</p>}
       </div>
 
       {/* Timeframe Filter Section */}
@@ -2034,6 +2136,41 @@ export default function SalesHistory() {
           </h2>
         </div>
 
+        {isAdmin && !showEditedSales && (
+          <div className="flex flex-wrap items-center gap-3 px-6 py-3 bg-purple-50 border-b border-purple-100">
+            <span className="flex items-center gap-1 text-sm font-medium text-purple-900">
+              <Shield className="w-4 h-4" />
+              {selectedOverrideIds.size > 0
+                ? `${selectedOverrideIds.size} vente(s) sélectionnée(s)`
+                : "Contrôle manuel (admin)"}
+            </span>
+            <button
+              type="button"
+              onClick={selectAllVisibleEligible}
+              className="px-3 py-1.5 text-sm bg-white border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-100"
+            >
+              Sélectionner les visibles éligibles
+            </button>
+            <button
+              type="button"
+              onClick={clearOverrideSelection}
+              disabled={selectedOverrideIds.size === 0}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Effacer la sélection
+            </button>
+            <button
+              type="button"
+              onClick={submitAdminOverride}
+              disabled={selectedOverrideIds.size === 0 || overrideSubmitting}
+              className="ml-auto px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {overrideSubmitting && <RefreshCw className="w-4 h-4 animate-spin" />}
+              Marquer comme validés et contrôlés
+            </button>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           {loading ? (
             <div className="text-center py-12">
@@ -2056,6 +2193,20 @@ export default function SalesHistory() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    {isAdmin && !showEditedSales && (
+                      <th className="px-6 py-3 text-left">
+                        <input
+                          type="checkbox"
+                          aria-label="Sélectionner les ventes éligibles visibles"
+                          className="w-4 h-4"
+                          checked={
+                            filteredSales.some(isOverrideEligible) &&
+                            filteredSales.filter(isOverrideEligible).every((sale) => selectedOverrideIds.has(sale._id))
+                          }
+                          onChange={(e) => (e.target.checked ? selectAllVisibleEligible() : clearOverrideSelection())}
+                        />
+                      </th>
+                    )}
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Identifiant de vente
                     </th>
@@ -2097,6 +2248,18 @@ export default function SalesHistory() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredSales.map((sale) => (
                     <tr key={sale._id} className="hover:bg-gray-50">
+                      {isAdmin && !showEditedSales && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <input
+                            type="checkbox"
+                            aria-label={`Sélectionner la vente ${sale.saleId}`}
+                            className="w-4 h-4"
+                            disabled={!isOverrideEligible(sale)}
+                            checked={selectedOverrideIds.has(sale._id)}
+                            onChange={() => toggleOverrideSelection(sale._id)}
+                          />
+                        </td>
+                      )}
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {sale.saleId}
                       </td>

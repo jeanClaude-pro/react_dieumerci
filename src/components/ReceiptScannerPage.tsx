@@ -2,9 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import { Camera, CameraOff, ScanLine } from "lucide-react";
 import { serverUrl } from "../utils/constants";
+import {
+  createScanDeduper,
+  describeScanForLogging,
+  isScannerSubmitKey,
+  isValidReceiptToken,
+  sanitizeScannerValue,
+} from "../utils/scannerInput";
 
 type ScannerMode = "approve" | "verify";
-const RECEIPT_TOKEN_PATTERN = /^EDM1:[A-Za-z0-9_-]{43}$/;
 
 interface ScanResult {
   code: string;
@@ -28,7 +34,8 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const processingRef = useRef(false);
-  const lastTokenRef = useRef<{ token: string; at: number } | null>(null);
+  const queueRef = useRef<string[]>([]);
+  const deduperRef = useRef(createScanDeduper(2500));
   const cameraDecodeLockedRef = useRef(false);
   const sessionInvalidRef = useRef(false);
 
@@ -36,22 +43,46 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
     window.setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
-  const submitToken = useCallback(async (rawToken: string) => {
-    const token = rawToken.replace(/[\r\n]+$/g, "");
+  const devLog = useCallback((step: string, detail?: string) => {
+    if (!import.meta.env.DEV) return;
+    console.debug(`[receipt-scan:${mode}] ${step}${detail ? ` — ${detail}` : ""}`);
+  }, [mode]);
+
+  // Processes exactly one queued scan, then immediately drains the next one
+  // if another arrived while this request was in flight. The input is never
+  // disabled while a request is pending — disabling it would make the DOM
+  // element unfocusable, silently swallowing any scan the operator makes
+  // during that window (the scanner still beeps because the optical read
+  // succeeded; the browser just never delivers those keystrokes anywhere).
+  const drainQueue = useCallback(async () => {
     if (processingRef.current) return;
-    if (token.length !== 48 || !RECEIPT_TOKEN_PATTERN.test(token)) {
-      setResult({ code: "INVALID", message: "REÇU INVALIDE" });
-      focusScanner();
+    if (sessionInvalidRef.current) {
+      queueRef.current = [];
       return;
     }
-    const last = lastTokenRef.current;
-    if (last?.token === token && Date.now() - last.at < 2500) return;
+    const token = queueRef.current.shift();
+    if (token === undefined) return;
+
+    devLog("buffer completed", describeScanForLogging(token));
+
+    if (!isValidReceiptToken(token)) {
+      devLog("qr prefix check failed");
+      setResult({ code: "INVALID", message: "REÇU INVALIDE" });
+      focusScanner();
+      void drainQueue();
+      return;
+    }
+    if (deduperRef.current.shouldSkip(token)) {
+      devLog("duplicate scan skipped (dedup window)");
+      void drainQueue();
+      return;
+    }
 
     processingRef.current = true;
-    lastTokenRef.current = { token, at: Date.now() };
     setProcessing(true);
     setResult(null);
     try {
+      devLog("api request started");
       const response = await fetch(`${serverUrl}/sales/receipt/${mode}`, {
         method: "POST",
         headers: {
@@ -60,9 +91,10 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
         },
         body: JSON.stringify({ token }),
       });
+      devLog("http response received", `status=${response.status}`);
       const data = (await response.json().catch(() => ({}))) as ScanResult;
       if (response.status === 401) sessionInvalidRef.current = true;
-      setResult(response.status === 401 ? {
+      const outcome: ScanResult = response.status === 401 ? {
         code: "AUTH_REQUIRED",
         message: "SESSION AUTHENTIFIÉE REQUISE",
       } : {
@@ -76,15 +108,26 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
         exitVerified: data.exitVerified,
         verifiedBy: data.verifiedBy,
         verifiedAt: data.verifiedAt,
-      });
+      };
+      devLog("business response", outcome.code);
+      setResult(outcome);
     } catch {
+      devLog("network/api failure");
       setResult({ code: "ERROR", message: "CONNEXION AU SERVEUR IMPOSSIBLE" });
     } finally {
       processingRef.current = false;
       setProcessing(false);
       focusScanner();
+      void drainQueue();
     }
-  }, [focusScanner, mode]);
+  }, [devLog, focusScanner, mode]);
+
+  const enqueueToken = useCallback((rawValue: string) => {
+    const token = sanitizeScannerValue(rawValue);
+    if (!token) return;
+    queueRef.current.push(token);
+    void drainQueue();
+  }, [drainQueue]);
 
   useEffect(() => {
     focusScanner();
@@ -116,12 +159,11 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
         (decoded) => {
           if (!decoded || cameraDecodeLockedRef.current) return;
           cameraDecodeLockedRef.current = true;
-          void submitToken(decoded.getText()).finally(() => {
-            // Keep the stream alive; only suppress duplicate video frames briefly.
-            window.setTimeout(() => {
-              cameraDecodeLockedRef.current = false;
-            }, 750);
-          });
+          enqueueToken(decoded.getText());
+          // Keep the stream alive; only suppress duplicate video frames briefly.
+          window.setTimeout(() => {
+            cameraDecodeLockedRef.current = false;
+          }, 750);
         }
       );
       setCameraActive(true);
@@ -178,13 +220,13 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
             aria-label="Entrée du lecteur QR USB"
             className="mt-4 w-full rounded-lg border border-slate-300 px-4 py-3 font-mono text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
             placeholder="EDM1:…"
-            disabled={processing || sessionInvalidRef.current}
             onKeyDown={(event) => {
-              if (event.key !== "Enter") return;
+              if (!isScannerSubmitKey(event.key)) return;
               event.preventDefault();
               const value = event.currentTarget.value;
               event.currentTarget.value = "";
-              void submitToken(value);
+              devLog("scanner event received", `key=${event.key}`);
+              enqueueToken(value);
             }}
           />
         </section>
