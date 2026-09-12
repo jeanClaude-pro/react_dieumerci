@@ -37,7 +37,6 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
   const queueRef = useRef<string[]>([]);
   const deduperRef = useRef(createScanDeduper(2500));
   const cameraDecodeLockedRef = useRef(false);
-  const sessionInvalidRef = useRef(false);
 
   const focusScanner = useCallback(() => {
     window.setTimeout(() => inputRef.current?.focus(), 50);
@@ -56,10 +55,6 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
   // succeeded; the browser just never delivers those keystrokes anywhere).
   const drainQueue = useCallback(async () => {
     if (processingRef.current) return;
-    if (sessionInvalidRef.current) {
-      queueRef.current = [];
-      return;
-    }
     const token = queueRef.current.shift();
     if (token === undefined) return;
 
@@ -93,7 +88,10 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
       });
       devLog("http response received", `status=${response.status}`);
       const data = (await response.json().catch(() => ({}))) as ScanResult;
-      if (response.status === 401) sessionInvalidRef.current = true;
+      // A 401 here is already handled centrally (see authFetchInterceptor),
+      // which clears the session and redirects to /login. This is purely a
+      // transient message for the instant before that navigation lands —
+      // it must never gate future scans on this page.
       const outcome: ScanResult = response.status === 401 ? {
         code: "AUTH_REQUIRED",
         message: "SESSION AUTHENTIFIÉE REQUISE",

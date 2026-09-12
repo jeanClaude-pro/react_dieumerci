@@ -7,8 +7,10 @@ import "react-toastify/dist/ReactToastify.css";
 import { Eye, EyeOff, LockKeyhole } from "lucide-react";
 
 import { useAuth } from "../../hooks/useAuth";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { login as loginApi } from "../../services/authService";
+
+const SESSION_EXPIRED_TOAST_ID = "session-expired";
 
 const LoginPage = () => {
   const [email, setEmail] = React.useState("");
@@ -19,6 +21,32 @@ const LoginPage = () => {
 
   const { setAuth } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  React.useEffect(() => {
+    if (searchParams.get("reason") === "session-expired") {
+      toast.error("Votre session a expiré. Veuillez vous reconnecter.", {
+        toastId: SESSION_EXPIRED_TOAST_ID,
+      });
+    }
+    // Only ever read on the initial mount of this page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Only ever navigate to an internal path — never let a returnTo value
+  // escape to an external origin.
+  const isSafeInternalPath = (path: string | null | undefined): path is string =>
+    !!path && path.startsWith("/") && !path.startsWith("//");
+
+  const getReturnTo = () => {
+    const stateFrom = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from;
+    const fromState = stateFrom?.pathname ? `${stateFrom.pathname}${stateFrom.search || ""}` : null;
+    if (isSafeInternalPath(fromState)) return fromState;
+    const returnTo = searchParams.get("returnTo");
+    if (isSafeInternalPath(returnTo)) return returnTo;
+    return "/";
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +57,7 @@ const LoginPage = () => {
       const { user, token } = await loginApi({ email, password });
       setAuth({ token, user });
       toast.success("Connexion réussie !");
-      navigate("/");
+      navigate(getReturnTo(), { replace: true });
     } catch (err: any) {
       const msg = err?.message || "Email ou mot de passe incorrect";
       setError(msg);

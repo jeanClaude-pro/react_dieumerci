@@ -30,6 +30,7 @@ import AdminPanel from "./pages/admin/AdminPanel";
 import { RequireRole } from "./components/RequireRole";
 import ReceiptScannerPage from "./components/ReceiptScannerPage";
 import Remboursements from "./pages/Remboursements";
+import { useAuth } from "./hooks/useAuth";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -45,10 +46,13 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App() {
-  const token = localStorage.getItem("token");
-  const isAuthenticated = !!token;
+function LoginRoute() {
+  const { token, loading } = useAuth();
+  if (loading) return null;
+  return token ? <Navigate to="/" replace /> : <LoginPage />;
+}
 
+export default function App() {
   return (
     <AuthProvider>
       <ToastContainer position="top-right" autoClose={3000} newestOnTop />
@@ -201,16 +205,7 @@ export default function App() {
                     </RequireAuth>
                   }
                 />
-                <Route
-                  path="/login"
-                  element={
-                    isAuthenticated ? (
-                      <Navigate to="/" replace />
-                    ) : (
-                      <LoginPage />
-                    )
-                  }
-                />
+                <Route path="/login" element={<LoginRoute />} />
               </Routes>
         </AppLayout>
       </Router>
