@@ -10,6 +10,15 @@ export const AUTH_USER_KEY = "user";
 
 export type SessionInvalidationReason = "expired" | "unauthorized";
 
+/**
+ * Dispatched on `window` synchronously from invalidateSession(), before the
+ * redirect is kicked off. Lets any mounted component (e.g. the receipt
+ * scanner) react immediately — stop in-flight work, clear queues, stop a
+ * camera stream — instead of relying solely on the navigation eventually
+ * unmounting it.
+ */
+export const SESSION_INVALIDATED_EVENT = "session:invalidated";
+
 interface JwtPayload {
   exp?: number;
   [key: string]: unknown;
@@ -71,15 +80,36 @@ export function invalidateSession(reason: SessionInvalidationReason): void {
   if (invalidating) return;
   invalidating = true;
 
-  if (import.meta.env.DEV) console.debug(`[session] invalidated (${reason})`);
-  clearAuthStorage();
+  // Safety valve: on the happy path this page unloads before the timer ever
+  // fires (navigation below). But if something throws, or the navigation is
+  // blocked/ignored by the environment, this guarantees `invalidating` can't
+  // stay latched forever and silently swallow every future real expiry.
+  const releaseTimer = window.setTimeout(() => {
+    invalidating = false;
+  }, 3000);
 
-  const { pathname, search } = window.location;
-  const returnTo = pathname === "/login" ? "" : `${pathname}${search}`;
+  try {
+    if (import.meta.env.DEV) console.debug(`[session] invalidated (${reason})`);
 
-  const params = new URLSearchParams();
-  params.set("reason", "session-expired");
-  if (returnTo) params.set("returnTo", returnTo);
+    try {
+      window.dispatchEvent(new CustomEvent(SESSION_INVALIDATED_EVENT, { detail: { reason } }));
+    } catch {
+      // A listener throwing (or an unusual environment) must never block the
+      // actual invalidation below.
+    }
 
-  window.location.href = `/login?${params.toString()}`;
+    clearAuthStorage();
+
+    const { pathname, search } = window.location;
+    const returnTo = pathname === "/login" ? "" : `${pathname}${search}`;
+
+    const params = new URLSearchParams();
+    params.set("reason", "session-expired");
+    if (returnTo) params.set("returnTo", returnTo);
+
+    window.location.href = `/login?${params.toString()}`;
+  } catch {
+    window.clearTimeout(releaseTimer);
+    invalidating = false;
+  }
 }

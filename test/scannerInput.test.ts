@@ -69,6 +69,22 @@ test("deduper allows the same token again once the window has elapsed", () => {
   });
 });
 
+test("release() clears the dedup slot so an immediate retry after a transient failure is not swallowed", () => {
+  const deduper = createScanDeduper(2500);
+  assert.equal(deduper.shouldSkip(VALID_TOKEN), false);
+  deduper.release(VALID_TOKEN);
+  assert.equal(deduper.shouldSkip(VALID_TOKEN), false, "retry right after release must not be treated as a duplicate");
+});
+
+test("release() is a no-op if a different, more recent scan has since taken the slot", () => {
+  const deduper = createScanDeduper(2500);
+  const otherToken = "EDM1:" + "B".repeat(43);
+  assert.equal(deduper.shouldSkip(VALID_TOKEN), false);
+  assert.equal(deduper.shouldSkip(otherToken), false);
+  deduper.release(VALID_TOKEN); // stale — otherToken is now "last"
+  assert.equal(deduper.shouldSkip(otherToken), true, "release() must not clear a newer unrelated record");
+});
+
 test("logging helper never leaks token content", () => {
   const description = describeScanForLogging(VALID_TOKEN);
   assert.doesNotMatch(description, /[A-Za-z0-9_-]{10,}/);

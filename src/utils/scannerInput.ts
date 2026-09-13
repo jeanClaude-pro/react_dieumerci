@@ -54,6 +54,17 @@ export function createScanDeduper(windowMs = 2500) {
       last = { token, at: now };
       return false;
     },
+    /**
+     * Releases the dedup record for `token` only if it is still the most
+     * recent one. Call this after a transient failure (timeout, abort,
+     * network error, 401) so a legitimate immediate retry of the same
+     * physical scan is never silently swallowed — dedup is meant to guard
+     * against a double-fire of one scan, not to block deliberate retries.
+     * No-op if a different, more recent scan has since taken the slot.
+     */
+    release(token: string): void {
+      if (last && last.token === token) last = null;
+    },
     reset(): void {
       last = null;
     },
