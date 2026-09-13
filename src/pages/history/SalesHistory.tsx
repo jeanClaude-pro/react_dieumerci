@@ -1088,8 +1088,9 @@ export default function SalesHistory() {
         border: 1px solid #ccc;
         border-radius: 2px;
       }
-      .receipt-qr { text-align: center; margin: 3mm auto; padding: 2mm; background: #fff; }
+      .receipt-qr { text-align: center; margin: 2mm auto; padding: 1mm; background: #fff; }
       .receipt-qr img { width: 42mm; height: 42mm; image-rendering: pixelated; }
+      .qr-promo { margin-top: 0.5mm; font-size: 9px; line-height: 1.15; text-align: center; }
       .customer-info {
         margin: 2mm 0;
         padding: 1mm 2mm;
@@ -1239,7 +1240,7 @@ export default function SalesHistory() {
         Agent: <strong>${(sale.salesPerson || 'Non spécifié').toUpperCase()}</strong>
       </div>
       
-      <div class="receipt-qr"><img src="${qrDataUrl}" alt="QR de contrôle du paiement" /><div><strong>SCAN CONTROLE PAIEMENT</strong></div></div>
+      <div class="receipt-qr"><img src="${qrDataUrl}" alt="QR de contrôle du paiement" /><div class="qr-promo"><div><strong>UN SYSTÈME POUR VOTRE BOUTIQUE OU ENTREPRISE ?</strong></div><div>Gestion, ventes, stock & bien plus</div><div><strong>WhatsApp : +243 844 311 550</strong></div></div></div>
 
       <div class="footer">
         <div class="thank-you"><strong>${shopSettings.receiptFooter || "MERCI POUR VOTRE ACHAT !"}</strong></div>
@@ -1347,7 +1348,14 @@ export default function SalesHistory() {
     doc.text(`Sous-total: ${compactDualSaleTotal(sale.subtotal, sale.items, sale.exchangeRate)}`, 20, yPos);
     doc.text(`Total: ${compactDualSaleTotal(sale.total, sale.items, sale.exchangeRate)}`, 20, yPos + 5);
     doc.addImage(qrDataUrl, "PNG", 84, yPos + 10, 42, 42);
-    yPos += 48;
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.text("UN SYSTÈME POUR VOTRE BOUTIQUE OU ENTREPRISE ?", 105, yPos + 56, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.text("Gestion, ventes, stock & bien plus", 105, yPos + 60, { align: "center" });
+    doc.setFont("helvetica", "bold");
+    doc.text("WhatsApp : +243 844 311 550", 105, yPos + 64, { align: "center" });
+    yPos += 53;
 
     // Footer
     doc.setFontSize(10);

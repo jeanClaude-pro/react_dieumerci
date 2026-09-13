@@ -819,14 +819,20 @@ export default function NewSale() {
       }
       .receipt-qr {
         text-align: center;
-        margin: 3mm auto;
-        padding: 2mm;
+        margin: 2mm auto;
+        padding: 1mm;
         background: #fff;
       }
       .receipt-qr img {
         width: 42mm;
         height: 42mm;
         image-rendering: pixelated;
+      }
+      .qr-promo {
+        margin-top: 0.5mm;
+        font-size: 9px;
+        line-height: 1.15;
+        text-align: center;
       }
       .customer-info {
         margin: 2mm 0;
@@ -972,7 +978,7 @@ export default function NewSale() {
         Agent: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
       </div>
 
-      ${receiptData.qrDataUrl ? `<div class="receipt-qr"><img src="${receiptData.qrDataUrl}" alt="QR de contrôle du paiement" /><div><strong>SCAN CONTROLE PAIEMENT</strong></div></div>` : ""}
+      ${receiptData.qrDataUrl ? `<div class="receipt-qr"><img src="${receiptData.qrDataUrl}" alt="QR de contrôle du paiement" /><div class="qr-promo"><div><strong>UN SYSTÈME POUR VOTRE BOUTIQUE OU ENTREPRISE ?</strong></div><div>Gestion, ventes, stock & bien plus</div><div><strong>WhatsApp : +243 844 311 550</strong></div></div></div>` : ""}
       
       <div class="footer">
         <div class="thank-you"><strong>${receiptData.receiptFooter || "MERCI POUR VOTRE ACHAT !"}</strong></div>
@@ -1210,6 +1216,23 @@ export default function NewSale() {
         border: 1px solid #ddd;
         border-radius: 2px;
       }
+      .receipt-qr {
+        text-align: center;
+        margin: 2mm auto;
+        padding: 1mm;
+        background: #fff;
+      }
+      .receipt-qr img {
+        width: 42mm;
+        height: 42mm;
+        image-rendering: pixelated;
+      }
+      .qr-promo {
+        margin-top: 0.5mm;
+        font-size: 9px;
+        line-height: 1.15;
+        text-align: center;
+      }
       .customer-info {
         margin: 2mm 0;
         padding: 1mm 2mm;
@@ -1353,7 +1376,7 @@ export default function NewSale() {
         Agent: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
       </div>
 
-      ${receiptData.qrDataUrl ? `<div style="text-align:center;margin:3mm auto;padding:2mm;background:#fff"><img src="${receiptData.qrDataUrl}" alt="QR de contrôle du paiement" style="width:42mm;height:42mm;image-rendering:pixelated" /><div><strong>SCAN CONTROLE PAIEMENT</strong></div></div>` : ""}
+      ${receiptData.qrDataUrl ? `<div class="receipt-qr"><img src="${receiptData.qrDataUrl}" alt="QR de contrôle du paiement" /><div class="qr-promo"><div><strong>UN SYSTÈME POUR VOTRE BOUTIQUE OU ENTREPRISE ?</strong></div><div>Gestion, ventes, stock & bien plus</div><div><strong>WhatsApp : +243 844 311 550</strong></div></div></div>` : ""}
       
       <div class="stub-footer">
         <div class="thank-you"><strong>SOUCHE DE CAISSE</strong></div>
