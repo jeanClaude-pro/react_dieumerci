@@ -1609,7 +1609,7 @@ export default function NewSale() {
             </div>
             
             {/* Exchange Rate Display */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 min-w-[280px]">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 w-full min-w-0 sm:w-auto sm:min-w-[280px]">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <DollarSign className="w-5 h-5 text-blue-600" />
@@ -1767,7 +1767,7 @@ export default function NewSale() {
             type="button"
             onClick={handleAddToCart}
             disabled={!canAddToCart}
-            className={`px-6 py-3 rounded-lg font-medium flex items-center gap-2 ${
+            className={`w-full sm:w-auto px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
               canAddToCart
                 ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
                 : "bg-gray-400 cursor-not-allowed text-white"
@@ -1933,7 +1933,7 @@ export default function NewSale() {
             type="submit"
             onClick={handleSale}
             disabled={!isFormValid || submitting}
-            className={`px-8 py-3 rounded-lg font-medium text-lg ${
+            className={`w-full sm:w-auto px-8 py-3 rounded-lg font-medium text-base sm:text-lg ${
               isFormValid && !submitting
                 ? "bg-green-600 hover:bg-green-700 text-white shadow-sm"
                 : "bg-gray-400 cursor-not-allowed text-white"

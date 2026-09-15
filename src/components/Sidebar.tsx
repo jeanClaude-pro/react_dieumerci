@@ -21,8 +21,6 @@ import {
   User,
   Clock,
   Wallet,
-  Menu,
-  X,
   Shield,
   ScanLine,
   BadgeCheck,
@@ -30,6 +28,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { canAccessNavigationItem } from "../config/navigation";
 
 const clsx = (...classes: (string | undefined | null | false)[]): string => {
   return classes.filter(Boolean).join(" ");
@@ -193,7 +192,7 @@ export default function Sidebar() {
   // Check if mobile device and set appropriate initial state
   useEffect(() => {
     const checkMobile = () => {
-      const mobile = window.innerWidth < 1024;
+      const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
 
       if (mobile) {
@@ -265,19 +264,7 @@ export default function Sidebar() {
   }, [isMobile]);
 
   const hasAccess = (item: SidebarItem): boolean => {
-    if (!item.roles) return true;
-    if (!user?.role) return false;
-    // Admin panel is always admin-only, never overridden by custom permissions
-    if (item.path === "/admin") return user.role === "admin";
-    // These operational duties cannot be overridden by custom page permissions.
-    if (["/payment-approval", "/payment-verification"].includes(item.path)) {
-      return item.roles?.includes(user.role) ?? false;
-    }
-    // If user has custom permissions, use path-based check
-    if (user.permissions && user.permissions.length > 0) {
-      return user.permissions.includes(item.path);
-    }
-    return item.roles.includes(user.role);
+    return canAccessNavigationItem(item, user);
   };
 
   const toggleSidebar = () => {
@@ -296,35 +283,8 @@ export default function Sidebar() {
   const formatTime = formatTimeGMT2;
   const formatDay = formatDayGMT2;
 
-  // Mobile overlay to close sidebar when clicking outside
-  const MobileOverlay = () => (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="lg:hidden fixed inset-0 bg-slate-950/55 backdrop-blur-[2px] z-40"
-      onClick={() => setIsMobileOpen(false)}
-    />
-  );
-
   return (
     <>
-      {/* Mobile Menu Button */}
-      {isMobile && isAuthed && (
-        <button
-          onClick={toggleSidebar}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-slate-950 rounded-lg text-white shadow-lg ring-1 ring-white/10"
-          aria-label={isMobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
-        >
-          {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
-      )}
-
-      {/* Mobile Overlay */}
-      <AnimatePresence>
-        {isMobile && isMobileOpen && <MobileOverlay />}
-      </AnimatePresence>
-
       {/* Sidebar */}
       <motion.aside
         ref={sidebarRef}
@@ -334,7 +294,7 @@ export default function Sidebar() {
           x: isMobile ? (isMobileOpen ? 0 : -280) : 0
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className="bg-[linear-gradient(180deg,#070f1f_0%,#0f172a_48%,#111827_100%)] border-r border-white/10 flex flex-col h-screen min-h-0 z-50 flex-shrink-0 overflow-hidden shadow-2xl shadow-slate-950/25"
+        className="hidden md:flex bg-[linear-gradient(180deg,#070f1f_0%,#0f172a_48%,#111827_100%)] border-r border-white/10 flex-col h-screen min-h-0 z-50 flex-shrink-0 overflow-hidden shadow-2xl shadow-slate-950/25"
         style={{
           touchAction: "pan-y",
           position: isMobile ? "fixed" : "sticky",

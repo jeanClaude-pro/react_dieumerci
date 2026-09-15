@@ -240,8 +240,9 @@ export default function SalesHistory() {
   // User state for role checking
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const canReprint = currentUser?.role === "admin" ||
-    Boolean(currentUser?.actionPermissions?.includes("reprint_receipts"));
+  // Reprinting an existing receipt is available to every authenticated user.
+  // This flag is intentionally independent from all edit/void/override rights.
+  const canReprint = Boolean(currentUser);
 
   // Timeframe state - Updated to match backend query parameters
   const [timeframeType, setTimeframeType] = useState<

@@ -1152,7 +1152,7 @@ export default function ReservationManagement() {
       {/* Filters and Search */}
       <div className="bg-white p-4 rounded-lg shadow">
         <div className="flex flex-wrap gap-4 items-center">
-          <div className="relative flex-1 min-w-[300px]">
+          <div className="relative flex-1 min-w-0 w-full sm:min-w-[300px]">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"

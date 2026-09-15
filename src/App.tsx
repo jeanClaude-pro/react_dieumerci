@@ -1,5 +1,7 @@
 "use client";
 
+import { lazy, Suspense } from "react";
+
 import {
   BrowserRouter as Router,
   Routes,
@@ -11,37 +13,44 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 import Sidebar from "./components/Sidebar";
-import Products from "./pages/products/products";
-import SalesHistory from "./pages/history/SalesHistory";
-import Analytics from "./pages/analytics/Analytics";
-import Customers from "./pages/customers/Customers";
 import LoginPage from "./pages/login/page";
-import NewSale from "./pages/NewSale";
-import Reservation from "./pages/Reservation";
-import ReservationHistory from "./pages/ReservationHistory";
-import Sortie from "./pages/Sortie";
-import SortieHistory  from "./pages/SortieHistory";
-import Rate from "./pages/Rate";
-import Entry from "./pages/Entry";
-import EntryHistory from "./pages/EntryHistory";
+import MobileNavigation from "./components/MobileNavigation";
 import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider } from "./context/AuthProvider";
-import AdminPanel from "./pages/admin/AdminPanel";
 import { RequireRole } from "./components/RequireRole";
-import ReceiptScannerPage from "./components/ReceiptScannerPage";
-import Remboursements from "./pages/Remboursements";
 import { useAuth } from "./hooks/useAuth";
+
+const Products = lazy(() => import("./pages/products/products"));
+const SalesHistory = lazy(() => import("./pages/history/SalesHistory"));
+const Analytics = lazy(() => import("./pages/analytics/Analytics"));
+const Customers = lazy(() => import("./pages/customers/Customers"));
+const NewSale = lazy(() => import("./pages/NewSale"));
+const Reservation = lazy(() => import("./pages/Reservation"));
+const ReservationHistory = lazy(() => import("./pages/ReservationHistory"));
+const Sortie = lazy(() => import("./pages/Sortie"));
+const SortieHistory = lazy(() => import("./pages/SortieHistory"));
+const Rate = lazy(() => import("./pages/Rate"));
+const Entry = lazy(() => import("./pages/Entry"));
+const EntryHistory = lazy(() => import("./pages/EntryHistory"));
+const AdminPanel = lazy(() => import("./pages/admin/AdminPanel"));
+const ReceiptScannerPage = lazy(() => import("./components/ReceiptScannerPage"));
+const Remboursements = lazy(() => import("./pages/Remboursements"));
+
+function RouteLoading() {
+  return <div className="route-loading" role="status" aria-live="polite"><span className="route-loading-spinner" /><span>Chargement…</span></div>;
+}
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const isLogin = location.pathname === "/login";
 
   return (
-    <div className="h-screen overflow-hidden flex bg-background text-slate-900">
+    <div className="app-shell overflow-hidden flex bg-background text-slate-900">
       {!isLogin && <Sidebar />}
-      <main className="h-screen flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
-        <div className="min-h-full min-w-0">{children}</div>
+      <main className="app-main flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
+        <div className="app-content min-h-full min-w-0">{children}</div>
       </main>
+      {!isLogin && <MobileNavigation />}
     </div>
   );
 }
@@ -59,20 +68,12 @@ export default function App() {
 
       <Router>
         <AppLayout>
-          <Routes>
+          <Suspense fallback={<RouteLoading />}><Routes>
                 <Route
                   path="/products"
                   element={
                     <RequireAuth>
                       <Products />
-                    </RequireAuth>
-                  }
-                />
-                <Route
-                  path="/new-sale"
-                  element={
-                    <RequireAuth>
-                      <NewSale />
                     </RequireAuth>
                   }
                 />
@@ -206,7 +207,7 @@ export default function App() {
                   }
                 />
                 <Route path="/login" element={<LoginRoute />} />
-              </Routes>
+              </Routes></Suspense>
         </AppLayout>
       </Router>
     </AuthProvider>
