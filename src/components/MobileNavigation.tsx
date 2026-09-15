@@ -26,7 +26,7 @@ export default function MobileNavigation() {
   const logout = () => { clearAuth(); window.location.href = "/login"; };
 
   return <>
-    {isMoreOpen && <div className="mobile-more-layer md:hidden">
+    {isMoreOpen && <div className="mobile-more-layer">
       <button className="mobile-more-backdrop" onClick={() => setIsMoreOpen(false)} aria-label="Fermer le menu" />
       <section className="mobile-more-sheet" role="dialog" aria-modal="true" aria-labelledby="mobile-menu-title">
         <div className="mobile-sheet-handle" />
@@ -53,7 +53,7 @@ export default function MobileNavigation() {
         </div>
       </section>
     </div>}
-    <nav className="mobile-bottom-nav md:hidden" aria-label="Navigation principale">
+    <nav className="mobile-bottom-nav" aria-label="Navigation principale">
       {primaryItems.map((item) => { const Icon = item.icon; const active = isNavigationItemActive(location.pathname, item); return <Link key={item.id} to={item.path} className={active ? "is-active" : ""} aria-current={active ? "page" : undefined}><Icon /><span>{item.shortLabel || item.label}</span></Link>; })}
       <button className={isMoreOpen ? "is-active" : ""} onClick={() => setIsMoreOpen(true)} aria-expanded={isMoreOpen}><MoreHorizontal /><span>Plus</span></button>
     </nav>

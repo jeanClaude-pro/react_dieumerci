@@ -175,7 +175,7 @@ const sidebarSections: SidebarSection[] = [
 ];
 
 export default function Sidebar() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => window.innerWidth <= 1024);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isMobile, setIsMobile] = useState(false);
@@ -192,12 +192,17 @@ export default function Sidebar() {
   // Check if mobile device and set appropriate initial state
   useEffect(() => {
     const checkMobile = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
+      const usesPhoneNavigation = window.matchMedia(
+        "(max-width: 480px) and (max-height: 1000px)"
+      ).matches;
+      setIsMobile(usesPhoneNavigation);
 
-      if (mobile) {
+      if (usesPhoneNavigation) {
         setIsCollapsed(true);
         setIsMobileOpen(false);
+      } else if (window.innerWidth <= 1024) {
+        // Tablets use the space-efficient icon rail instead of phone tabs.
+        setIsCollapsed(true);
       } else {
         setIsMobileOpen(false);
       }
@@ -294,7 +299,7 @@ export default function Sidebar() {
           x: isMobile ? (isMobileOpen ? 0 : -280) : 0
         }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className="hidden md:flex bg-[linear-gradient(180deg,#070f1f_0%,#0f172a_48%,#111827_100%)] border-r border-white/10 flex-col h-screen min-h-0 z-50 flex-shrink-0 overflow-hidden shadow-2xl shadow-slate-950/25"
+        className="desktop-tablet-sidebar bg-[linear-gradient(180deg,#070f1f_0%,#0f172a_48%,#111827_100%)] border-r border-white/10 flex-col h-screen min-h-0 z-50 flex-shrink-0 overflow-hidden shadow-2xl shadow-slate-950/25"
         style={{
           touchAction: "pan-y",
           position: isMobile ? "fixed" : "sticky",

@@ -248,13 +248,17 @@ tbody tr:hover {
 }
 
 /* Phone navigation ------------------------------------------------------ */
+.desktop-tablet-sidebar {
+  display: flex;
+}
+
 .mobile-bottom-nav {
   position: fixed;
   z-index: 60;
   inset: auto 0 0;
   min-height: 4.25rem;
   padding: 0.35rem max(0.35rem, env(safe-area-inset-right)) calc(0.35rem + env(safe-area-inset-bottom)) max(0.35rem, env(safe-area-inset-left));
-  display: flex;
+  display: none;
   align-items: stretch;
   justify-content: space-around;
   background: rgba(255, 255, 255, 0.98);
@@ -299,6 +303,7 @@ tbody tr:hover {
   position: fixed;
   inset: 0;
   z-index: 70;
+  display: none;
 }
 
 .mobile-more-backdrop {
@@ -438,15 +443,6 @@ tbody tr:hover {
 }
 
 @media (max-width: 767px) {
-  .app-main {
-    padding-bottom: calc(4.25rem + env(safe-area-inset-bottom));
-    scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom));
-  }
-
-  .app-content {
-    min-height: calc(100dvh - 4.25rem - env(safe-area-inset-bottom));
-  }
-
   .app-content .p-6 { padding: 1rem; }
   .app-content .px-6 { padding-left: 1rem; padding-right: 1rem; }
   .app-content .py-8 { padding-top: 1rem; padding-bottom: 1rem; }
@@ -499,6 +495,31 @@ tbody tr:hover {
   }
 
   .Toastify__toast { min-height: 3.5rem; margin-bottom: 0.5rem; }
+}
+
+/* The tab bar is a phone-only pattern. Both limits are intentional so a
+   narrow but unusually tall desktop/browser window still receives the rail. */
+@media (max-width: 480px) and (max-height: 1000px) {
+  .desktop-tablet-sidebar {
+    display: none;
+  }
+
+  .mobile-bottom-nav {
+    display: flex;
+  }
+
+  .mobile-more-layer {
+    display: block;
+  }
+
+  .app-main {
+    padding-bottom: calc(4.25rem + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+
+  .app-content {
+    min-height: calc(100dvh - 4.25rem - env(safe-area-inset-bottom));
+  }
 }
 
 @media (max-width: 359px) {
