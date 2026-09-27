@@ -44,6 +44,8 @@ function RouteLoading() {
 function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const isLogin = location.pathname === "/login";
+  // The welcome launcher is itself the navigation: full width, no sidebar.
+  const isWelcome = location.pathname === "/";
   const mainRef = useRef<HTMLElement>(null);
 
   // <main> is the scroll container: start each screen at its top.
@@ -52,7 +54,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell">
       <a href="#main-content" className="skip-link">Aller au contenu</a>
-      {!isLogin && <Sidebar />}
+      {!isLogin && !isWelcome && <Sidebar />}
       <main ref={mainRef} id="main-content" tabIndex={-1} className={`app-main ${isLogin ? "app-login" : ""}`}>
         <div className="app-content">{children}</div>
       </main>

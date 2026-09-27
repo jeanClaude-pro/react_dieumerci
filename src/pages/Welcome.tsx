@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeftRight, ArrowUpRight, CalendarDays } from "lucide-react";
+import { ArrowLeftRight, ArrowUpRight, CalendarDays, LogOut } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { getAccessibleSections, roleLabels, type NavigationItem } from "../config/navigation";
@@ -14,9 +14,11 @@ function greeting(date: Date) {
   return hour >= 18 || hour < 4 ? "Bonsoir" : "Bonjour";
 }
 
-function Launcher({ item, primary = false }: { item: NavigationItem; primary?: boolean }) {
+type Tone = "blue" | "green";
+
+function Launcher({ item, primary = false, tone = "blue" }: { item: NavigationItem; primary?: boolean; tone?: Tone }) {
   const Icon = item.icon;
-  return <Link to={item.path} className={`launcher-card ${primary ? "launcher-primary" : ""}`}>
+  return <Link to={item.path} data-tone={tone} className={`launcher-card ${primary ? "launcher-primary" : ""}`}>
     <span className="launcher-icon"><Icon aria-hidden="true" /></span>
     <span className="launcher-copy"><strong>{item.label}</strong>{item.description && <span>{item.description}</span>}</span>
     <ArrowUpRight className="launcher-arrow" aria-hidden="true" />
@@ -24,7 +26,8 @@ function Launcher({ item, primary = false }: { item: NavigationItem; primary?: b
 }
 
 export default function Welcome() {
-  const { user } = useAuth();
+  const { user, clearAuth } = useAuth();
+  const logout = () => { clearAuth(); window.location.href = "/login"; };
   const [rate, setRate] = useState<number | null>(null);
   const today = new Date();
 
@@ -61,6 +64,21 @@ export default function Welcome() {
   const dateLabel = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "Africa/Lubumbashi" }).format(today);
 
   return <div className="page welcome-page">
+    {/* No sidebar on this screen: brand, account and logout live here. */}
+    <div className="welcome-topbar">
+      <div className="welcome-topbar-brand">
+        <img src="/logo.jpeg" alt="" />
+        <span>ETS. DIEU MERCI<small>Gestion commerciale</small></span>
+      </div>
+      {user && <div className="welcome-account">
+        <span className="welcome-avatar" aria-hidden="true">{user.username.slice(0, 2).toUpperCase()}</span>
+        <span className="welcome-account-text"><strong>{user.username}</strong><small>{roleLabels[user.role]}</small></span>
+        <button type="button" onClick={logout} className="btn btn-secondary btn-sm" aria-label="Se déconnecter" title="Se déconnecter">
+          <LogOut aria-hidden="true" /><span className="welcome-logout-text">Déconnexion</span>
+        </button>
+      </div>}
+    </div>
+
     <header className="welcome-hero">
       <div className="min-w-0">
         <div className="eyebrow"><CalendarDays aria-hidden="true" /><span>{dateLabel}</span></div>
@@ -69,25 +87,28 @@ export default function Welcome() {
           ? "Choisissez une opération pour commencer. Seuls les modules autorisés pour votre compte sont affichés."
           : "Votre compte est actif. Les modules vous seront accessibles dès qu'un administrateur les aura attribués."}</p>
         <div className="welcome-meta">
-          {user && <span className="badge badge-brand">{roleLabels[user.role]}</span>}
-          {rate !== null && <span className="badge"><ArrowLeftRight aria-hidden="true" />
+          {user && <span className="welcome-chip">{roleLabels[user.role]}</span>}
+          {rate !== null && <span className="welcome-chip"><ArrowLeftRight aria-hidden="true" />
             <span className="num">1 USD = {new Intl.NumberFormat("fr-FR").format(rate)} FC</span></span>}
         </div>
       </div>
-      <div className="welcome-brand"><img src="/logo.jpeg" alt="" /><span>ETS. DIEU MERCI<small>Gestion commerciale</small></span></div>
     </header>
 
     {quick.length > 0 && <section aria-labelledby="quick-title">
       <div className="welcome-section-heading"><h2 id="quick-title">Opérations courantes</h2></div>
       <div className="launcher-grid launcher-quick">
-        {quick.map(item => <Launcher key={item.id} item={item} primary={item.id === "pos"} />)}
+        {quick.map((item, index) => <Launcher key={item.id} item={item} primary={item.id === "pos"} tone={index % 2 ? "green" : "blue"} />)}
       </div>
     </section>}
 
-    {sections.map(section => <section key={section.title} aria-labelledby={`launch-${section.title}`}>
-      <div className="welcome-section-heading"><h2 id={`launch-${section.title}`}>{section.title}</h2></div>
-      <div className="launcher-grid">{section.items.map(item => <Launcher key={item.id} item={item} />)}</div>
-    </section>)}
+    {/* Sections alternate blue and green so the launcher reads in groups. */}
+    {sections.map((section, index) => {
+      const tone: Tone = index % 2 ? "blue" : "green";
+      return <section key={section.title} aria-labelledby={`launch-${section.title}`} data-tone={tone} className="welcome-section">
+        <div className="welcome-section-heading"><h2 id={`launch-${section.title}`}>{section.title}</h2></div>
+        <div className="launcher-grid">{section.items.map(item => <Launcher key={item.id} item={item} tone={tone} />)}</div>
+      </section>;
+    })}
 
     {!quick.length && !sections.length && <div className="card">
       <EmptyState title="Aucun module attribué">Contactez votre administrateur pour obtenir l'accès aux modules nécessaires à votre poste.</EmptyState>

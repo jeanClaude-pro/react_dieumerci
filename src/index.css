@@ -1848,33 +1848,147 @@
 /* 5. Screens ============================================================== */
 
 /* Welcome / launcher ------------------------------------------------------ */
+/* Full-width launcher (no sidebar). Palette mixes the brand blue with a deep
+   green; both keep AA contrast with white text. */
 .welcome-page {
+  --wl-blue: #1d4ed8;
+  --wl-blue-deep: #1e3a8a;
+  --wl-blue-soft: #eff4ff;
+  --wl-blue-line: #bfd3fe;
+  --wl-green: #047857;
+  --wl-green-soft: #ecfdf5;
+  --wl-green-line: #a7f3d0;
+  --wl-gradient: linear-gradient(120deg, var(--wl-blue-deep) 0%, var(--wl-blue) 38%, #0f766e 72%, var(--wl-green) 100%);
   display: grid;
   gap: 1.75rem;
+  max-width: 80rem;
 }
-.welcome-hero {
+
+.welcome-topbar {
+  min-width: 0;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1.25rem;
-  padding: clamp(1.25rem, 3vw, 2rem);
+  gap: 1rem;
+}
+.welcome-topbar-brand {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.welcome-topbar-brand img {
+  width: 4.5rem;
+  height: 2.5rem;
+  flex: none;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  background: #fff;
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  background: linear-gradient(180deg, #fff 0%, #fbfcfe 100%);
-  box-shadow: var(--shadow-xs);
+  padding: 0.125rem;
+}
+.welcome-topbar-brand span {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.welcome-topbar-brand small {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 450;
+  letter-spacing: 0;
+}
+.welcome-account {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+.welcome-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: var(--wl-gradient);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+.welcome-account-text {
+  display: grid;
+  min-width: 0;
+  line-height: 1.2;
+}
+.welcome-account-text strong {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.welcome-account-text small {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.welcome-hero {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.5rem, 3.5vw, 2.5rem);
+  border-radius: 0.875rem;
+  background: var(--wl-gradient);
+  color: #fff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08), 0 12px 32px rgb(4 120 87 / 0.14);
+}
+/* Soft light accents; decorative only. */
+.welcome-hero::before,
+.welcome-hero::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+}
+.welcome-hero::before {
+  width: 22rem;
+  height: 22rem;
+  right: -6rem;
+  top: -10rem;
+  background: radial-gradient(circle, rgb(110 231 183 / 0.28), transparent 65%);
+}
+.welcome-hero::after {
+  width: 18rem;
+  height: 18rem;
+  left: -8rem;
+  bottom: -12rem;
+  background: radial-gradient(circle, rgb(147 180 253 / 0.25), transparent 65%);
+}
+.welcome-hero > * {
+  position: relative;
+}
+.welcome-hero .eyebrow {
+  color: rgb(255 255 255 / 0.8);
 }
 .welcome-hero h1 {
-  margin: 0.375rem 0 0.25rem;
-  font-size: clamp(1.75rem, 1.2rem + 2.2vw, 2.5rem);
-  line-height: 1.12;
-  font-weight: 620;
+  margin: 0.5rem 0 0.375rem;
+  font-size: clamp(1.75rem, 1.2rem + 2.2vw, 2.75rem);
+  line-height: 1.1;
+  font-weight: 640;
   letter-spacing: -0.025em;
 }
 .welcome-hero p {
   margin: 0;
-  max-width: 38rem;
-  color: var(--text-muted);
+  max-width: 40rem;
+  color: rgb(255 255 255 / 0.86);
   font-size: 0.9375rem;
 }
 .welcome-meta {
@@ -1882,48 +1996,51 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin-top: 1rem;
+  margin-top: 1.125rem;
 }
-.welcome-brand {
-  display: flex;
+.welcome-chip {
+  display: inline-flex;
   align-items: center;
-  gap: 0.875rem;
-  padding-left: 1.25rem;
-  border-left: 1px solid var(--border);
+  gap: 0.375rem;
+  min-height: 1.75rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.14);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(4px);
 }
-.welcome-brand img {
-  width: 5.5rem;
-  height: 2.75rem;
-  object-fit: contain;
+.welcome-chip svg {
+  width: 0.875rem;
+  height: 0.875rem;
 }
-.welcome-brand span {
-  display: grid;
-  color: var(--text);
-  font-size: 0.875rem;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-}
-.welcome-brand small {
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  font-weight: 450;
-  letter-spacing: 0;
-}
+
 .welcome-section-heading {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
+  align-items: center;
+  gap: 0.625rem;
   margin-bottom: 0.75rem;
+}
+.welcome-section-heading::before {
+  content: "";
+  width: 0.25rem;
+  height: 1.125rem;
+  border-radius: 999px;
+  background: var(--wl-gradient);
+}
+.welcome-section[data-tone="blue"] .welcome-section-heading::before {
+  background: var(--wl-blue);
+}
+.welcome-section[data-tone="green"] .welcome-section-heading::before {
+  background: var(--wl-green);
 }
 .welcome-section-heading h2 {
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
-}
-.welcome-section-heading span {
-  color: var(--text-muted);
-  font-size: 0.8125rem;
 }
 
 .launcher-grid {
@@ -1935,6 +2052,9 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
 }
 .launcher-card {
+  --tone: var(--wl-blue);
+  --tone-soft: var(--wl-blue-soft);
+  --tone-line: var(--wl-blue-line);
   position: relative;
   display: flex;
   align-items: center;
@@ -1950,12 +2070,17 @@
   transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease),
     background-color 160ms var(--ease);
 }
+.launcher-card[data-tone="green"] {
+  --tone: var(--wl-green);
+  --tone-soft: var(--wl-green-soft);
+  --tone-line: var(--wl-green-line);
+}
 .launcher-card:hover {
-  border-color: #bfd3fe;
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 6px 16px rgb(29 78 216 / 0.08);
+  border-color: var(--tone-line);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 6px 16px rgb(15 23 42 / 0.07);
 }
 .launcher-card:active {
-  background: var(--surface-muted);
+  background: var(--tone-soft);
 }
 .launcher-icon {
   display: grid;
@@ -1964,8 +2089,8 @@
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 0.625rem;
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--tone-soft);
+  color: var(--tone);
 }
 .launcher-icon svg {
   width: 1.25rem;
@@ -1994,7 +2119,7 @@
   transition: color 160ms var(--ease), transform 160ms var(--ease);
 }
 .launcher-card:hover .launcher-arrow {
-  color: var(--primary);
+  color: var(--tone);
   transform: translate(1px, -1px);
 }
 .launcher-quick .launcher-card {
@@ -2003,6 +2128,10 @@
   gap: 1.25rem;
   min-height: 8.5rem;
   padding: 1.125rem;
+}
+/* Coloured top edge ties the quick actions to the hero. */
+.launcher-quick .launcher-card:not(.launcher-primary) {
+  border-top: 3px solid var(--tone);
 }
 .launcher-quick .launcher-copy strong {
   font-size: 0.9375rem;
@@ -2013,32 +2142,35 @@
   right: 1.125rem;
 }
 .launcher-card.launcher-primary {
-  border-color: var(--primary);
-  background: var(--primary);
+  border-color: transparent;
+  background: var(--wl-gradient);
   color: #fff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08), 0 8px 20px rgb(29 78 216 / 0.22);
 }
 .launcher-card.launcher-primary:hover {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
+  border-color: transparent;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08), 0 10px 26px rgb(4 120 87 / 0.28);
 }
 .launcher-primary .launcher-icon {
-  background: rgb(255 255 255 / 0.16);
+  background: rgb(255 255 255 / 0.18);
   color: #fff;
 }
 .launcher-primary .launcher-copy span,
 .launcher-primary .launcher-arrow,
 .launcher-card.launcher-primary:hover .launcher-arrow {
-  color: rgb(255 255 255 / 0.8);
+  color: rgb(255 255 255 / 0.85);
 }
 
-@media (max-width: 1023px) {
-  .welcome-brand {
-    display: none;
-  }
-}
 @media (max-width: 639px) {
   .welcome-page {
     gap: 1.25rem;
+  }
+  .welcome-account-text,
+  .welcome-logout-text {
+    display: none;
+  }
+  .welcome-topbar-brand small {
+    display: none;
   }
   .launcher-grid.launcher-quick {
     grid-template-columns: repeat(2, minmax(0, 1fr));
