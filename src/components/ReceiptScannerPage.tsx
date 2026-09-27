@@ -472,23 +472,25 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
   const statusColor = sessionExpired ? "text-red-700" : processing ? "text-amber-700" : "text-blue-700";
 
   return (
-    <div className="min-h-full bg-slate-100 p-4 md:p-8" onClick={focusScanner}>
-      <div className="mx-auto max-w-3xl space-y-6">
-        <header>
-          <h1 className="text-2xl font-bold text-slate-950">
+    <div className="page page-narrow" onClick={focusScanner}>
+      <div className="space-y-5">
+        <header className="page-header" style={{ marginBottom: 0 }}>
+          <div>
+          <h1 className="page-title">
             {mode === "approve" ? "Validation paiement" : "Contrôle paiement"}
           </h1>
-          <p className="mt-1 text-slate-600">
+          <p className="page-subtitle">
             {mode === "approve"
               ? "Le scan valide automatiquement le paiement."
               : "Vérification en lecture seule — aucun paiement ne sera validé ici."}
           </p>
+          </div>
         </header>
 
-        <section className="rounded-2xl border bg-white p-6 shadow-sm">
+        <section className="card p-5 sm:p-6">
           <div className={`flex items-center gap-3 ${statusColor}`} aria-live="polite">
-            <ScanLine className="h-7 w-7" />
-            <span className="text-lg font-bold">{statusLabel}</span>
+            <ScanLine className="h-6 w-6" aria-hidden="true" />
+            <span className="text-lg font-semibold tracking-wide">{statusLabel}</span>
           </div>
           <p className="mt-2 text-sm text-slate-600">
             Scannez avec le lecteur USB. Le code est traité automatiquement à la touche Entrée.
@@ -506,9 +508,9 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
         </section>
 
         {isAdmin && (
-          <section className="rounded-2xl border bg-white p-6 shadow-sm">
+          <section className="card p-5 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-semibold text-slate-900">Scanner avec la caméra</h2>
+              <h2 className="section-title">Scanner avec la caméra</h2>
               <button
                 type="button"
                 onClick={(event) => {
@@ -516,9 +518,9 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
                   if (cameraMachine.state === "active" || cameraMachine.state === "starting") stopCamera();
                   else void startCamera();
                 }}
-                className="flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white"
+                className={`btn ${cameraMachine.state === "active" ? "btn-secondary" : "btn-primary"}`}
               >
-                {cameraMachine.state === "active" ? <CameraOff className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+                {cameraMachine.state === "active" ? <CameraOff aria-hidden="true" /> : <Camera aria-hidden="true" />}
                 {cameraMachine.state === "active" ? "Arrêter" : "Ouvrir la caméra"}
               </button>
             </div>
@@ -533,8 +535,8 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
         )}
 
         {result && (
-          <section className={`rounded-2xl border-2 p-6 shadow-sm ${resultColor}`} aria-live="assertive">
-            <h2 className="text-xl font-black">{result.message}</h2>
+          <section className={`rounded-xl border-2 p-5 sm:p-6 ${resultColor}`} aria-live="assertive">
+            <h2 className="text-xl font-bold tracking-wide">{result.message}</h2>
             {mode === "verify" && result.code === "APPROVED" && (
               <p className="mt-2 text-lg font-black">SORTIE AUTORISÉE</p>
             )}

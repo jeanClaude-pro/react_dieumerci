@@ -1,4 +1,7 @@
 "use client";
+import ResponsiveTable from "../../components/ui/ResponsiveTable";
+import Dialog from "../../components/ui/Dialog";
+import { EmptyState, LoadingState } from "../../components/ui/States";
 
 import type React from "react";
 import { useState, useEffect } from "react";
@@ -274,39 +277,37 @@ export default function Products() {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="page space-y-5">
+      <header className="page-header">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Articles</h1>
-          <p className="text-gray-600">Gérez votre catalogue des Articles</p>
-          {!isAdmin && (
-            <p className="text-sm text-blue-600 mt-1">
-              Staff
-            </p>
+          <h1 className="page-title">Articles</h1>
+          <p className="page-subtitle">Catalogue, prix et disponibilité des articles.</p>
+        </div>
+        <div className="page-actions">
+          {/* The add/edit dialog is admin-only (unchanged), so is its trigger. */}
+          {isAdmin ? (
+            <button type="button" onClick={() => setShowAddModal(true)} className="btn btn-primary">
+              <Plus aria-hidden="true" />
+              Nouvel article
+            </button>
+          ) : (
+            <span className="badge"><Eye aria-hidden="true" />Consultation</span>
           )}
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors"
-        >
-          <Plus className="w-4 h-4 " />
-          Ajouter un nouvel Article
-        </button>
-      </div>
+      </header>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-300">
-        <div className="flex flex-col sm:flex-row gap-4">
+      <div className="card p-4">
+        <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex-1">
-            <div className="relative">
-              <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Recherchez des Articles par nom..."
+            <div className="input-group">
+              <Search aria-hidden="true" />
+              <input aria-label="Rechercher un article"
+                type="search"
+                placeholder="Rechercher un article par nom…"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none focus:border-transparent"
+                className="input"
               />
             </div>
           </div>
@@ -320,20 +321,16 @@ export default function Products() {
       </div>
 
       {/* Products Grid */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-300">
+      <section className="card" aria-label="Liste des articles">
         {loading ? (
-          <div className="p-8 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-2 text-gray-600">Chargement des Articles......</p>
-          </div>
+          <LoadingState label="Chargement des articles…" />
         ) : filteredProducts.length === 0 ? (
-          <div className="p-8 text-center">
-            <Package className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-            <p className="text-gray-600">Aucun article trouvé</p>
-          </div>
+          <EmptyState title="Aucun article trouvé" icon={<Package aria-hidden="true" />}>
+            Modifiez la recherche ou la catégorie sélectionnée.
+          </EmptyState>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div>
+            <ResponsiveTable className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -343,7 +340,7 @@ export default function Products() {
                     Article
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Categorie
+                    Catégorie
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Stock
@@ -364,7 +361,7 @@ export default function Products() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="ml-4">
+                        <div>
                           <div className="text-sm font-medium text-gray-900">
                             {product.name}
                           </div>
@@ -382,10 +379,10 @@ export default function Products() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
-                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        className={`badge ${
                           product.status === "active"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
+                            ? "badge-success"
+                            : "badge-danger"
                         }`}
                       >
                         {getProductStatus(product.status)}
@@ -393,25 +390,25 @@ export default function Products() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
-                        <button
+                        <button aria-label={`Voir les détails de ${product.name}`} title="Détails"
                           onClick={() => openViewModal(product)}
                           className="text-blue-600 hover:text-blue-900 p-1 rounded"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Détails</span>
                         </button>
                         {isAdmin && (
                           <>
-                            <button
+                            <button aria-label={`Modifier ${product.name}`} title="Modifier"
                               onClick={() => openEditModal(product)}
-                              className="text-green-600 hover:text-green-900 p-1 rounded"
+                              className="text-gray-700 hover:text-gray-900 p-1 rounded"
                             >
-                              <Edit className="w-4 h-4" />
+                              <Edit className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Modifier</span>
                             </button>
-                            <button
+                            <button aria-label={`Supprimer ${product.name}`} title="Supprimer"
                               onClick={() => deleteProduct(product._id)}
-                              className="text-red-600 hover:text-red-900 p-1 rounded"
+                              className="text-red-600 hover:text-red-800 p-1 rounded"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Supprimer</span>
                             </button>
                           </>
                         )}
@@ -420,21 +417,25 @@ export default function Products() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         )}
-      </div>
+      </section>
 
       {/* Add/Edit Product Modal - Only for Admin */}
       {(showAddModal || showEditModal) && isAdmin && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <Dialog label={showEditModal ? "Modifier l'article" : "Nouvel article"} onClose={() => {
+                    setShowAddModal(false);
+                    setShowEditModal(false);
+                    resetForm();
+                  }}>
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900">
                   {showEditModal ? "Modifier l'Article" : "Ajouter un Article"}
                 </h2>
-                <button
+                <button aria-label="Fermer"
                   onClick={() => {
                     setShowAddModal(false);
                     setShowEditModal(false);
@@ -456,10 +457,10 @@ export default function Products() {
                   </h3>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="products-field-16985" className="block text-sm font-medium text-gray-700 mb-1">
                       Nom de l'Article *
                     </label>
-                    <input
+                    <input id="products-field-16985"
                       type="text"
                       required
                       value={formData.name}
@@ -474,10 +475,10 @@ export default function Products() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="products-field-17739" className="block text-sm font-medium text-gray-700 mb-1">
                       Description
                     </label>
-                    <textarea
+                    <textarea id="products-field-17739"
                       rows={3}
                       value={formData.description}
                       onChange={(e) =>
@@ -506,10 +507,10 @@ export default function Products() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="products-field-19059" className="block text-sm font-medium text-gray-700 mb-1">
                       Marques
                     </label>
-                    <input
+                    <input id="products-field-19059"
                       type="text"
                       value={formData.brand}
                       onChange={(e) =>
@@ -523,10 +524,10 @@ export default function Products() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="products-field-19778" className="block text-sm font-medium text-gray-700 mb-1">
                       Statut
                     </label>
-                    <select
+                    <select id="products-field-19778"
                       value={formData.status}
                       onChange={(e) =>
                         setFormData((prev) => ({
@@ -549,10 +550,10 @@ export default function Products() {
                   </h3>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="products-field-20897" className="block text-sm font-medium text-gray-700 mb-1">
                       Prix par défaut (USD)
                     </label>
-                    <input
+                    <input id="products-field-20897"
                       type="number"
                       min="0"
                       step="0.01"
@@ -572,10 +573,10 @@ export default function Products() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="products-field-21956" className="block text-sm font-medium text-gray-700 mb-1">
                         Stock Total
                       </label>
-                      <input
+                      <input id="products-field-21956"
                         type="number"
                         value={formData.stock}
                         onChange={(e) =>
@@ -588,10 +589,10 @@ export default function Products() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="products-field-22728" className="block text-sm font-medium text-gray-700 mb-1">
                         Unité
                       </label>
-                      <select
+                      <select id="products-field-22728"
                         value={formData.unit}
                         onChange={(e) =>
                           setFormData((prev) => ({
@@ -612,10 +613,10 @@ export default function Products() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="products-field-23780" className="block text-sm font-medium text-gray-700 mb-1">
                         Stock minimum
                       </label>
-                      <input
+                      <input id="products-field-23780"
                         type="number"
                         value={formData.minStock}
                         onChange={(e) =>
@@ -653,19 +654,19 @@ export default function Products() {
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Quick View Modal */}
       {showViewModal && selectedProduct && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <Dialog label="Détails de l'Article" onClose={() => setShowViewModal(false)}>
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900">
                   Détails de l'Article
                 </h2>
-                <button
+                <button aria-label="Fermer"
                   onClick={() => setShowViewModal(false)}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -764,7 +765,7 @@ export default function Products() {
               )}
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

@@ -2,7 +2,7 @@
  * Centralizes 401 handling for authenticated API requests without requiring
  * every page (most of which call `fetch` directly with a manual
  * `Authorization` header — see ReceiptScannerPage, SortieHistory,
- * Reservation, etc.) to be rewritten to go through a shared request wrapper.
+ * feature pages to be rewritten to go through a shared request wrapper.
  *
  * Only requests to our own API that actually carried an Authorization header
  * are considered "authenticated requests". /auth/login and /auth/register

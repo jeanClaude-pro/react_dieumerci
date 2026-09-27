@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 
 import {
   BrowserRouter as Router,
@@ -19,36 +19,42 @@ import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider } from "./context/AuthProvider";
 import { RequireRole } from "./components/RequireRole";
 import { useAuth } from "./hooks/useAuth";
+import { LoadingState } from "./components/ui/States";
 
 const Products = lazy(() => import("./pages/products/products"));
 const SalesHistory = lazy(() => import("./pages/history/SalesHistory"));
 const Analytics = lazy(() => import("./pages/analytics/Analytics"));
 const Customers = lazy(() => import("./pages/customers/Customers"));
 const NewSale = lazy(() => import("./pages/NewSale"));
-const Reservation = lazy(() => import("./pages/Reservation"));
-const ReservationHistory = lazy(() => import("./pages/ReservationHistory"));
 const Sortie = lazy(() => import("./pages/Sortie"));
 const SortieHistory = lazy(() => import("./pages/SortieHistory"));
 const Rate = lazy(() => import("./pages/Rate"));
 const Entry = lazy(() => import("./pages/Entry"));
 const EntryHistory = lazy(() => import("./pages/EntryHistory"));
 const AdminPanel = lazy(() => import("./pages/admin/AdminPanel"));
+const SaleEditApprovals = lazy(() => import("./pages/admin/SaleEditApprovals"));
 const ReceiptScannerPage = lazy(() => import("./components/ReceiptScannerPage"));
 const Remboursements = lazy(() => import("./pages/Remboursements"));
+const Welcome = lazy(() => import("./pages/Welcome"));
 
 function RouteLoading() {
-  return <div className="route-loading" role="status" aria-live="polite"><span className="route-loading-spinner" /><span>Chargement…</span></div>;
+  return <LoadingState page />;
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const isLogin = location.pathname === "/login";
+  const mainRef = useRef<HTMLElement>(null);
+
+  // <main> is the scroll container: start each screen at its top.
+  useEffect(() => { mainRef.current?.scrollTo(0, 0); }, [location.pathname]);
 
   return (
-    <div className="app-shell overflow-hidden flex bg-background text-slate-900">
+    <div className="app-shell">
+      <a href="#main-content" className="skip-link">Aller au contenu</a>
       {!isLogin && <Sidebar />}
-      <main className="app-main flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
-        <div className="app-content min-h-full min-w-0">{children}</div>
+      <main ref={mainRef} id="main-content" tabIndex={-1} className={`app-main ${isLogin ? "app-login" : ""}`}>
+        <div className="app-content">{children}</div>
       </main>
       {!isLogin && <MobileNavigation />}
     </div>
@@ -118,22 +124,6 @@ export default function App() {
                   }
                 />
                 <Route
-                  path="/reservation"
-                  element={
-                    <RequireAuth>
-                      <Reservation />
-                    </RequireAuth>
-                  }
-                />
-                <Route
-                  path="/reservationhistory"
-                  element={
-                    <RequireAuth>
-                      <ReservationHistory />
-                    </RequireAuth>
-                  }
-                />
-                <Route
                   path="/sortiehistory"
                   element={
                     <RequireAuth>
@@ -145,7 +135,7 @@ export default function App() {
                   path="/"
                   element={
                     <RequireAuth>
-                      <NewSale />
+                      <Welcome />
                     </RequireAuth>
                   }
                 />
@@ -197,6 +187,10 @@ export default function App() {
                 <Route
                   path="/remboursements"
                   element={<RequireAuth><RequireRole roles={["admin"]}><Remboursements /></RequireRole></RequireAuth>}
+                />
+                <Route
+                  path="/admin/sale-edit-approvals"
+                  element={<RequireAuth><RequireRole roles={["admin"]}><SaleEditApprovals /></RequireRole></RequireAuth>}
                 />
                 <Route
                   path="/admin"

@@ -1,4 +1,7 @@
 "use client";
+import ResponsiveTable from "../../components/ui/ResponsiveTable";
+import Dialog from "../../components/ui/Dialog";
+import { EmptyState, LoadingState, PermissionDenied } from "../../components/ui/States";
 
 import type React from "react";
 import { formatDateGMT2, formatDateTimeGMT2 } from "../../utils/dateUtils";
@@ -16,8 +19,7 @@ import {
   ShoppingBag,
   RefreshCw,
   AlertCircle,
-  Shield,
-} from "lucide-react";
+  Plus, X } from "lucide-react";
 
 interface Customer {
   _id: string;
@@ -259,79 +261,58 @@ export default function Customers() {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-lg border border-red-200 p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Shield className="w-8 h-8 text-red-600" />
-          </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Accès Refusé</h2>
-          <p className="text-gray-500 text-sm">
-            Cette section est réservée aux administrateurs uniquement.
-          </p>
-        </div>
+      <div className="page">
+        <PermissionDenied>Cette section est réservée aux administrateurs.</PermissionDenied>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
+    <div className="page space-y-5">
+      <header className="page-header">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Clients</h1>
-          <p className="text-gray-600">Gérez vos relations clients</p>
+          <h1 className="page-title">Clients</h1>
+          <p className="page-subtitle">Coordonnées et historique d'achat des clients enregistrés.</p>
         </div>
-        <div className="flex gap-3">
-          <button
+        <div className="page-actions">
+          <button type="button" aria-label="Actualiser la liste des clients"
             onClick={refreshCustomers}
             disabled={refreshing}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="btn btn-secondary"
           >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Actualisation..." : "Actualiser"}
+            <RefreshCw className={refreshing ? "animate-spin" : ""} aria-hidden="true" />
+            {refreshing ? "Actualisation…" : "Actualiser"}
           </button>
-          <button
+          <button type="button"
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+            className="btn btn-primary"
           >
-            Ajouter un Client
+            <Plus aria-hidden="true" />
+            Nouveau client
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="md:col-span-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="rechercher les clients..."
-              className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="metric-card">
+          <span className="metric-label flex items-center gap-1.5"><Users className="w-4 h-4 text-blue-600" aria-hidden="true" />Clients</span>
+          <span className="metric-value">{customers.length}</span>
+        </div>
+        <div className="metric-card">
+          <span className="metric-label flex items-center gap-1.5"><DollarSign className="w-4 h-4 text-green-600" aria-hidden="true" />Chiffre d'affaires clients</span>
+          <span className="metric-value">{formatCurrency(calculateTotalRevenue())}</span>
+          <span className="text-xs text-gray-500">{customers.filter((c) => c.totalSpent > 0).length} clients actifs</span>
+        </div>
+        <div className="col-span-2 flex items-end">
+          <div className="input-group w-full">
+            <Search aria-hidden="true" />
+            <input aria-label="Rechercher un client"
+              type="search"
+              placeholder="Nom, téléphone ou e-mail…"
+              className="input"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow border">
-          <div className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-blue-600" />
-            <div>
-              <p className="text-sm text-gray-600">Nombre Total de Clients</p>
-              <p className="text-xl font-semibold text-gray-900">{customers.length}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow border">
-          <div className="flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-green-600" />
-            <div>
-              <p className="text-sm text-gray-600">Revenue Totale Clients</p>
-              <p className="text-xl font-semibold text-gray-900">
-                {formatCurrency(calculateTotalRevenue())}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {customers.filter((c) => c.totalSpent > 0).length} clients actifs
-              </p>
-            </div>
           </div>
         </div>
       </div>
@@ -341,14 +322,14 @@ export default function Customers() {
           customer.totalPurchases > 0 &&
           (customer.totalSpent === 0 || customer.totalSpent > 100000)
       ) && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-yellow-600" />
+        <div className="alert alert-warning" role="status">
+          <AlertCircle aria-hidden="true" />
+          <div>
             <div>
-              <p className="text-sm font-medium text-yellow-800">
-                Attention: Statistiques potentiellement inexactes
+              <p className="text-sm font-semibold">
+                Statistiques potentiellement inexactes
               </p>
-              <p className="text-sm text-yellow-700">
+              <p className="text-sm">
                 Certaines statistiques clients peuvent être incorrectes suite à
                 des modifications de ventes. Utilisez "Recalculer les
                 statistiques" pour corriger.
@@ -358,35 +339,24 @@ export default function Customers() {
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <Users className="w-5 h-5" />
-            Répertoire clients ({filteredCustomers.length})
+      <section className="card" aria-labelledby="customers-list-title">
+        <div className="card-header">
+          <h2 id="customers-list-title" className="section-title flex items-center gap-2">
+            <Users className="w-4 h-4 text-gray-500" aria-hidden="true" />
+            Répertoire clients
+            <span className="badge num">{filteredCustomers.length}</span>
           </h2>
-          <button
-            onClick={refreshCustomers}
-            disabled={refreshing}
-            className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
-            Actualiser
-          </button>
         </div>
 
-        <div className="overflow-x-auto">
+        <div>
           {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="text-gray-500 mt-2">Chargement des clients...</p>
-            </div>
+            <LoadingState label="Chargement des clients…" />
           ) : filteredCustomers.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>Aucun client trouvé</p>
-            </div>
+            <EmptyState title="Aucun client trouvé" icon={<Users aria-hidden="true" />}>
+              Modifiez la recherche ou ajoutez un nouveau client.
+            </EmptyState>
           ) : (
-            <table className="min-w-full divide-y divide-gray-200">
+            <ResponsiveTable className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -402,7 +372,7 @@ export default function Customers() {
                     Montant total dépensé
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Dernier Achat
+                    Dernier achat
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
@@ -415,7 +385,7 @@ export default function Customers() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
-                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                          <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center" aria-hidden="true">
                             <span className="text-sm font-medium text-blue-600">
                               {customer.name.charAt(0).toUpperCase()}
                             </span>
@@ -433,12 +403,12 @@ export default function Customers() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900 flex items-center gap-1">
-                        <Phone className="w-3 h-3" />
+                        <Phone className="w-3 h-3" aria-hidden="true" />
                         {customer.phone}
                       </div>
                       {customer.email && (
                         <div className="text-sm text-gray-500 flex items-center gap-1">
-                          <Mail className="w-3 h-3" />
+                          <Mail className="w-3 h-3" aria-hidden="true" />
                           {customer.email}
                         </div>
                       )}
@@ -459,14 +429,14 @@ export default function Customers() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex gap-2">
-                        <button
+                        <button aria-label="Voir les détails du client"
                           onClick={() => viewCustomerDetails(customer)}
                           className="text-blue-600 hover:text-blue-900 p-1 rounded"
                           title="Voir les détails du client"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Détails</span>
                         </button>
-                        <button
+                        <button aria-label="Recalculer les statistiques"
                           onClick={() => recalculateCustomerStats(customer._id)}
                           disabled={recalculating === customer._id}
                           className="text-green-600 hover:text-green-900 p-1 rounded disabled:opacity-50"
@@ -476,46 +446,44 @@ export default function Customers() {
                             className={`w-4 h-4 ${
                               recalculating === customer._id ? "animate-spin" : ""
                             }`}
-                          />
+                            aria-hidden="true"
+                          /><span className="ui-action-label">Recalculer</span>
                         </button>
-                        <button
+                        <button aria-label="Supprimer le client"
                           onClick={() => handleDeleteCustomer(customer._id)}
                           className="text-red-600 hover:text-red-900 p-1 rounded"
-                          title="supprimer le client"
+                          title="Supprimer le client"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Supprimer</span>
                         </button>
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           )}
         </div>
 
-        {/* REMOVED PAGINATION SECTION - No more page navigation */}
-      </div>
+      </section>
 
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <Dialog label="Ajouter un Nouveau Client" onClose={() => setShowAddModal(false)}>
           <div className="bg-white rounded-lg max-w-md w-full mx-4">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">Ajouter un Nouveau Client</h3>
-              <button
+              <button type="button" aria-label="Fermer"
                 onClick={() => setShowAddModal(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
             <form onSubmit={handleAddCustomer} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nom *</label>
-                <input
+                <label htmlFor="customers-field-20210" className="block text-sm font-medium text-gray-700 mb-1">Nom *</label>
+                <input id="customers-field-20210"
                   type="text"
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -525,8 +493,8 @@ export default function Customers() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone *</label>
-                <input
+                <label htmlFor="customers-field-20728" className="block text-sm font-medium text-gray-700 mb-1">Téléphone *</label>
+                <input id="customers-field-20728"
                   type="tel"
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -536,8 +504,8 @@ export default function Customers() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
+                <label htmlFor="customers-field-21241" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input id="customers-field-21241"
                   type="email"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   value={formData.email}
@@ -562,21 +530,19 @@ export default function Customers() {
               </div>
             </form>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {showModal && selectedCustomer && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <Dialog label="Détails du client" onClose={() => setShowModal(false)}>
           <div className="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">Détails du client</h3>
-              <button
+              <button type="button" aria-label="Fermer"
                 onClick={() => setShowModal(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
@@ -676,7 +642,7 @@ export default function Customers() {
               </div>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

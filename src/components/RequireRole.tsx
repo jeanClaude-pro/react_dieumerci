@@ -1,6 +1,7 @@
 import React from "react";
 import { useAuth } from "../hooks/useAuth";
 import type { Role } from "../types/auth";
+import { PermissionDenied } from "./ui/States";
 
 export const RequireRole: React.FC<
   React.PropsWithChildren<{ roles: Role[] }>
@@ -8,11 +9,6 @@ export const RequireRole: React.FC<
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user || !roles.includes(user.role))
-    return (
-      <div className="p-8">
-        <h1 className="text-2xl font-black text-red-700">ACCÈS REFUSÉ</h1>
-        <p className="mt-2">Vous n'êtes pas autorisé à accéder à cette page.</p>
-      </div>
-    );
+    return <div className="page"><PermissionDenied>Vous n'êtes pas autorisé à accéder à cette page.</PermissionDenied></div>;
   return <>{children}</>;
 };

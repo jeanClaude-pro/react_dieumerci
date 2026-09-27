@@ -1,4 +1,7 @@
 "use client";
+import ResponsiveTable from "../../components/ui/ResponsiveTable";
+import Dialog from "../../components/ui/Dialog";
+import { EmptyState, LoadingState } from "../../components/ui/States";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../../hooks/useAuth";
@@ -24,6 +27,9 @@ import {
   Shield,
   BadgeCheck,
   ScanLine,
+  CheckCircle,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
@@ -95,12 +101,17 @@ interface Sale {
       verifiedBy?: { username: string } | null;
     };
   };
+  saleEditApproval?: {
+    status: "pending" | "approved" | "rejected";
+    requestedByName: string;
+    requestedAt: string;
+    reason: string;
+  };
 }
 
 interface Product {
   _id: string;
   name: string;
-  stock: number;
   price: number;
   sku?: string;
 }
@@ -198,6 +209,10 @@ const isPaymentApprovedForDisplay = (sale: Sale) =>
 const isExitControlledForDisplay = (sale: Sale) =>
   isLegacyReceiptSale(sale) || sale.receiptVerification?.exitVerification?.verified === true;
 
+// Display labels only; stored values are unchanged.
+const PAYMENT_LABELS: Record<string, string> = { cash: "Espèces", card: "Carte", transfer: "Transfert", other: "Autre" };
+const SALE_STATUS_LABELS: Record<string, string> = { completed: "Terminée", voided: "Annulée", corrected: "Corrigée", refunded: "Remboursée", pending: "En attente", expense: "Dépense" };
+
 export default function SalesHistory() {
   const { token: authToken } = useAuth();
 
@@ -242,7 +257,7 @@ export default function SalesHistory() {
   const [isAdmin, setIsAdmin] = useState(false);
   // Reprinting an existing receipt is available to every authenticated user.
   // This flag is intentionally independent from all edit/void/override rights.
-  const canReprint = Boolean(currentUser);
+  const canReprintSale = (sale: Sale) => Boolean(currentUser) && sale.saleEditApproval?.status !== "pending";
 
   // Timeframe state - Updated to match backend query parameters
   const [timeframeType, setTimeframeType] = useState<
@@ -1424,9 +1439,10 @@ export default function SalesHistory() {
     setEditForm((prev) => ({
       ...prev,
       isWalkIn: !prev.isWalkIn,
+      // A walk-in keeps its optional display name but never contact details.
       customer: prev.isWalkIn
         ? prev.customer
-        : { name: "", phone: "", email: "" },
+        : { name: prev.customer.name, phone: "", email: "" },
     }));
   };
 
@@ -1434,15 +1450,6 @@ export default function SalesHistory() {
     if (newQuantity < 1) return;
 
     const updatedItems = [...editForm.items];
-    const product = products.find(
-      (p) => p._id === updatedItems[index].productId
-    );
-
-    if (product && newQuantity > product.stock + updatedItems[index].quantity) {
-      setError(`Insufficient stock. Available: ${product.stock}`);
-      return;
-    }
-
     updatedItems[index].quantity = newQuantity;
     updatedItems[index].total = newQuantity * updatedItems[index].price;
 
@@ -1575,7 +1582,7 @@ export default function SalesHistory() {
       // Make sure we're sending the correct data structure
       const updateData = {
         customer: editForm.isWalkIn
-          ? { name: "Client de passage", phone: "", email: "" }
+          ? { name: editForm.customer.name.trim() || "Client de passage", phone: "", email: "" }
           : editForm.customer,
         isWalkIn: editForm.isWalkIn,
         items: editForm.items.map((item) => ({
@@ -1613,8 +1620,10 @@ export default function SalesHistory() {
       );
 
       if (response.ok) {
-        await response.json();
-        setMessage("✅ Sale updated successfully");
+        const result = await response.json();
+        setMessage(response.status === 202
+          ? "Modification enregistrée — EN ATTENTE D'APPROBATION"
+          : (result.message || "Vente mise à jour avec succès"));
 
         // Refresh the sales list immediately
         await fetchSales();
@@ -1671,7 +1680,7 @@ export default function SalesHistory() {
       );
 
       if (response.ok) {
-        setMessage("✅ Sale voided successfully");
+        setMessage("Vente annulée avec succès.");
         await fetchSales();
         setShowModal(false);
       } else {
@@ -1689,237 +1698,152 @@ export default function SalesHistory() {
   const { subtotal, total } = calculateTotals();
 
   return (
-    <div className="space-y-6 p-6 flex-1 overflow-auto">
-      <div className="flex items-center justify-between flex-wrap gap-4 overflow-auto">
+    <div className="page space-y-5">
+      <header className="page-header">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Historique des ventes
-          </h1>
-          <p className="text-gray-600">
-            Voir toutes les transactions et ventes passées
-          </p>
+          <h1 className="page-title">Historique des ventes</h1>
+          <p className="page-subtitle">Retrouvez une vente, son reçu et son état de contrôle.</p>
         </div>
-        <div className="flex gap-3">
-          {/* NEW: Edited Sales Filter Button */}
-          <button
-            onClick={() => setShowEditedSales(!showEditedSales)}
-            className={`px-4 py-2 rounded-lg border transition-all duration-200 flex items-center gap-2 ${
-              showEditedSales
-                ? "bg-blue-500 text-white border-blue-500 shadow-sm"
-                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-            }`}
-          >
-            <Filter className="w-4 h-4" />
-            {showEditedSales ? "Toutes les ventes" : "Ventes modifiées"}
-            {showEditedSales && (
-              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-                {editedSales.length}
-              </span>
-            )}
-          </button>
-
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search sales..."
-              className="pl-10 w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        <div className="page-actions w-full sm:w-auto">
+          <div className="input-group flex-1 sm:flex-none sm:w-72">
+            <Search aria-hidden="true" />
+            <input aria-label="Rechercher une vente"
+              type="search"
+              placeholder="Identifiant, client, agent…"
+              className="input"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+          <button
+            type="button"
+            onClick={() => setShowEditedSales(!showEditedSales)}
+            aria-pressed={showEditedSales}
+            className={`btn ${showEditedSales ? "btn-primary" : "btn-secondary"}`}
+          >
+            <Filter aria-hidden="true" />
+            {showEditedSales ? "Toutes les ventes" : "Ventes modifiées"}
+            {showEditedSales && (
+              <span className="badge num" style={{ background: "rgb(255 255 255 / 0.2)", color: "inherit", borderColor: "transparent" }}>
+                {editedSales.length}
+              </span>
+            )}
+          </button>
         </div>
-      </div>
+      </header>
 
       {/* Summary Stats - ONLY VISIBLE TO ADMINS */}
       {isAdmin && summaryStats && (
-        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-semibold text-blue-900 flex items-center gap-2">
-              <Shield className="w-5 h-5" />
-              Summary Statistics (Admin View)
-            </h3>
-            {currentUser && (
-              <span className="text-sm text-blue-700 bg-blue-100 px-3 py-1 rounded-full">
-                Logged in as: {currentUser.name} ({currentUser.role})
-              </span>
-            )}
+        <section aria-labelledby="sales-summary-title" className="grid gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="sales-summary-title" className="eyebrow">
+              <Shield aria-hidden="true" />
+              Synthèse de la période · vue administrateur
+            </h2>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Records</p>
-                  <p className="text-2xl font-bold text-gray-900">{summaryStats.totalRecords}</p>
-                </div>
-                <FileText className="w-8 h-8 text-blue-500" />
-              </div>
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+            <div className="metric-card">
+              <span className="metric-label">Chiffre d'affaires</span>
+              <span className="metric-value text-green-700">{formatCurrency(summaryStats.revenue)}</span>
             </div>
-            
-            <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Revenue</p>
-                  <p className="text-2xl font-bold text-green-600">{formatCurrency(summaryStats.revenue)}</p>
-                </div>
-                <Download className="w-8 h-8 text-green-500" />
-              </div>
+            <div className="metric-card">
+              <span className="metric-label">Net</span>
+              <span className="metric-value text-blue-700">{formatCurrency(summaryStats.net)}</span>
             </div>
-            
-            <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Expenses</p>
-                  <p className="text-2xl font-bold text-red-600">{formatCurrency(summaryStats.expenses)}</p>
-                </div>
-                <Minus className="w-8 h-8 text-red-500" />
-              </div>
+            <div className="metric-card">
+              <span className="metric-label">Dépenses</span>
+              <span className="metric-value text-red-700">{formatCurrency(summaryStats.expenses)}</span>
             </div>
-            
-            <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Net</p>
-                  <p className="text-2xl font-bold text-blue-600">{formatCurrency(summaryStats.net)}</p>
-                </div>
-                <Package className="w-8 h-8 text-blue-500" />
-              </div>
+            <div className="metric-card">
+              <span className="metric-label">Enregistrements</span>
+              <span className="metric-value">{summaryStats.totalRecords}</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Ventes</span>
+              <span className="metric-value">{summaryStats.salesCount}</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-label">Dépenses (nombre)</span>
+              <span className="metric-value">{summaryStats.expensesCount}</span>
             </div>
           </div>
-          
-          {/* Additional stats row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Sales</p>
-                  <p className="text-xl font-bold text-green-700">{summaryStats.salesCount}</p>
-                </div>
-                <FileText className="w-6 h-6 text-green-500" />
-              </div>
-            </div>
-            
-            <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Expenses</p>
-                  <p className="text-xl font-bold text-red-700">{summaryStats.expensesCount}</p>
-                </div>
-                <Minus className="w-6 h-6 text-red-500" />
-              </div>
-            </div>
-          </div>
-        </div>
+        </section>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <button
-          type="button"
-          onClick={() => handleQueryParamChange("controlStatus", "")}
-          className={`rounded-lg border p-4 text-left transition-colors ${queryParams.controlStatus === "" ? "border-gray-400 bg-gray-100 ring-2 ring-gray-300" : "border-gray-200 bg-white hover:bg-gray-50"}`}
-        >
-          <p className="text-sm font-medium text-gray-700">Tous</p>
-          <p className="mt-1 text-2xl font-bold text-gray-900">{scanStatsError ? "—" : (scanStats?.total ?? "…")}</p>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleQueryParamChange("controlStatus", "payment_pending")}
-          title="Ventes dont le paiement n'a pas encore été scanné/validé"
-          className={`rounded-lg border p-4 text-left transition-colors ${queryParams.controlStatus === "payment_pending" ? "border-amber-400 bg-amber-100 ring-2 ring-amber-300" : "border-amber-200 bg-amber-50 hover:bg-amber-100"}`}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-amber-800">Non validés</p>
-              <p className="mt-1 text-2xl font-bold text-amber-950">{scanStatsError ? "—" : (scanStats?.paymentPending ?? "…")}</p>
-            </div>
-            <BadgeCheck className="h-7 w-7 text-amber-600" />
-          </div>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleQueryParamChange("controlStatus", "exit_unverified")}
-          title="Paiement approuvé mais sortie pas encore contrôlée"
-          className={`rounded-lg border p-4 text-left transition-colors ${queryParams.controlStatus === "exit_unverified" ? "border-orange-400 bg-orange-100 ring-2 ring-orange-300" : "border-orange-200 bg-orange-50 hover:bg-orange-100"}`}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-orange-800">Non contrôlés</p>
-              <p className="mt-1 text-2xl font-bold text-orange-950">{scanStatsError ? "—" : (scanStats?.awaitingExitControl ?? "…")}</p>
-            </div>
-            <ScanLine className="h-7 w-7 text-orange-600" />
-          </div>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleQueryParamChange("controlStatus", "payment_approved")}
-          className={`rounded-lg border p-4 text-left transition-colors ${queryParams.controlStatus === "payment_approved" ? "border-emerald-400 bg-emerald-100 ring-2 ring-emerald-300" : "border-emerald-200 bg-emerald-50 hover:bg-emerald-100"}`}
-        >
-          <p className="text-sm font-medium text-emerald-800">Validés</p>
-          <p className="mt-1 text-2xl font-bold text-emerald-950">{scanStatsError ? "—" : (scanStats?.paymentApproved ?? "…")}</p>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleQueryParamChange("controlStatus", "exit_verified")}
-          className={`rounded-lg border p-4 text-left transition-colors ${queryParams.controlStatus === "exit_verified" ? "border-blue-400 bg-blue-100 ring-2 ring-blue-300" : "border-blue-200 bg-blue-50 hover:bg-blue-100"}`}
-        >
-          <p className="text-sm font-medium text-blue-800">Contrôlés</p>
-          <p className="mt-1 text-2xl font-bold text-blue-950">{scanStatsError ? "—" : (scanStats?.exitControlled ?? "…")}</p>
-        </button>
-        {scanStatsError && <p className="text-sm text-amber-700 col-span-2 lg:col-span-5">Statistiques de contrôle temporairement indisponibles.</p>}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" role="group" aria-label="Filtrer par contrôle du reçu">
+        {([
+          { value: "", label: "Toutes", count: scanStats?.total, icon: FileText, tone: "text-gray-500", title: undefined },
+          { value: "payment_pending", label: "Paiement non validé", count: scanStats?.paymentPending, icon: BadgeCheck, tone: "text-amber-600", title: "Ventes dont le paiement n'a pas encore été scanné/validé" },
+          { value: "exit_unverified", label: "Sortie non contrôlée", count: scanStats?.awaitingExitControl, icon: ScanLine, tone: "text-orange-600", title: "Paiement approuvé mais sortie pas encore contrôlée" },
+          { value: "payment_approved", label: "Paiement validé", count: scanStats?.paymentApproved, icon: BadgeCheck, tone: "text-green-600", title: undefined },
+          { value: "exit_verified", label: "Sortie contrôlée", count: scanStats?.exitControlled, icon: ScanLine, tone: "text-blue-600", title: undefined },
+        ] as const).map((tile, index) => {
+          const Icon = tile.icon;
+          const active = queryParams.controlStatus === tile.value;
+          return (
+            <button
+              key={tile.value || "all"}
+              type="button"
+              onClick={() => handleQueryParamChange("controlStatus", tile.value)}
+              title={tile.title}
+              aria-pressed={active}
+              className={`metric-card text-left transition-colors ${index === 0 ? "col-span-2 sm:col-span-1" : ""} ${active ? "!border-blue-600 ring-2 ring-blue-600/20 !bg-blue-50" : "hover:!bg-gray-50"}`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="metric-label">{tile.label}</span>
+                <Icon className={`w-4 h-4 shrink-0 ${tile.tone}`} aria-hidden="true" />
+              </span>
+              <span className="metric-value">{scanStatsError ? "—" : (tile.count ?? "…")}</span>
+            </button>
+          );
+        })}
+        {scanStatsError && <p className="text-sm text-amber-700 col-span-2 sm:col-span-3 lg:col-span-5">Statistiques de contrôle temporairement indisponibles.</p>}
       </div>
 
       {/* Timeframe Filter Section */}
-      <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
-            {showEditedSales ? "Ventes modifiées" : "Toutes les ventes"} - {getTimeframeDescription()}
-          </h3>
-          
+      <section className="card" aria-labelledby="sales-period-title">
+        <div className="card-header">
+          <h2 id="sales-period-title" className="section-title flex items-center gap-2 min-w-0">
+            <Calendar className="w-4 h-4 text-gray-500 shrink-0" aria-hidden="true" />
+            <span className="truncate">{showEditedSales ? "Ventes modifiées" : "Toutes les ventes"} · {getTimeframeDescription()}</span>
+          </h2>
           <div className="flex flex-wrap gap-2">
             <button
+              type="button"
               onClick={() => setShowFilters(!showFilters)}
-              className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-2"
+              aria-expanded={showFilters}
+              className="btn btn-secondary btn-sm"
             >
-              <Filter className="w-4 h-4" />
-              {showFilters ? "Hide Filters" : "Show Filters"}
-              <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              <Filter aria-hidden="true" />
+              {showFilters ? "Masquer les filtres" : "Filtres"}
+              <ChevronDown className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
-            
-            <button
-              onClick={clearAllFilters}
-              className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-2"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Clear Filters
+            <button type="button" onClick={clearAllFilters} className="btn btn-ghost btn-sm">
+              <RefreshCw aria-hidden="true" />
+              Réinitialiser
             </button>
           </div>
         </div>
+        <div className="card-body empty:hidden">
 
         {/* Timeframe Selection */}
         {showFilters && (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Timeframe Type
-              </label>
-              <div className="flex flex-wrap gap-2">
+              <span className="field-label block mb-2" id="sales-timeframe-label">Période</span>
+              <div className="segmented max-w-full overflow-x-auto" role="group" aria-labelledby="sales-timeframe-label">
                 {(["today", "day", "month", "year", "custom"] as const).map((type) => (
                   <button
                     key={type}
+                    type="button"
+                    aria-pressed={timeframeType === type}
                     onClick={() => handleTimeframeTypeChange(type)}
-                    className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                      timeframeType === type
-                        ? "bg-blue-500 text-white shadow-sm"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
                   >
-                    {type === "today" && "Today"}
-                    {type === "day" && "Specific Day"}
-                    {type === "month" && "Specific Month"}
-                    {type === "year" && "Specific Year"}
-                    {type === "custom" && "Custom Range"}
+                    {type === "today" && "Aujourd'hui"}
+                    {type === "day" && "Jour"}
+                    {type === "month" && "Mois"}
+                    {type === "year" && "Année"}
+                    {type === "custom" && "Plage"}
                   </button>
                 ))}
               </div>
@@ -1929,10 +1853,10 @@ export default function SalesHistory() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {timeframeType === "day" && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="saleshistory-field-66084" className="block text-sm font-medium text-gray-700 mb-1">
                     Date
                   </label>
-                  <input
+                  <input id="saleshistory-field-66084"
                     type="date"
                     value={queryParams.date}
                     onChange={(e) => handleQueryParamChange("date", e.target.value)}
@@ -1944,10 +1868,10 @@ export default function SalesHistory() {
               {timeframeType === "month" && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Year
+                    <label htmlFor="saleshistory-field-66657" className="block text-sm font-medium text-gray-700 mb-1">
+                      Année
                     </label>
-                    <input
+                    <input id="saleshistory-field-66657"
                       type="number"
                       value={queryParams.year}
                       onChange={(e) => handleQueryParamChange("year", e.target.value)}
@@ -1957,10 +1881,10 @@ export default function SalesHistory() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Month
+                    <label htmlFor="saleshistory-field-67226" className="block text-sm font-medium text-gray-700 mb-1">
+                      Mois
                     </label>
-                    <select
+                    <select id="saleshistory-field-67226"
                       value={queryParams.month}
                       onChange={(e) => handleQueryParamChange("month", e.target.value)}
                       className="w-full p-2 border border-gray-300 rounded-lg"
@@ -1980,10 +1904,10 @@ export default function SalesHistory() {
 
               {timeframeType === "year" && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="saleshistory-field-68202" className="block text-sm font-medium text-gray-700 mb-1">
                     Year
                   </label>
-                  <input
+                  <input id="saleshistory-field-68202"
                     type="number"
                     value={queryParams.year}
                     onChange={(e) => handleQueryParamChange("year", e.target.value)}
@@ -1997,10 +1921,10 @@ export default function SalesHistory() {
               {timeframeType === "custom" && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      From Date
+                    <label htmlFor="saleshistory-field-68847" className="block text-sm font-medium text-gray-700 mb-1">
+                      Du
                     </label>
-                    <input
+                    <input id="saleshistory-field-68847"
                       type="date"
                       value={queryParams.from}
                       onChange={(e) => handleQueryParamChange("from", e.target.value)}
@@ -2008,10 +1932,10 @@ export default function SalesHistory() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      To Date
+                    <label htmlFor="saleshistory-field-69348" className="block text-sm font-medium text-gray-700 mb-1">
+                      Au
                     </label>
-                    <input
+                    <input id="saleshistory-field-69348"
                       type="date"
                       value={queryParams.to}
                       onChange={(e) => handleQueryParamChange("to", e.target.value)}
@@ -2025,20 +1949,22 @@ export default function SalesHistory() {
             {/* Advanced Filters */}
             <div>
               <button
+                type="button"
                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                aria-expanded={showAdvancedFilters}
+                className="btn btn-ghost btn-sm -ml-3 text-blue-700"
               >
-                {showAdvancedFilters ? "Hide Advanced Filters" : "Show Advanced Filters"}
+                {showAdvancedFilters ? "Masquer les filtres avancés" : "Filtres avancés"}
                 <ChevronDown className={`w-4 h-4 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
               </button>
 
               {showAdvancedFilters && (
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-gray-50 border border-gray-200 rounded-xl">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="saleshistory-field-70567" className="block text-sm font-medium text-gray-700 mb-1">
                       Contrôle du reçu
                     </label>
-                    <select
+                    <select id="saleshistory-field-70567"
                       value={queryParams.controlStatus}
                       onChange={(e) => handleQueryParamChange("controlStatus", e.target.value)}
                       className="w-full p-2 border border-gray-300 rounded-lg"
@@ -2052,46 +1978,45 @@ export default function SalesHistory() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Sale Type
+                    <label htmlFor="saleshistory-field-71470" className="block text-sm font-medium text-gray-700 mb-1">
+                      Type
                     </label>
-                    <select
+                    <select id="saleshistory-field-71470"
                       value={queryParams.type}
                       onChange={(e) => handleQueryParamChange("type", e.target.value)}
                       className="w-full p-2 border border-gray-300 rounded-lg"
                     >
-                      <option value="">All Types</option>
-                      <option value="sale">Sale</option>
-                      <option value="reservation">Reservation</option>
-                      <option value="expense">Expense</option>
+                      <option value="">Tous les types</option>
+                      <option value="sale">Vente</option>
+                      <option value="expense">Dépense</option>
                     </select>
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Status
+                    <label htmlFor="saleshistory-field-72167" className="block text-sm font-medium text-gray-700 mb-1">
+                      Statut
                     </label>
-                    <select
+                    <select id="saleshistory-field-72167"
                       value={queryParams.status}
                       onChange={(e) => handleQueryParamChange("status", e.target.value)}
                       className="w-full p-2 border border-gray-300 rounded-lg"
                     >
-                      <option value="">All Status</option>
-                      <option value="completed">Completed</option>
-                      <option value="pending">Pending</option>
-                      <option value="expense">Expense</option>
+                      <option value="">Tous les statuts</option>
+                      <option value="completed">Terminée</option>
+                      <option value="pending">En attente</option>
+                      <option value="expense">Dépense</option>
                     </select>
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Customer Phone
+                    <label htmlFor="saleshistory-field-72951" className="block text-sm font-medium text-gray-700 mb-1">
+                      Téléphone du client
                     </label>
-                    <input
+                    <input id="saleshistory-field-72951"
                       type="text"
                       value={queryParams.customerPhone}
                       onChange={(e) => handleQueryParamChange("customerPhone", e.target.value)}
-                      placeholder="Filter by phone..."
+                      placeholder="+243 …"
                       className="w-full p-2 border border-gray-300 rounded-lg"
                     />
                   </div>
@@ -2104,51 +2029,49 @@ export default function SalesHistory() {
         {/* Applied Filters Summary */}
         {appliedFilters && (
           <div className="mt-4 text-sm text-gray-600">
-            <span className="font-medium">Applied filters:</span>
+            <span className="font-medium">Filtres appliqués :</span>
             <span className="ml-2">
-              Status: {appliedFilters.status}, Type: {appliedFilters.type}
-              {appliedFilters.customerPhone !== 'none' && `, Phone: ${appliedFilters.customerPhone}`}
+              Statut : {appliedFilters.status}, Type : {appliedFilters.type}
+              {appliedFilters.customerPhone !== 'none' && `, Téléphone : ${appliedFilters.customerPhone}`}
             </span>
           </div>
         )}
-      </div>
+        </div>
+      </section>
 
       {message && (
-        <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg border border-green-200">
-          {message}
-          <button
-            onClick={() => setMessage(null)}
-            className="float-right text-green-700 hover:text-green-900"
-          >
-            ×
+        <div className="alert alert-success" role="status">
+          <CheckCircle className="w-5 h-5" aria-hidden="true" />
+          <span className="flex-1">{message}</span>
+          <button type="button" aria-label="Fermer le message" onClick={() => setMessage(null)} className="btn btn-ghost btn-icon btn-sm -my-1 -mr-1">
+            <X aria-hidden="true" />
           </button>
         </div>
       )}
 
       {error && (
-        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-200">
-          {error}
-          <button
-            onClick={() => setError(null)}
-            className="float-right text-red-700 hover:text-red-900"
-          >
-            ×
+        <div className="alert alert-danger" role="alert">
+          <AlertTriangle className="w-5 h-5" aria-hidden="true" />
+          <span className="flex-1">{error}</span>
+          <button type="button" aria-label="Fermer le message" onClick={() => setError(null)} className="btn btn-ghost btn-icon btn-sm -my-1 -mr-1">
+            <X aria-hidden="true" />
           </button>
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            {showEditedSales ? "Ventes modifiées" : "Transactions de vente"} ({filteredSales.length})
+      <section className="card" aria-labelledby="sales-list-title">
+        <div className="card-header">
+          <h2 id="sales-list-title" className="section-title flex items-center gap-2">
+            <FileText className="w-4 h-4 text-gray-500" aria-hidden="true" />
+            {showEditedSales ? "Ventes modifiées" : "Transactions de vente"}
+            <span className="badge num">{filteredSales.length}</span>
           </h2>
         </div>
 
         {isAdmin && !showEditedSales && (
-          <div className="flex flex-wrap items-center gap-3 px-6 py-3 bg-purple-50 border-b border-purple-100">
-            <span className="flex items-center gap-1 text-sm font-medium text-purple-900">
-              <Shield className="w-4 h-4" />
+          <div className="flex flex-wrap items-center gap-2 px-4 sm:px-5 py-3 bg-gray-50 border-b border-gray-200">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-gray-800 mr-auto">
+              <Shield className="w-4 h-4 text-gray-500" aria-hidden="true" />
               {selectedOverrideIds.size > 0
                 ? `${selectedOverrideIds.size} vente(s) sélectionnée(s)`
                 : "Contrôle manuel (admin)"}
@@ -2156,7 +2079,7 @@ export default function SalesHistory() {
             <button
               type="button"
               onClick={selectAllVisibleEligible}
-              className="px-3 py-1.5 text-sm bg-white border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-100"
+              className="btn btn-secondary btn-sm"
             >
               Sélectionner les visibles éligibles
             </button>
@@ -2164,7 +2087,7 @@ export default function SalesHistory() {
               type="button"
               onClick={clearOverrideSelection}
               disabled={selectedOverrideIds.size === 0}
-              className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn btn-ghost btn-sm"
             >
               Effacer la sélection
             </button>
@@ -2172,7 +2095,7 @@ export default function SalesHistory() {
               type="button"
               onClick={submitAdminOverride}
               disabled={selectedOverrideIds.size === 0 || overrideSubmitting}
-              className="ml-auto px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="btn btn-primary btn-sm"
             >
               {overrideSubmitting && <RefreshCw className="w-4 h-4 animate-spin" />}
               Marquer comme validés et contrôlés
@@ -2180,26 +2103,16 @@ export default function SalesHistory() {
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        <div className="sales-table-region">
           {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="text-gray-500 mt-2">Chargement des ventes...</p>
-            </div>
+            <LoadingState label="Chargement des ventes…" />
           ) : filteredSales.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>
-                {showEditedSales 
-                  ? "Aucune vente modifiée trouvée" 
-                  : "Aucune vente trouvée"
-                }
-              </p>
-              <p className="text-sm">pour la période sélectionnée</p>
-            </div>
+            <EmptyState title={showEditedSales ? "Aucune vente modifiée" : "Aucune vente trouvée"} icon={<FileText aria-hidden="true" />}>
+              Aucun résultat pour la période et les filtres sélectionnés.
+            </EmptyState>
           ) : (
             <>
-              <table className="min-w-full divide-y divide-gray-200">
+              <ResponsiveTable className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     {isAdmin && !showEditedSales && (
@@ -2276,9 +2189,7 @@ export default function SalesHistory() {
                         <div className="text-sm text-gray-900 flex items-center gap-2">
                           {sale.customer.name}
                           {sale.isWalkIn && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                              Passage
-                            </span>
+                            <span className="badge badge-warning">Passage</span>
                           )}
                         </div>
                         <div className="text-sm text-gray-500">
@@ -2289,14 +2200,14 @@ export default function SalesHistory() {
                         {sale.salesPerson || "Non spécifié"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {sale.items.length} Article(s)
+                        {sale.items.length} article{sale.items.length > 1 ? "s" : ""}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {formatCurrency(sale.total)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          {sale.paymentMethod}
+                        <span className="badge">
+                          {PAYMENT_LABELS[sale.paymentMethod] || sale.paymentMethod}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-xs">
@@ -2318,14 +2229,16 @@ export default function SalesHistory() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
-                            sale.status === "completed"
+                            sale.saleEditApproval?.status === "pending"
+                              ? "bg-amber-100 text-amber-800"
+                              : sale.status === "completed"
                               ? "bg-green-100 text-green-800"
                               : sale.status === "voided"
                               ? "bg-red-100 text-red-800"
                               : "bg-yellow-100 text-yellow-800"
                           }`}
                         >
-                          {sale.status}
+                          {sale.saleEditApproval?.status === "pending" ? "En attente d'approbation" : SALE_STATUS_LABELS[sale.status] || sale.status}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -2339,7 +2252,7 @@ export default function SalesHistory() {
                               : null) || sale.editedBy;
                           return modifier ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium border border-yellow-200">
-                              ✏️ {modifier}
+                              <Edit className="w-3 h-3" aria-hidden="true" />{modifier}
                             </span>
                           ) : (
                             <span className="text-gray-300">—</span>
@@ -2349,69 +2262,70 @@ export default function SalesHistory() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex gap-2">
                           {showEditedSales ? (
-                            <button
+                            <button aria-label="Voir les détails des modifications"
                               onClick={() => viewEditedSaleDetails(sale)}
                               className="text-blue-600 hover:text-blue-900 p-1 rounded"
                               title="Voir les détails des modifications"
                             >
-                              <History className="w-4 h-4" />
+                              <History className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Modifications</span>
                             </button>
                           ) : (
-                            <button
+                            <button aria-label="Voir les détails de la vente"
                               onClick={() => viewSaleDetails(sale)}
                               className="text-blue-600 hover:text-blue-900 p-1 rounded"
-                              title="Voir les détails de"
+                              title="Voir les détails de la vente"
                             >
-                              <Eye className="w-4 h-4" />
+                              <Eye className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Détails</span>
                             </button>
                           )}
                           {!showEditedSales && (
                             <>
-                              <button
+                              <button aria-label="Modifier la vente"
                                 onClick={() => openEditModal(sale)}
                                 disabled={
                                   sale.status === "voided" ||
-                                  sale.status === "corrected"
+                                  sale.status === "corrected" ||
+                                  sale.saleEditApproval?.status === "pending"
                                 }
                                 className={`p-1 rounded ${
                                   sale.status === "voided" ||
-                                  sale.status === "corrected"
+                                  sale.status === "corrected" || sale.saleEditApproval?.status === "pending"
                                     ? "text-gray-400 cursor-not-allowed"
                                     : "text-yellow-600 hover:text-yellow-900"
                                 }`}
-                                title="Edit Sale"
+                                title="Modifier la vente"
                               >
-                                <Edit className="w-4 h-4" />
+                                <Edit className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Modifier</span>
                               </button>
-                              {canReprint && (
+                              {canReprintSale(sale) && (
                                 <>
-                                  <button
+                                  <button aria-label="Télécharger le reçu PDF"
                                     onClick={() => generateReceiptPDF(sale)}
                                     className="text-green-600 hover:text-green-900 p-1 rounded"
-                                    title="Download PDF Receipt"
+                                    title="Télécharger le reçu PDF"
                                   >
-                                    <Download className="w-4 h-4" />
+                                    <Download className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">PDF</span>
                                   </button>
-                                  <button
+                                  <button aria-label="Imprimer le reçu"
                                     onClick={() => printESC_POSReceipt(sale)}
                                     className="text-purple-600 hover:text-purple-900 p-1 rounded"
-                                    title="Print ESC/POS Receipt"
+                                    title="Imprimer le reçu (ESC/POS)"
                                   >
-                                    <Printer className="w-4 h-4" />
+                                    <Printer className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Imprimer</span>
                                   </button>
                                 </>
                               )}
-                              <button
+                              <button aria-label="Annuler la vente"
                                 onClick={() => handleVoidSale(sale)}
-                                disabled={sale.status === "voided"}
+                                disabled={sale.status === "voided" || sale.saleEditApproval?.status === "pending"}
                                 className={`p-1 rounded ${
-                                  sale.status === "voided"
+                                  sale.status === "voided" || sale.saleEditApproval?.status === "pending"
                                     ? "text-gray-400 cursor-not-allowed"
                                     : "text-red-600 hover:text-red-900"
                                 }`}
-                                title="Void Sale"
+                                title="Annuler la vente"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Annuler</span>
                               </button>
                             </>
                           )}
@@ -2420,15 +2334,15 @@ export default function SalesHistory() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </>
           )}
         </div>
-      </div>
+      </section>
 
       {pagination && pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-3">
-          <span className="text-sm text-gray-600">
+        <nav className="card flex flex-wrap items-center justify-between gap-3 px-4 py-3" aria-label="Pagination des ventes">
+          <span className="text-sm text-gray-600 num">
             Page {pagination.page} sur {pagination.totalPages} · {pagination.totalRecords} ventes
           </span>
           <div className="flex gap-2">
@@ -2436,7 +2350,7 @@ export default function SalesHistory() {
               type="button"
               disabled={!pagination.hasPreviousPage}
               onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-              className="rounded border px-3 py-1.5 text-sm disabled:opacity-40"
+              className="btn btn-secondary btn-sm"
             >
               Précédent
             </button>
@@ -2444,39 +2358,27 @@ export default function SalesHistory() {
               type="button"
               disabled={!pagination.hasNextPage}
               onClick={() => setCurrentPage((page) => page + 1)}
-              className="rounded border px-3 py-1.5 text-sm disabled:opacity-40"
+              className="btn btn-secondary btn-sm"
             >
               Suivant
             </button>
           </div>
-        </div>
+        </nav>
       )}
 
       {/* Sale Details Modal */}
       {showModal && selectedSale && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <Dialog label="Détails de la vente" onClose={() => setShowModal(false)}>
           <div className="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">
                 Détails de la vente
               </h3>
-              <button
+              <button type="button" aria-label="Fermer"
                 onClick={() => setShowModal(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
@@ -2499,10 +2401,10 @@ export default function SalesHistory() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Methode de Payment{" "}
+                    Méthode de paiement
                   </label>
-                  <p className="text-sm text-gray-900 capitalize">
-                    {selectedSale.paymentMethod}
+                  <p className="text-sm text-gray-900">
+                    {PAYMENT_LABELS[selectedSale.paymentMethod] || selectedSale.paymentMethod}
                   </p>
                 </div>
                 <div>
@@ -2518,7 +2420,7 @@ export default function SalesHistory() {
                         : "bg-yellow-100 text-yellow-800"
                     }`}
                   >
-                    {selectedSale.status}
+                    {SALE_STATUS_LABELS[selectedSale.status] || selectedSale.status}
                   </span>
                 </div>
                 <div className="col-span-2">
@@ -2535,7 +2437,7 @@ export default function SalesHistory() {
                       Dernière modification
                     </label>
                     <p className="text-sm text-gray-900">
-                      By: {selectedSale.editedBy} at{" "}
+                      Par {selectedSale.editedBy} le{" "}
                       {selectedSale.editedAt
                         ? formatDate(selectedSale.editedAt)
                         : "N/A"}
@@ -2567,7 +2469,7 @@ export default function SalesHistory() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Phone
+                        Téléphone
                       </label>
                       <p className="text-sm text-gray-900">
                         {selectedSale.customer.phone}
@@ -2602,7 +2504,7 @@ export default function SalesHistory() {
                             {item.name}
                           </h5>
                           <p className="text-sm text-gray-600">
-                            Nombre de pieces: {item.quantity} ×{" "}
+                            Pièces : {item.quantity} ×{" "}
                             {formatOriginalItemUnitPrice(item)}
                           </p>
                         </div>
@@ -2672,74 +2574,61 @@ export default function SalesHistory() {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-3 pt-4">
-                {canReprint && <button
-                  onClick={() => generateReceiptPDF(selectedSale)}
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  Télécharger PDF
-                </button>}
-                {canReprint && <button
+              <div className="dialog-actions">
+                {canReprintSale(selectedSale) && <button
+                  type="button"
                   onClick={() => printESC_POSReceipt(selectedSale)}
-                  className="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+                  className="btn btn-primary"
                 >
-                  <Printer className="w-4 h-4" />
-                  Imprimer Reçu
+                  <Printer aria-hidden="true" />
+                  Imprimer le reçu
+                </button>}
+                {canReprintSale(selectedSale) && <button
+                  type="button"
+                  onClick={() => generateReceiptPDF(selectedSale)}
+                  className="btn btn-secondary"
+                >
+                  <Download aria-hidden="true" />
+                  Télécharger PDF
                 </button>}
                 <button
                   onClick={() => openEditModal(selectedSale)}
                   disabled={
                     selectedSale.status === "voided" ||
-                    selectedSale.status === "corrected"
+                    selectedSale.status === "corrected" ||
+                    selectedSale.saleEditApproval?.status === "pending"
                   }
-                  className={`px-4 py-2 border rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                    selectedSale.status === "voided" ||
-                    selectedSale.status === "corrected"
-                      ? "border-gray-300 text-gray-400 cursor-not-allowed"
-                      : "border-yellow-300 text-yellow-600 hover:bg-yellow-50"
-                  }`}
+                  className="btn btn-secondary"
                 >
-                  <Edit className="w-4 h-4" />
+                  <Edit aria-hidden="true" />
                   Modifier la vente
                 </button>
                 <button
+                  type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="btn btn-ghost"
                 >
                   Fermer
                 </button>
               </div>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {/* NEW: Edited Sale Details Modal */}
       {showEditedDetailsModal && selectedEditedSale && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <Dialog label="Détails des modifications" onClose={() => setShowEditedDetailsModal(false)}>
           <div className="bg-white rounded-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">
                 Détails des modifications - {selectedEditedSale.saleId}
               </h3>
-              <button
+              <button type="button" aria-label="Fermer"
                 onClick={() => setShowEditedDetailsModal(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
@@ -2867,34 +2756,22 @@ export default function SalesHistory() {
               </div>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Edit Sale Modal */}
       {showEditModal && editingSale && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <Dialog label="Edit Sale" onClose={closeEditModal}>
           <div className="bg-white rounded-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">
                 Edit Sale - {editingSale.saleId}
               </h3>
-              <button
+              <button type="button" aria-label="Fermer"
                 onClick={closeEditModal}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
@@ -2919,16 +2796,16 @@ export default function SalesHistory() {
                     className="w-4 h-4"
                   />
                   <span className="text-sm font-medium text-gray-700">
-                    Client de passage (sans coordonnées)
+                    Client de passage (nom facultatif, sans téléphone)
                   </span>
                 </label>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nom
+                    <label htmlFor="saleshistory-field-115345" className="block text-sm font-medium text-gray-700 mb-1">
+                      Nom {editForm.isWalkIn ? <span className="font-normal text-gray-400">(facultatif)</span> : <span className="text-red-600" aria-hidden="true">*</span>}
                     </label>
-                    <input
+                    <input id="saleshistory-field-115345"
                       type="text"
                       value={editForm.customer.name}
                       onChange={(e) =>
@@ -2937,16 +2814,16 @@ export default function SalesHistory() {
                           customer: { ...prev.customer, name: e.target.value },
                         }))
                       }
+                      placeholder={editForm.isWalkIn ? "Client de passage" : undefined}
                       className="w-full p-2 border rounded disabled:bg-gray-100 disabled:text-gray-400"
-                      disabled={editForm.isWalkIn}
                       required={!editForm.isWalkIn}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="saleshistory-field-116167" className="block text-sm font-medium text-gray-700 mb-1">
                       Numéro de téléphone
                     </label>
-                    <input
+                    <input id="saleshistory-field-116167"
                       type="tel"
                       value={editForm.customer.phone}
                       onChange={(e) =>
@@ -2961,10 +2838,10 @@ export default function SalesHistory() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="saleshistory-field-116976" className="block text-sm font-medium text-gray-700 mb-1">
                       Email
                     </label>
-                    <input
+                    <input id="saleshistory-field-116976"
                       type="email"
                       value={editForm.customer.email}
                       onChange={(e) =>
@@ -3056,7 +2933,7 @@ export default function SalesHistory() {
                               Loading products...
                             </div>
                           ) : products.length === 0 ? (
-                            <input
+                            <input aria-label="Product name"
                               type="text"
                               value={item.name}
                               onChange={(e) => {
@@ -3080,9 +2957,7 @@ export default function SalesHistory() {
                             >
                               {products.map((product) => (
                                 <option key={product._id} value={product._id}>
-                                  {product.name} -{" "}
-                                  {formatCurrency(product.price)} (Stock:{" "}
-                                  {product.stock})
+                                  {product.name} — {formatCurrency(product.price)}
                                 </option>
                               ))}
                             </select>
@@ -3093,7 +2968,7 @@ export default function SalesHistory() {
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Prix
                           </label>
-                          <input
+                          <input aria-label="Prix"
                             type="number"
                             min="0"
                             step="0.01"
@@ -3113,7 +2988,7 @@ export default function SalesHistory() {
                             Nombre de pièces{" "}
                           </label>
                           <div className="flex items-center border rounded">
-                            <button
+                            <button aria-label="Diminuer"
                               type="button"
                               onClick={() =>
                                 updateItemQuantity(index, item.quantity - 1)
@@ -3123,7 +2998,7 @@ export default function SalesHistory() {
                             >
                               <Minus className="w-3 h-3" />
                             </button>
-                            <input
+                            <input aria-label="Nombre de pièces"
                               type="number"
                               min="1"
                               value={item.quantity}
@@ -3135,7 +3010,7 @@ export default function SalesHistory() {
                               }
                               className="w-full p-2 text-center border-0"
                             />
-                            <button
+                            <button aria-label="Ajouter"
                               type="button"
                               onClick={() =>
                                 updateItemQuantity(index, item.quantity + 1)
@@ -3190,7 +3065,7 @@ export default function SalesHistory() {
                 <h4 className="text-md font-medium text-gray-900 mb-3">
                   Raison de modification
                 </h4>
-                <textarea
+                <textarea aria-label="Veuillez indiquer une raison pour la modification de cette vente...."
                   value={editForm.reason}
                   onChange={(e) =>
                     setEditForm((prev) => ({ ...prev, reason: e.target.value }))
@@ -3227,7 +3102,7 @@ export default function SalesHistory() {
               </div>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

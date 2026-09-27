@@ -38,15 +38,16 @@ const CategoriesDropdown = ({
     setSelectedCategory(e.target.value);
   };
 
-  return loading ? (
-    <p className="text-sm text-gray-600">Loading categories...</p>
-  ) : (
+  // Same size while loading, so the filter bar does not shift.
+  return (
     <select
+      aria-label="Filtrer par catégorie"
       value={selectedCategory}
       onChange={handleChange}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none focus:border-transparent"
+      disabled={loading}
+      className="input"
     >
-      <option value="">Selectionner La Categorie</option>
+      <option value="">{loading ? "Chargement des catégories…" : "Toutes les catégories"}</option>
       {categories.map((category) => (
         <option key={category._id} value={category.name}>
           {category.name}

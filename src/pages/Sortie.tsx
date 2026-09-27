@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from "react";
-import { formatDateGMT2 } from "../utils/dateUtils";
+import PageHeader from "../components/ui/PageHeader";
+import ExchangeRateChip from "../components/ui/ExchangeRateChip";
 import { useAuth } from "../hooks/useAuth";
-import { Calculator, DollarSign, RefreshCw } from "lucide-react";
+import { AlertTriangle, Calculator, CheckCircle2 } from "lucide-react";
 import { serverUrl } from "../utils/constants";
 import { createAmountSnapshot } from "../utils/salePricing";
 
@@ -213,7 +214,7 @@ export default function Sortie() {
         currencyMode: "usd",
       });
 
-      setMessage("✅ Dépense enregistrée avec succès !");
+      setMessage("Dépense enregistrée avec succès.");
     } catch (e: any) {
       setError(e?.message || "La dépense n'a pas pu être enregistrée");
     } finally {
@@ -222,72 +223,42 @@ export default function Sortie() {
   }
 
   return (
-    <div className="flex-1 p-6 overflow-auto">
-      <div className="max-w-4xl mx-auto">
-        {/* Header with Exchange Rate */}
-        <div className="mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Nouvelle Sortie de Caisse</h2>
-              <p className="text-gray-600 mt-1">Enregistrez les dépenses avec gestion multi-devises</p>
-            </div>
-            
-            {/* Exchange Rate Display */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 min-w-[280px]">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <DollarSign className="w-5 h-5 text-blue-600" />
-                  <span className="font-semibold text-blue-900">Taux du jour:</span>
-                </div>
-                {loadingRate ? (
-                  <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
-                ) : exchangeRate ? (
-                  <div className="text-right">
-                    <div className="font-bold text-blue-800 text-lg">
-                      1 USD = {new Intl.NumberFormat('fr-FR').format(exchangeRate.rate)} FC
-                    </div>
-                    <div className="text-xs text-blue-600">
-                      Effectif depuis {formatDateGMT2(exchangeRate.effectiveFrom)}
-                    </div>
-                  </div>
-                ) : (
-                  <span className="text-red-600 text-sm">Taux non disponible</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+    <div className="page page-narrow">
+      <div>
+        <PageHeader
+          title="Sortie de caisse"
+          description="Enregistrer une dépense ou un remboursement, en USD ou en FC."
+          actions={<ExchangeRateChip loading={loadingRate} rate={exchangeRate} />}
+        />
 
         {message && (
-          <div className="mb-6 p-4 bg-green-100 text-green-700 rounded-lg border border-green-200">
-            {message}
+          <div className="alert alert-success mb-4" role="status">
+            <CheckCircle2 aria-hidden="true" /><span>{message}</span>
           </div>
         )}
         {error && (
-          <div className="mb-6 p-4 bg-red-100 text-red-700 rounded-lg border border-red-200">{error}</div>
+          <div className="alert alert-danger mb-4" role="alert"><AlertTriangle aria-hidden="true" /><span>{error}</span></div>
         )}
 
         <div className="bg-white shadow-lg rounded-xl border border-gray-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6">
-            <h3 className="text-xl font-semibold text-white text-center">
-              Enregistrement de Dépense
-            </h3>
-            <p className="text-blue-100 text-center mt-2">
-              Enregistrez les sorties de caisse pour le suivi des dépenses
-            </p>
+          <div className="card-header">
+            <div>
+              <h2 className="section-title">Enregistrement de la dépense</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Chaque sortie est enregistrée pour le suivi et la validation.</p>
+            </div>
           </div>
 
           <form onSubmit={handleSortie} className="p-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><label className="block mb-2 font-medium text-gray-700">Type de sortie *</label><select value={form.expenseType} onChange={(e) => setForm({...form, expenseType: e.target.value as "normal" | "repayment", creditorId: ""})} className="w-full p-3 border rounded-lg"><option value="normal">Dépense normale</option><option value="repayment">Remboursement de dette</option></select></div>
-              {form.expenseType === "repayment" && <div><label className="block mb-2 font-medium text-gray-700">Créancier actif *</label><select required value={form.creditorId} onChange={(e) => { const c=creditors.find(x=>x._id===e.target.value); setForm({...form, creditorId:e.target.value, reason:c?`Remboursement dette — ${c.name}`:form.reason, recipientName:c?.name||form.recipientName, recipientPhone:c?.phone||form.recipientPhone}); }} className="w-full p-3 border rounded-lg"><option value="">Sélectionner...</option>{creditors.map(c=><option key={c._id} value={c._id}>{c.name} ({c.type})</option>)}</select><p className="text-xs text-gray-500 mt-1">Le solde de dette reste confidentiel et sera vérifié par le serveur.</p></div>}
+              <div><label htmlFor="sortie-field-9697" className="block mb-2 font-medium text-gray-700">Type de sortie *</label><select id="sortie-field-9697" value={form.expenseType} onChange={(e) => setForm({...form, expenseType: e.target.value as "normal" | "repayment", creditorId: ""})} className="w-full p-3 border rounded-lg"><option value="normal">Dépense normale</option><option value="repayment">Remboursement de dette</option></select></div>
+              {form.expenseType === "repayment" && <div><label htmlFor="sortie-field-10137" className="block mb-2 font-medium text-gray-700">Créancier actif *</label><select id="sortie-field-10137" required value={form.creditorId} onChange={(e) => { const c=creditors.find(x=>x._id===e.target.value); setForm({...form, creditorId:e.target.value, reason:c?`Remboursement dette — ${c.name}`:form.reason, recipientName:c?.name||form.recipientName, recipientPhone:c?.phone||form.recipientPhone}); }} className="w-full p-3 border rounded-lg"><option value="">Sélectionner...</option>{creditors.map(c=><option key={c._id} value={c._id}>{c.name} ({c.type})</option>)}</select><p className="text-xs text-gray-500 mt-1">Le solde de dette reste confidentiel et sera vérifié par le serveur.</p></div>}
             </div>
             {/* Reason for Expense */}
             <div>
-              <label className="block mb-2 font-medium text-gray-700">
+              <label htmlFor="sortie-field-10968" className="block mb-2 font-medium text-gray-700">
                 Raison de la dépense *
               </label>
-              <input
+              <input id="sortie-field-10968"
                 type="text"
                 name="reason"
                 value={form.reason}
@@ -301,10 +272,10 @@ export default function Sortie() {
             {/* Recipient Information */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block mb-2 font-medium text-gray-700">
+                <label htmlFor="sortie-field-11694" className="block mb-2 font-medium text-gray-700">
                   Nom du bénéficiaire *
                 </label>
-                <input
+                <input id="sortie-field-11694"
                   type="text"
                   name="recipientName"
                   value={form.recipientName}
@@ -316,10 +287,10 @@ export default function Sortie() {
               </div>
 
               <div>
-                <label className="block mb-2 font-medium text-gray-700">
+                <label htmlFor="sortie-field-12312" className="block mb-2 font-medium text-gray-700">
                   Téléphone du bénéficiaire *
                 </label>
-                <input
+                <input id="sortie-field-12312"
                   type="tel"
                   name="recipientPhone"
                   value={form.recipientPhone}
@@ -349,7 +320,7 @@ export default function Sortie() {
                 </div>
                 
                 {form.currencyMode === 'usd' ? (
-                  <input
+                  <input aria-label="Montant *"
                     type="number"
                     step="0.01"
                     name="amount"
@@ -361,7 +332,7 @@ export default function Sortie() {
                     required
                   />
                 ) : (
-                  <input
+                  <input aria-label="Montant *"
                     type="number"
                     name="amountInFC"
                     value={form.amountInFC}
@@ -387,10 +358,10 @@ export default function Sortie() {
               </div>
 
               <div>
-                <label className="block mb-2 font-medium text-gray-700">
+                <label htmlFor="sortie-field-15524" className="block mb-2 font-medium text-gray-700">
                   Méthode de paiement *
                 </label>
-                <select
+                <select id="sortie-field-15524"
                   name="paymentMethod"
                   value={form.paymentMethod}
                   onChange={handleChange}
@@ -428,10 +399,10 @@ export default function Sortie() {
 
             {/* Additional Notes */}
             <div>
-              <label className="block mb-2 font-medium text-gray-700">
+              <label htmlFor="sortie-field-17432" className="block mb-2 font-medium text-gray-700">
                 Notes supplémentaires (optionnel)
               </label>
-              <textarea
+              <textarea id="sortie-field-17432"
                 name="notes"
                 value={form.notes}
                 onChange={handleChange}
@@ -467,7 +438,7 @@ export default function Sortie() {
                   Enregistrement...
                 </div>
               ) : (
-                "📝 Enregistrer la Dépense"
+                "Enregistrer la dépense"
               )}
             </button>
           </form>
@@ -491,7 +462,7 @@ export default function Sortie() {
                   </p>
                   {exchangeRate && (
                     <p className="mt-2 font-medium">
-                      💱 Taux utilisé: 1 USD = {new Intl.NumberFormat('fr-FR').format(exchangeRate.rate)} FC
+                      Taux utilisé : 1 USD = {new Intl.NumberFormat('fr-FR').format(exchangeRate.rate)} FC
                     </p>
                   )}
                 </div>

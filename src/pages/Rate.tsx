@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { LoadingState } from "../components/ui/States";
 import { formatDateTimeGMT2 } from "../utils/dateUtils";
 import { serverUrl } from "../utils/constants";
 import { 
@@ -11,7 +12,8 @@ import {
   Calendar,
   User,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  X,
 } from 'lucide-react';
 
 interface TauxChange {
@@ -180,68 +182,60 @@ export default function TauxChange() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Chargement des taux de change...</p>
-        </div>
+      <div className="page">
+        <LoadingState page label="Chargement des taux de change…" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* En-tête */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                <DollarSign className="w-8 h-8 text-green-600" />
-                Gestion des Taux de Change
-              </h1>
-              <p className="text-gray-600 mt-2">
-                Gérez les taux de change FC vers USD pour votre système de vente
-              </p>
-            </div>
+    <div className="page">
+      <div>
+        <header className="page-header">
+          <div>
+            <h1 className="page-title">Taux d'échange</h1>
+            <p className="page-subtitle">Taux USD / FC utilisé par les ventes, entrées et sorties.</p>
+          </div>
+          <div className="page-actions">
             <button
+              type="button"
               onClick={chargerTaux}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="btn btn-secondary"
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw aria-hidden="true" />
               Actualiser
             </button>
           </div>
-        </div>
+        </header>
 
         {/* Messages */}
         {message && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
-            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-            <p className="text-green-800">{message}</p>
-            <button
+          <div className="alert alert-success mb-4" role="status">
+            <CheckCircle aria-hidden="true" />
+            <p className="flex-1">{message}</p>
+            <button type="button" aria-label="Fermer le message"
               onClick={() => setMessage(null)}
-              className="ml-auto text-green-600 hover:text-green-800"
+              className="btn btn-ghost btn-icon btn-sm -my-1 -mr-1"
             >
-              ×
+              <X aria-hidden="true" />
             </button>
           </div>
         )}
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
-            <p className="text-red-800">{error}</p>
-            <button
+          <div className="alert alert-danger mb-4" role="alert">
+            <AlertCircle aria-hidden="true" />
+            <p className="flex-1">{error}</p>
+            <button type="button" aria-label="Fermer le message"
               onClick={() => setError(null)}
-              className="ml-auto text-red-600 hover:text-red-800"
+              className="btn btn-ghost btn-icon btn-sm -my-1 -mr-1"
             >
-              ×
+              <X aria-hidden="true" />
             </button>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* Colonne de gauche - Taux actuel et formulaire */}
           <div className="lg:col-span-2 space-y-6">
             {/* Carte du taux actuel */}
@@ -313,10 +307,10 @@ export default function TauxChange() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="rate-field-11555" className="block text-sm font-medium text-gray-700 mb-2">
                       Nouveau Taux (1 USD = X FC) *
                     </label>
-                    <input
+                    <input id="rate-field-11555"
                       type="number"
                       step="0.01"
                       min="0.01"
@@ -332,10 +326,10 @@ export default function TauxChange() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="rate-field-12441" className="block text-sm font-medium text-gray-700 mb-2">
                       Date d'Effet
                     </label>
-                    <input
+                    <input id="rate-field-12441"
                       type="datetime-local"
                       value={form.effectiveFrom}
                       onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })}
@@ -348,10 +342,10 @@ export default function TauxChange() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="rate-field-13200" className="block text-sm font-medium text-gray-700 mb-2">
                     Notes (Optionnel)
                   </label>
-                  <textarea
+                  <textarea id="rate-field-13200"
                     value={form.notes}
                     onChange={(e) => setForm({ ...form, notes: e.target.value })}
                     placeholder="Raison du changement, source du taux, etc."
@@ -446,7 +440,7 @@ export default function TauxChange() {
         {/* Section d'information */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
           <h3 className="text-lg font-semibold text-blue-900 mb-3">
-            💡 Comment utiliser les taux de change
+            Comment utiliser les taux de change
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-800">
             <div>

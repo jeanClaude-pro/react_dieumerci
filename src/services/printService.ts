@@ -23,7 +23,7 @@ export interface PrintReceiptData {
 }
 
 export class PrintService {
-  static async printReceipt(receiptData: PrintReceiptData, type: 'sale' | 'reservation' = 'sale'): Promise<boolean> {
+  static async printReceipt(receiptData: PrintReceiptData, type: 'sale' = 'sale'): Promise<boolean> {
     try {
       const response = await fetch(`${serverUrl}/print/receipt`, {
         method: 'POST',
@@ -46,7 +46,7 @@ export class PrintService {
     }
   }
 
-  static async printStub(receiptData: PrintReceiptData, type: 'sale' | 'reservation' = 'sale'): Promise<boolean> {
+  static async printStub(receiptData: PrintReceiptData, type: 'sale' = 'sale'): Promise<boolean> {
     try {
       const response = await fetch(`${serverUrl}/print/stub`, {
         method: 'POST',
@@ -69,7 +69,7 @@ export class PrintService {
     }
   }
 
-  static async printReceiptAndStub(receiptData: PrintReceiptData, type: 'sale' | 'reservation' = 'sale'): Promise<boolean> {
+  static async printReceiptAndStub(receiptData: PrintReceiptData, type: 'sale' = 'sale'): Promise<boolean> {
     try {
       // Print receipt first
       await this.printReceipt(receiptData, type);

@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { serverUrl } from "../utils/constants";
+import { Info, Landmark, Plus } from "lucide-react";
+import PageHeader from "../components/ui/PageHeader";
+import { EmptyState } from "../components/ui/States";
 
 type Creditor = { _id: string; name: string; type: "person" | "bank" | "company"; phone: string; address: string; isActive: boolean; totalBorrowed: number; totalRepaid: number; remainingBalance: number };
 const headers = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("authToken") || localStorage.getItem("token") || ""}` });
@@ -19,21 +22,86 @@ export default function Remboursements() {
   const createCreditor = async (e: React.FormEvent) => { e.preventDefault(); const r = await fetch(`${serverUrl}/creditors`, { method: "POST", headers: headers(), body: JSON.stringify(form) }); const data = await r.json(); setMessage(r.ok ? "Créancier ajouté." : data.error); if (r.ok) { setForm({ name: "", type: "person", phone: "", address: "" }); load(); } };
   const addLoan = async (e: React.FormEvent) => { e.preventDefault(); const amount = Number(loan.enteredAmount); const rate = loan.enteredCurrency === "FC" ? Number(loan.exchangeRate) : (Number(loan.exchangeRate) || 1); const body = { ...loan, enteredAmount: amount, exchangeRate: rate, amount: amount, amountUSD: loan.enteredCurrency === "FC" ? amount / rate : amount, amountFC: loan.enteredCurrency === "FC" ? amount : amount * rate }; const r = await fetch(`${serverUrl}/creditors/${selected}/loans`, { method: "POST", headers: headers(), body: JSON.stringify(body) }); const data = await r.json(); setMessage(r.ok ? "Emprunt enregistré." : data.error); if (r.ok) { setLoan({ ...loan, enteredAmount: "", reference: "", note: "" }); await load(); await loadHistory(selected); } };
 
-  return <div className="p-6 space-y-6 max-w-7xl mx-auto">
-    <div><h1 className="text-2xl font-bold">Remboursements et dettes</h1><p className="text-gray-600">Suivi administratif des créanciers, emprunts et remboursements validés.</p></div>
-    {message && <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">{message}</div>}
-    <form onSubmit={createCreditor} className="bg-white border rounded-xl p-4 grid md:grid-cols-5 gap-3">
-      <input required className="border rounded p-2" placeholder="Nom du créancier" value={form.name} onChange={e => setForm({...form, name:e.target.value})}/>
-      <select className="border rounded p-2" value={form.type} onChange={e => setForm({...form, type:e.target.value})}><option value="person">Personne</option><option value="bank">Banque</option><option value="company">Entreprise</option></select>
-      <input className="border rounded p-2" placeholder="Téléphone" value={form.phone} onChange={e => setForm({...form, phone:e.target.value})}/>
-      <input className="border rounded p-2" placeholder="Adresse" value={form.address} onChange={e => setForm({...form, address:e.target.value})}/>
-      <button className="bg-blue-600 text-white rounded p-2">Ajouter</button>
+  return <div className="page space-y-5">
+    <PageHeader title="Remboursements et dettes" description="Suivi administratif des créanciers, emprunts et remboursements validés." />
+    {message && <div className="alert alert-info" role="status"><Info aria-hidden="true" /><span>{message}</span></div>}
+
+    <form onSubmit={createCreditor} className="card">
+      <div className="card-header"><h2 className="section-title">Nouveau créancier</h2></div>
+      <div className="card-body grid sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+        <div className="field">
+          <label htmlFor="creditor-name" className="field-label">Nom <span className="req" aria-hidden="true">*</span></label>
+          <input id="creditor-name" required className="input" placeholder="Nom du créancier" value={form.name} onChange={e => setForm({...form, name:e.target.value})}/>
+        </div>
+        <div className="field">
+          <label htmlFor="creditor-type" className="field-label">Type</label>
+          <select id="creditor-type" className="input" value={form.type} onChange={e => setForm({...form, type:e.target.value})}><option value="person">Personne</option><option value="bank">Banque</option><option value="company">Entreprise</option></select>
+        </div>
+        <div className="field">
+          <label htmlFor="creditor-phone" className="field-label">Téléphone</label>
+          <input id="creditor-phone" type="tel" className="input" placeholder="+243 …" value={form.phone} onChange={e => setForm({...form, phone:e.target.value})}/>
+        </div>
+        <div className="field">
+          <label htmlFor="creditor-address" className="field-label">Adresse</label>
+          <input id="creditor-address" className="input" placeholder="Adresse" value={form.address} onChange={e => setForm({...form, address:e.target.value})}/>
+        </div>
+        <button className="btn btn-primary"><Plus aria-hidden="true" />Ajouter</button>
+      </div>
     </form>
-    <div className="grid lg:grid-cols-3 gap-5">
-      <div className="bg-white border rounded-xl overflow-hidden"><h2 className="font-semibold p-4 border-b">Créanciers</h2>{creditors.map(c => <button key={c._id} onClick={() => loadHistory(c._id)} className={`w-full text-left p-4 border-b hover:bg-gray-50 ${selected===c._id?"bg-blue-50":""}`}><div className="font-semibold">{c.name} {!c.isActive && <span className="text-xs text-red-600">Archivé</span>}</div><div className="text-sm text-gray-600">Dette: {money(c.remainingBalance)} · Emprunté: {money(c.totalBorrowed)}</div></button>)}</div>
+
+    <div className="grid lg:grid-cols-3 gap-5 items-start">
+      <section className="card overflow-hidden" aria-labelledby="creditors-title">
+        <div className="card-header"><h2 id="creditors-title" className="section-title">Créanciers</h2><span className="badge num">{creditors.length}</span></div>
+        {creditors.length === 0
+          ? <EmptyState title="Aucun créancier" icon={<Landmark aria-hidden="true" />}>Ajoutez un créancier pour suivre ses emprunts.</EmptyState>
+          : <ul className="divide-y divide-gray-100">{creditors.map(c => <li key={c._id}><button type="button" onClick={() => loadHistory(c._id)} aria-pressed={selected===c._id} className={`w-full text-left px-5 py-3.5 transition-colors hover:bg-gray-50 ${selected===c._id?"bg-blue-50":""}`}>
+              <div className="font-semibold text-sm flex items-center gap-2">{c.name} {!c.isActive && <span className="badge badge-danger">Archivé</span>}</div>
+              <div className="text-xs text-gray-600 num mt-0.5">Dette : {money(c.remainingBalance)} · Emprunté : {money(c.totalBorrowed)}</div>
+            </button></li>)}</ul>}
+      </section>
       <div className="lg:col-span-2 space-y-5">
-        {selected && <form onSubmit={addLoan} className="bg-white border rounded-xl p-4 grid md:grid-cols-3 gap-3"><h2 className="font-semibold md:col-span-3">Nouvel emprunt</h2><input required type="number" min="0.01" step="0.01" className="border rounded p-2" placeholder="Montant" value={loan.enteredAmount} onChange={e=>setLoan({...loan,enteredAmount:e.target.value})}/><select className="border rounded p-2" value={loan.enteredCurrency} onChange={e=>setLoan({...loan,enteredCurrency:e.target.value})}><option>USD</option><option>FC</option></select><input required={loan.enteredCurrency==="FC"} type="number" className="border rounded p-2" placeholder="Taux USD/FC" value={loan.exchangeRate} onChange={e=>setLoan({...loan,exchangeRate:e.target.value})}/><input type="date" className="border rounded p-2" value={loan.borrowedAt} onChange={e=>setLoan({...loan,borrowedAt:e.target.value})}/><input className="border rounded p-2" placeholder="Référence" value={loan.reference} onChange={e=>setLoan({...loan,reference:e.target.value})}/><button className="bg-emerald-600 text-white rounded p-2">Enregistrer l'emprunt</button></form>}
-        {history && <div className="bg-white border rounded-xl p-4"><h2 className="font-semibold mb-3">Historique — {history.creditor.name}</h2><div className="grid grid-cols-3 gap-2 mb-4 text-sm"><div>Emprunté<br/><b>{money(history.reconciliation.borrowed)}</b></div><div>Remboursé<br/><b>{money(history.reconciliation.repaid)}</b></div><div>Solde<br/><b>{money(history.reconciliation.storedOutstanding)}</b></div></div><div className="space-y-2">{history.loans.map((x:any)=><div key={x._id} className="p-2 bg-green-50 rounded">Emprunt {money(x.amountUSD)} · {new Date(x.borrowedAt).toLocaleDateString("fr-FR")}</div>)}{history.repayments.map((x:any)=><div key={x._id} className="p-2 bg-orange-50 rounded">Remboursement {money(x.amountUSD)} · {x.status}</div>)}</div></div>}
+        {!selected && <div className="card"><EmptyState title="Sélectionnez un créancier" icon={<Landmark aria-hidden="true" />}>Son historique d'emprunts et de remboursements s'affichera ici.</EmptyState></div>}
+        {selected && <form onSubmit={addLoan} className="card">
+          <div className="card-header"><h2 className="section-title">Nouvel emprunt</h2></div>
+          <div className="card-body grid sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+            <div className="field">
+              <label htmlFor="loan-amount" className="field-label">Montant <span className="req" aria-hidden="true">*</span></label>
+              <input id="loan-amount" required type="number" inputMode="decimal" min="0.01" step="0.01" className="input num" placeholder="0,00" value={loan.enteredAmount} onChange={e=>setLoan({...loan,enteredAmount:e.target.value})}/>
+            </div>
+            <div className="field">
+              <label htmlFor="loan-currency" className="field-label">Devise</label>
+              <select id="loan-currency" className="input" value={loan.enteredCurrency} onChange={e=>setLoan({...loan,enteredCurrency:e.target.value})}><option>USD</option><option>FC</option></select>
+            </div>
+            <div className="field">
+              <label htmlFor="loan-rate" className="field-label">Taux USD/FC {loan.enteredCurrency==="FC" && <span className="req" aria-hidden="true">*</span>}</label>
+              <input id="loan-rate" required={loan.enteredCurrency==="FC"} type="number" inputMode="decimal" className="input num" placeholder="ex : 2850" value={loan.exchangeRate} onChange={e=>setLoan({...loan,exchangeRate:e.target.value})}/>
+            </div>
+            <div className="field">
+              <label htmlFor="loan-date" className="field-label">Date de l'emprunt</label>
+              <input id="loan-date" type="date" className="input" value={loan.borrowedAt} onChange={e=>setLoan({...loan,borrowedAt:e.target.value})}/>
+            </div>
+            <div className="field">
+              <label htmlFor="loan-reference" className="field-label">Référence</label>
+              <input id="loan-reference" className="input" placeholder="Référence" value={loan.reference} onChange={e=>setLoan({...loan,reference:e.target.value})}/>
+            </div>
+            <button className="btn btn-success">Enregistrer l'emprunt</button>
+          </div>
+        </form>}
+        {history && <section className="card" aria-labelledby="creditor-history-title">
+          <div className="card-header"><h2 id="creditor-history-title" className="section-title">Historique — {history.creditor.name}</h2></div>
+          <div className="card-body space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="metric-card"><span className="metric-label">Emprunté</span><span className="metric-value">{money(history.reconciliation.borrowed)}</span></div>
+              <div className="metric-card"><span className="metric-label">Remboursé</span><span className="metric-value">{money(history.reconciliation.repaid)}</span></div>
+              <div className="metric-card"><span className="metric-label">Solde</span><span className="metric-value">{money(history.reconciliation.storedOutstanding)}</span></div>
+            </div>
+            <ul className="space-y-2 num">
+              {history.loans.map((x:any)=><li key={x._id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-green-200 bg-green-50 text-sm"><span className="font-medium text-green-800">Emprunt</span><span>{money(x.amountUSD)} · {new Date(x.borrowedAt).toLocaleDateString("fr-FR")}</span></li>)}
+              {history.repayments.map((x:any)=><li key={x._id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-sm"><span className="font-medium text-amber-800">Remboursement</span><span>{money(x.amountUSD)} · {x.status}</span></li>)}
+              {!history.loans.length && !history.repayments.length && <li className="text-sm text-gray-500">Aucun mouvement enregistré.</li>}
+            </ul>
+          </div>
+        </section>}
       </div>
     </div>
   </div>;

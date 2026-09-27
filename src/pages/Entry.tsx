@@ -1,8 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState, useRef } from "react";
-import { formatNowGMT2, formatDateGMT2 } from "../utils/dateUtils";
+import PageHeader from "../components/ui/PageHeader";
+import ExchangeRateChip from "../components/ui/ExchangeRateChip";
+import { formatNowGMT2 } from "../utils/dateUtils";
 import { useAuth } from "../hooks/useAuth";
-import { DollarSign, RefreshCw, FileText, User, Calculator } from "lucide-react";
+import { AlertTriangle, CheckCircle2, DollarSign, RefreshCw, FileText, User, Calculator } from "lucide-react";
 import { serverUrl } from "../utils/constants";
 import { createAmountSnapshot } from "../utils/salePricing";
 
@@ -979,7 +981,7 @@ export default function Entry() {
       });
 
       setMessage(
-        "✅ Entrée d'argent enregistrée avec succès ! Impression du reçu et de la souche..."
+        "Entrée d'argent enregistrée avec succès. Impression du reçu et de la souche…"
       );
     } catch (e: any) {
       console.error("Error creating entry:", e);
@@ -990,49 +992,21 @@ export default function Entry() {
   }
 
   return (
-    <div className="flex-1 p-6 overflow-auto">
-      <div className="max-w-4xl mx-auto">
-        {/* Header with Exchange Rate */}
-        <div className="mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Nouvelle Entrée d'Argent</h2>
-              <p className="text-gray-600 mt-1">Enregistrez une nouvelle entrée d'argent dans le système</p>
-            </div>
-            
-            {/* Exchange Rate Display */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 min-w-[280px]">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <DollarSign className="w-5 h-5 text-blue-600" />
-                  <span className="font-semibold text-blue-900">Taux du jour:</span>
-                </div>
-                {loadingRate ? (
-                  <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
-                ) : exchangeRate ? (
-                  <div className="text-right">
-                    <div className="font-bold text-blue-800 text-lg">
-                      1 USD = {new Intl.NumberFormat('fr-FR').format(exchangeRate.rate)} FC
-                    </div>
-                    <div className="text-xs text-blue-600">
-                      Effectif depuis {formatDateGMT2(exchangeRate.effectiveFrom)}
-                    </div>
-                  </div>
-                ) : (
-                  <span className="text-red-600 text-sm">Taux non disponible</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+    <div className="page page-narrow">
+      <div>
+        <PageHeader
+          title="Entrée de caisse"
+          description="Enregistrer une entrée d'argent, son expéditeur et son mode de paiement."
+          actions={<ExchangeRateChip loading={loadingRate} rate={exchangeRate} />}
+        />
 
         {message && (
-          <div className="mb-4 p-3 bg-green-100 text-green-700 rounded">
-            {message}
+          <div className="alert alert-success mb-4" role="status">
+            <CheckCircle2 aria-hidden="true" /><span>{message}</span>
           </div>
         )}
         {error && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">{error}</div>
+          <div className="alert alert-danger mb-4" role="alert"><AlertTriangle aria-hidden="true" /><span>{error}</span></div>
         )}
 
         <form onSubmit={handleEntry} className="space-y-6">
@@ -1060,7 +1034,7 @@ export default function Entry() {
                 </div>
                 
                 {form.currencyMode === 'usd' ? (
-                  <input
+                  <input aria-label="Montant *"
                     type="number"
                     step="0.01"
                     name="amount"
@@ -1072,7 +1046,7 @@ export default function Entry() {
                     required
                   />
                 ) : (
-                  <input
+                  <input aria-label="Montant *"
                     type="number"
                     name="amountInFC"
                     value={form.amountInFC}
@@ -1098,10 +1072,10 @@ export default function Entry() {
               </div>
 
               <div>
-                <label className="block mb-2 font-medium text-gray-700">
+                <label htmlFor="entry-field-34674" className="block mb-2 font-medium text-gray-700">
                   Source *
                 </label>
-                <select
+                <select id="entry-field-34674"
                   name="source"
                   value={form.source}
                   onChange={handleChange}
@@ -1118,10 +1092,10 @@ export default function Entry() {
               </div>
 
               <div>
-                <label className="block mb-2 font-medium text-gray-700">
+                <label htmlFor="entry-field-35456" className="block mb-2 font-medium text-gray-700">
                   Catégorie *
                 </label>
-                <select
+                <select id="entry-field-35456"
                   name="category"
                   value={form.category}
                   onChange={handleChange}
@@ -1138,10 +1112,10 @@ export default function Entry() {
               </div>
 
               <div>
-                <label className="block mb-2 font-medium text-gray-700">
+                <label htmlFor="entry-field-36266" className="block mb-2 font-medium text-gray-700">
                   Méthode de Paiement *
                 </label>
-                <select
+                <select id="entry-field-36266"
                   name="paymentMethod"
                   value={form.paymentMethod}
                   onChange={handleChange}
@@ -1158,10 +1132,10 @@ export default function Entry() {
             </div>
 
             <div className="mt-4">
-              <label className="block mb-2 font-medium text-gray-700">
+              <label htmlFor="entry-field-37169" className="block mb-2 font-medium text-gray-700">
                 Description (Optionnel)
               </label>
-              <textarea
+              <textarea id="entry-field-37169"
                 name="description"
                 value={form.description}
                 onChange={handleChange}
@@ -1181,10 +1155,10 @@ export default function Entry() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block mb-2 font-medium text-gray-700">
+                <label htmlFor="entry-field-38178" className="block mb-2 font-medium text-gray-700">
                   Nom de l'Expéditeur *
                 </label>
-                <input
+                <input id="entry-field-38178"
                   type="text"
                   name="receivedFromName"
                   value={form.receivedFromName}
@@ -1196,10 +1170,10 @@ export default function Entry() {
               </div>
 
               <div>
-                <label className="block mb-2 font-medium text-gray-700">
+                <label htmlFor="entry-field-38804" className="block mb-2 font-medium text-gray-700">
                   Téléphone de l'Expéditeur *
                 </label>
-                <input
+                <input id="entry-field-38804"
                   type="tel"
                   name="receivedFromPhone"
                   value={form.receivedFromPhone}
@@ -1211,10 +1185,10 @@ export default function Entry() {
               </div>
 
               <div className="md:col-span-2">
-                <label className="block mb-2 font-medium text-gray-700">
+                <label htmlFor="entry-field-39464" className="block mb-2 font-medium text-gray-700">
                   Email de l'Expéditeur (Optionnel)
                 </label>
-                <input
+                <input id="entry-field-39464"
                   type="email"
                   name="receivedFromEmail"
                   value={form.receivedFromEmail}

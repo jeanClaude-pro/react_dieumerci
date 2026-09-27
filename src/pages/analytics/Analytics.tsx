@@ -1,5 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
+import Dialog from "../../components/ui/Dialog";
+import PageHeader from "../../components/ui/PageHeader";
+import { EmptyState, LoadingState, PermissionDenied } from "../../components/ui/States";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import React, { useCallback, useState, useEffect } from "react";
 import {
@@ -546,16 +549,8 @@ export default function Analytics() {
   // Non-admin: hard block
   if (!isAdmin()) {
     return (
-      <div className="min-h-screen analytics-page flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-lg border border-red-200 p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Shield className="w-8 h-8 text-red-600" />
-          </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Accès Refusé</h2>
-          <p className="text-gray-500 text-sm">
-            Cette section est réservée aux administrateurs uniquement.
-          </p>
-        </div>
+      <div className="page">
+        <PermissionDenied>Cette section est réservée aux administrateurs.</PermissionDenied>
       </div>
     );
   }
@@ -563,43 +558,44 @@ export default function Analytics() {
   // Admin: password gate before showing anything
   if (!accessVerified) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-8 max-w-sm w-full">
+      <div className="page min-h-screen flex items-center justify-center">
+        <div className="card p-6 sm:p-8 max-w-sm w-full">
           <div className="text-center mb-6">
-            <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
-              <Shield className="w-7 h-7 text-blue-600" />
+            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-3">
+              <Shield className="w-6 h-6 text-blue-600" aria-hidden="true" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Vérification Requise</h2>
+            <h1 className="text-xl font-semibold text-gray-900">Vérification requise</h1>
             <p className="text-gray-500 text-sm mt-1">
-              Entrez votre mot de passe pour accéder aux Analytiques
+              Saisissez votre mot de passe pour accéder aux rapports.
             </p>
           </div>
           <form onSubmit={handleAccessVerify} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <label htmlFor="analytics-field-18830" className="block text-sm font-medium text-gray-700 mb-1.5">
                 Mot de passe administrateur
               </label>
-              <input
+              <input id="analytics-field-18830"
                 type="password"
                 value={accessPassword}
                 onChange={(e) => setAccessPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                className="input"
                 placeholder="Votre mot de passe"
+                autoComplete="current-password"
                 autoFocus
                 required
               />
             </div>
             {accessError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+              <div className="alert alert-danger" role="alert">
                 {accessError}
               </div>
             )}
             <button
               type="submit"
               disabled={accessLoading}
-              className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm"
+              className="btn btn-primary btn-lg btn-block"
             >
-              {accessLoading ? "Vérification..." : "Accéder"}
+              {accessLoading ? "Vérification…" : "Accéder aux rapports"}
             </button>
           </form>
         </div>
@@ -609,45 +605,21 @@ export default function Analytics() {
 
   if (loading) {
     return (
-      <div className="min-h-screen analytics-page p-4 sm:p-6">
-        <div className="max-w-7xl mx-auto space-y-6 analytics-shell">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Analytiques
-            </h1>
-            <p className="text-sm sm:text-base text-gray-600 mt-2">
-              Analyse approfondie de la performance de votre entreprise
-            </p>
-          </div>
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="text-gray-500 mt-2 text-sm sm:text-base">
-              Chargement des analytiques...
-            </p>
-          </div>
-        </div>
+      <div className="page analytics-page">
+        <PageHeader title="Rapports & analytique" description="Performance commerciale par période." />
+        <div className="card"><LoadingState label="Chargement des analytiques…" /></div>
       </div>
     );
   }
 
   if (!analytics) {
     return (
-      <div className="min-h-screen analytics-page p-4 sm:p-6">
-        <div className="max-w-7xl mx-auto space-y-6 analytics-shell">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Analytiques
-            </h1>
-            <p className="text-sm sm:text-base text-gray-600 mt-2">
-              Analyse approfondie de la performance de votre entreprise
-            </p>
-          </div>
-          <div className="text-center py-12 text-gray-500">
-            <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p className="text-sm sm:text-base">
-              Aucune donnée disponible pour les analytiques
-            </p>
-          </div>
+      <div className="page analytics-page">
+        <PageHeader title="Rapports & analytique" description="Performance commerciale par période." />
+        <div className="card">
+          <EmptyState title="Aucune donnée disponible" icon={<BarChart3 aria-hidden="true" />}>
+            Aucune donnée n'est disponible pour les analytiques.
+          </EmptyState>
         </div>
       </div>
     );
@@ -679,18 +651,14 @@ export default function Analytics() {
 
   return (
     <>
-    <div className="min-h-screen analytics-page p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto space-y-6 analytics-shell">
+    <div className="page analytics-page">
+      <div className="space-y-5">
         {/* Header */}
-        <div className="analytics-hero rounded-lg text-center sm:text-left">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <div className="page-header" style={{ marginBottom: 0 }}>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-950">
-                Analytiques
-              </h1>
-              <p className="text-sm sm:text-base text-slate-600 mt-2 max-w-2xl">
-                Analyse approfondie de la performance de votre entreprise
-              </p>
+              <h1 className="page-title">Rapports & analytique</h1>
+              <p className="page-subtitle">Performance commerciale, dépenses et rapports imprimables par période.</p>
             </div>
             <div className="flex items-center gap-3">
               {shouldSeeOnlyTodayData() && (
@@ -744,7 +712,7 @@ export default function Analytics() {
 
               {timeframe === "year" && availableYears.length > 1 && (
                 <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
-                  <button
+                  <button type="button" aria-label="Année précédente"
                     onClick={() => navigateYear("prev")}
                     disabled={availableYears.indexOf(selectedYear) === availableYears.length - 1}
                     className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -754,7 +722,7 @@ export default function Analytics() {
                   <span className="text-xs sm:text-sm font-medium text-gray-900 px-2 min-w-[60px] sm:min-w-[80px] text-center">
                     {selectedYear}
                   </span>
-                  <button
+                  <button type="button" aria-label="Année suivante"
                     onClick={() => navigateYear("next")}
                     disabled={availableYears.indexOf(selectedYear) === 0}
                     className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -764,18 +732,14 @@ export default function Analytics() {
                 </div>
               )}
 
-              <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-full sm:w-auto">
+              <div className="segmented w-full sm:w-auto" role="group" aria-label="Période">
                 {(["day", "week", "month", "year"] as const).map((period) => (
                   <button
                     key={period}
+                    type="button"
+                    aria-pressed={timeframe === period}
                     onClick={() => handleTimeframeChange(period)}
-                    className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 flex-1 sm:flex-none ${
-                      timeframe === period
-                        ? "bg-blue-500 text-white shadow-sm"
-                        : shouldSeeOnlyTodayData() && period !== "day"
-                        ? "text-gray-400 cursor-not-allowed opacity-50"
-                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                    }`}
+                    className={shouldSeeOnlyTodayData() && period !== "day" ? "opacity-50 !cursor-not-allowed" : ""}
                     disabled={shouldSeeOnlyTodayData() && period !== "day"}
                   >
                     {period === "day" && "Jour"}
@@ -1233,10 +1197,10 @@ export default function Analytics() {
 
                   {/* Signature text input */}
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                    <label htmlFor="analytics-field-50736" className="block text-xs font-medium text-gray-700 mb-1">
                       Titre / Poste (optionnel)
                     </label>
-                    <input
+                    <input id="analytics-field-50736"
                       type="text"
                       value={adminSignatureText}
                       onChange={(e) => setAdminSignatureText(e.target.value)}
@@ -1338,7 +1302,7 @@ export default function Analytics() {
 
     {/* ── Print password confirmation modal ───────────────────────── */}
     {showPrintPasswordModal && (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <Dialog label="Confirmation Requise" onClose={() => { setShowPrintPasswordModal(false); setPrintPassword(""); setPrintPasswordError(""); }}>
         <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-6 max-w-sm w-full">
           <div className="text-center mb-5">
             <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -1350,7 +1314,7 @@ export default function Analytics() {
             </p>
           </div>
           <form onSubmit={handlePrintPasswordVerify} className="space-y-4">
-            <input
+            <input aria-label="Mot de passe"
               type="password"
               value={printPassword}
               onChange={(e) => setPrintPassword(e.target.value)}
@@ -1382,7 +1346,7 @@ export default function Analytics() {
             </div>
           </form>
         </div>
-      </div>
+      </Dialog>
     )}
     </>
   );

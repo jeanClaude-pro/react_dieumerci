@@ -1,5 +1,7 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
+import ResponsiveTable from "../../components/ui/ResponsiveTable";
+import { EmptyState, LoadingState } from "../../components/ui/States";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
@@ -59,12 +61,10 @@ const ALL_PAGES = [
   { path: "/dashboard", label: "Tableau de bord" },
   { path: "/rate", label: "Taux d'échange" },
   { path: "/", label: "Point de Vente (POS)" },
-  { path: "/reservation", label: "Réservation" },
   { path: "/entry", label: "Entrée de caisse" },
   { path: "/sortie", label: "Sortie de caisse" },
   { path: "/products", label: "Articles / Stock" },
   { path: "/sales", label: "Historique de Vente" },
-  { path: "/reservationhistory", label: "Historique de Réservation" },
   { path: "/entryhistory", label: "Historique d'Entrée" },
   { path: "/sortiehistory", label: "Historique de Sortie" },
   { path: "/reports", label: "Rapports & Analytiques" },
@@ -104,34 +104,28 @@ const ROLE_DEFAULT_PAGES: Record<AppRole, string[]> = {
   admin: ALL_PAGES.map((p) => p.path),
   manager: [
     "/",
-    "/reservation",
     "/entry",
     "/sortie",
     "/products",
     "/sales",
-    "/reservationhistory",
     "/entryhistory",
     "/sortiehistory",
     "/customers",
   ],
   inventory_manager: [
     "/",
-    "/reservation",
     "/entry",
     "/sortie",
     "/products",
     "/sales",
-    "/reservationhistory",
     "/entryhistory",
     "/sortiehistory",
   ],
   cashier_supervisor: [
     "/",
-    "/reservation",
     "/entry",
     "/sortie",
     "/sales",
-    "/reservationhistory",
     "/entryhistory",
     "/sortiehistory",
     "/customers",
@@ -589,54 +583,43 @@ export default function AdminPanel() {
   ] as const;
 
   return (
-    <div className="flex-1 p-6 overflow-auto bg-gray-50 min-h-screen">
-      <div className="max-w-6xl mx-auto">
-
-        {/* ─── Header ─── */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-700 rounded-xl flex items-center justify-center shadow">
-              <Shield className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Administration</h1>
-              <p className="text-sm text-gray-500">
-                Gérez les comptes, rôles, permissions et réglages du système
-              </p>
-            </div>
+    <div className="page">
+      <div>
+        <header className="page-header">
+          <div>
+            <div className="eyebrow"><Shield aria-hidden="true" />Contrôle administrateur</div>
+            <h1 className="page-title">Administration</h1>
+            <p className="page-subtitle">Comptes, rôles, permissions et réglages des reçus.</p>
           </div>
+        </header>
 
-          <div className="grid grid-cols-3 gap-4 mt-6">
-            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-              <p className="text-2xl font-bold text-gray-900">{users.length}</p>
-              <p className="text-sm text-gray-500 mt-0.5">Comptes totaux</p>
-            </div>
-            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-              <p className="text-2xl font-bold text-emerald-600">{activeCount}</p>
-              <p className="text-sm text-gray-500 mt-0.5">Actifs</p>
-            </div>
-            <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-              <p className="text-2xl font-bold text-red-500">
-                {users.length - activeCount}
-              </p>
-              <p className="text-sm text-gray-500 mt-0.5">Désactivés</p>
-            </div>
+        <div className="grid grid-cols-3 gap-3 mb-5">
+          <div className="metric-card">
+            <span className="metric-label">Comptes</span>
+            <span className="metric-value">{users.length}</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Actifs</span>
+            <span className="metric-value text-green-700">{activeCount}</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-label">Désactivés</span>
+            <span className="metric-value text-red-700">{users.length - activeCount}</span>
           </div>
         </div>
 
         {/* ─── Tabs ─── */}
-        <div className="flex gap-1 mb-6 bg-white rounded-xl p-1 border border-gray-200 shadow-sm flex-wrap">
+        <div className="segmented flex! w-full overflow-x-auto mb-5" role="tablist" aria-label="Sections de l'administration">
           {TABS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
               onClick={() => setTab(key)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                tab === key
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
+              className="shrink-0 grow"
             >
-              <Icon className="w-4 h-4" />
+              <Icon aria-hidden="true" />
               {label}
             </button>
           ))}
@@ -644,30 +627,31 @@ export default function AdminPanel() {
 
         {/* ══════════════ USERS TAB ══════════════ */}
         {tab === "users" && (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 flex-wrap">
-              <div className="relative flex-1 min-w-[220px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Rechercher par nom ou email…"
+          <div className="card overflow-hidden" role="tabpanel" aria-label="Utilisateurs">
+            <div className="card-header">
+              <div className="input-group flex-1 min-w-0 sm:min-w-[16rem]">
+                <Search aria-hidden="true" />
+                <input aria-label="Rechercher un utilisateur"
+                  type="search"
+                  placeholder="Nom ou e-mail…"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="input"
                 />
               </div>
               <button
+                type="button"
                 onClick={fetchUsers}
                 disabled={loading}
-                className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+                className="btn btn-secondary"
               >
-                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                <RefreshCw className={loading ? "animate-spin" : ""} aria-hidden="true" />
                 Actualiser
               </button>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <ResponsiveTable className="w-full">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
                     <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Utilisateur</th>
@@ -681,16 +665,14 @@ export default function AdminPanel() {
                 <tbody className="divide-y divide-gray-50">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="text-center py-16 text-gray-400">
-                        <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 opacity-40" />
-                        Chargement…
+                      <td colSpan={6}>
+                        <LoadingState label="Chargement des utilisateurs…" />
                       </td>
                     </tr>
                   ) : filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="text-center py-16 text-gray-400">
-                        <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                        Aucun utilisateur trouvé
+                      <td colSpan={6}>
+                        <EmptyState title="Aucun utilisateur trouvé" icon={<Users aria-hidden="true" />} />
                       </td>
                     </tr>
                   ) : (
@@ -720,15 +702,16 @@ export default function AdminPanel() {
                                       if (e.key === "Escape") cancelEditUsername();
                                     }}
                                     autoFocus
+                                    aria-label={`Nouveau nom d'utilisateur pour ${user.username}`}
                                     className="text-sm border border-blue-300 rounded-lg px-2 py-1 focus:ring-1 focus:ring-blue-500 w-36"
                                   />
-                                  <button
+                                  <button type="button" aria-label="Enregistrer le nom d'utilisateur" title="Enregistrer"
                                     onClick={() => saveUsername(user._id)}
                                     className="text-emerald-600 hover:text-emerald-800"
                                   >
-                                    <Check className="w-3.5 h-3.5" />
+                                    <Check className="w-3.5 h-3.5" aria-hidden="true" />
                                   </button>
-                                  <button
+                                  <button type="button" aria-label="Annuler la modification" title="Annuler"
                                     onClick={cancelEditUsername}
                                     className="text-gray-400 hover:text-gray-600"
                                   >
@@ -740,9 +723,9 @@ export default function AdminPanel() {
                                   <p className="font-medium text-gray-900 text-sm truncate">
                                     {user.username}
                                   </p>
-                                  <button
+                                  <button aria-label="Modifier le nom d'utilisateur"
                                     onClick={() => startEditUsername(user)}
-                                    className="text-gray-300 hover:text-blue-500 transition-colors flex-shrink-0"
+                                    className="text-gray-400 hover:text-blue-600 transition-colors flex-shrink-0 rounded p-0.5"
                                     title="Modifier le nom d'utilisateur"
                                   >
                                     <Pencil className="w-3 h-3" />
@@ -765,6 +748,7 @@ export default function AdminPanel() {
                                 }
                                 className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-blue-500 bg-white"
                                 autoFocus
+                                aria-label={`Rôle de ${user.username}`}
                               >
                                 {(Object.keys(ROLE_LABELS) as AppRole[]).map((r) => (
                                   <option key={r} value={r}>
@@ -772,7 +756,7 @@ export default function AdminPanel() {
                                   </option>
                                 ))}
                               </select>
-                              <button
+                              <button type="button" aria-label="Annuler le changement de rôle"
                                 onClick={() => setEditingRoleId(null)}
                                 className="text-gray-400 hover:text-gray-600"
                               >
@@ -780,7 +764,7 @@ export default function AdminPanel() {
                               </button>
                             </div>
                           ) : (
-                            <button
+                            <button type="button" aria-label={`Rôle : ${ROLE_LABELS[user.role]} — modifier`} title="Modifier le rôle"
                               onClick={() => setEditingRoleId(user._id)}
                               className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${ROLE_COLORS[user.role]} hover:opacity-80 transition-opacity`}
                             >
@@ -793,7 +777,10 @@ export default function AdminPanel() {
                         {/* Status */}
                         <td className="px-5 py-3.5">
                           <button
+                            type="button"
                             onClick={() => handleToggleStatus(user)}
+                            aria-label={user.isActive ? `Compte actif — désactiver ${user.username}` : `Compte désactivé — activer ${user.username}`}
+                            title={user.isActive ? "Désactiver le compte" : "Activer le compte"}
                             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                               user.isActive
                                 ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
@@ -838,7 +825,7 @@ export default function AdminPanel() {
                         {/* Actions */}
                         <td className="px-5 py-3.5">
                           <div className="flex items-center justify-center gap-1">
-                            <button
+                            <button aria-label="Gérer les permissions"
                               onClick={() => {
                                 handleSelectUserForPerms(user._id);
                                 setTab("permissions");
@@ -846,14 +833,14 @@ export default function AdminPanel() {
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                               title="Gérer les permissions"
                             >
-                              <Shield className="w-4 h-4" />
+                              <Shield className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Permissions</span>
                             </button>
-                            <button
+                            <button aria-label="Supprimer l'utilisateur"
                               onClick={() => handleDeleteUser(user)}
                               className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                               title="Supprimer l'utilisateur"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Supprimer</span>
                             </button>
                           </div>
                         </td>
@@ -861,7 +848,7 @@ export default function AdminPanel() {
                     ))
                   )}
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </div>
           </div>
         )}
@@ -884,10 +871,10 @@ export default function AdminPanel() {
 
               <form onSubmit={handleCreateUser} className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <label htmlFor="adminpanel-field-33777" className="block text-sm font-medium text-gray-700 mb-1.5">
                     Nom d'utilisateur <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input id="adminpanel-field-33777"
                     type="text"
                     value={createForm.username}
                     onChange={(e) => setCreateForm((f) => ({ ...f, username: e.target.value }))}
@@ -898,10 +885,10 @@ export default function AdminPanel() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <label htmlFor="adminpanel-field-34474" className="block text-sm font-medium text-gray-700 mb-1.5">
                     Adresse email <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input id="adminpanel-field-34474"
                     type="email"
                     value={createForm.email}
                     onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
@@ -912,11 +899,11 @@ export default function AdminPanel() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <label htmlFor="adminpanel-field-35210" className="block text-sm font-medium text-gray-700 mb-1.5">
                     Rôle <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
-                    <select
+                    <select id="adminpanel-field-35210"
                       value={createForm.role}
                       onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value as AppRole }))}
                       className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white appearance-none"
@@ -931,11 +918,11 @@ export default function AdminPanel() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <label htmlFor="adminpanel-field-36298" className="block text-sm font-medium text-gray-700 mb-1.5">
                     Mot de passe <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
-                    <input
+                    <input id="adminpanel-field-36298"
                       type={showPassword ? "text" : "password"}
                       value={createForm.password}
                       onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
@@ -945,7 +932,7 @@ export default function AdminPanel() {
                       minLength={10}
                       maxLength={128}
                     />
-                    <button type="button" onClick={() => setShowPassword((s) => !s)}
+                    <button aria-label="Masquer le mot de passe" type="button" onClick={() => setShowPassword((s) => !s)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -953,10 +940,10 @@ export default function AdminPanel() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <label htmlFor="adminpanel-field-37494" className="block text-sm font-medium text-gray-700 mb-1.5">
                     Confirmer le mot de passe <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input id="adminpanel-field-37494"
                     type={showPassword ? "text" : "password"}
                     value={createForm.confirmPassword}
                     onChange={(e) => setCreateForm((f) => ({ ...f, confirmPassword: e.target.value }))}
@@ -1016,11 +1003,11 @@ export default function AdminPanel() {
             <div className="p-6">
               {/* User selector */}
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="adminpanel-field-40763" className="block text-sm font-medium text-gray-700 mb-2">
                   Sélectionner un utilisateur
                 </label>
                 <div className="relative max-w-sm">
-                  <select
+                  <select id="adminpanel-field-40763"
                     value={selectedUserId}
                     onChange={(e) => handleSelectUserForPerms(e.target.value)}
                     className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white appearance-none"
@@ -1229,10 +1216,10 @@ export default function AdminPanel() {
               ) : (
                 <form onSubmit={handleSaveSettings} className="p-6 space-y-5">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    <label htmlFor="adminpanel-field-52350" className="block text-sm font-medium text-gray-700 mb-1.5">
                       Nom de l'établissement
                     </label>
-                    <input
+                    <input id="adminpanel-field-52350"
                       type="text"
                       value={shopSettings.shopName}
                       onChange={(e) =>
@@ -1245,10 +1232,10 @@ export default function AdminPanel() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    <label htmlFor="adminpanel-field-53080" className="block text-sm font-medium text-gray-700 mb-1.5">
                       Adresse
                     </label>
-                    <input
+                    <input id="adminpanel-field-53080"
                       type="text"
                       value={shopSettings.shopAddress}
                       onChange={(e) =>
@@ -1260,10 +1247,10 @@ export default function AdminPanel() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    <label htmlFor="adminpanel-field-53832" className="block text-sm font-medium text-gray-700 mb-1.5">
                       Numéro(s) de téléphone
                     </label>
-                    <input
+                    <input id="adminpanel-field-53832"
                       type="text"
                       value={shopSettings.shopNumber}
                       onChange={(e) =>
@@ -1275,10 +1262,10 @@ export default function AdminPanel() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    <label htmlFor="adminpanel-field-54577" className="block text-sm font-medium text-gray-700 mb-1.5">
                       Numéro d'enregistrement (RCCM)
                     </label>
-                    <input
+                    <input id="adminpanel-field-54577"
                       type="text"
                       value={shopSettings.shopRegistration}
                       onChange={(e) =>
@@ -1290,10 +1277,10 @@ export default function AdminPanel() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    <label htmlFor="adminpanel-field-55306" className="block text-sm font-medium text-gray-700 mb-1.5">
                       Pied de page du reçu
                     </label>
-                    <textarea
+                    <textarea id="adminpanel-field-55306"
                       value={shopSettings.receiptFooter}
                       onChange={(e) =>
                         setShopSettings((s) => ({ ...s, receiptFooter: e.target.value }))

@@ -1,8 +1,11 @@
+import PageHeader from "../components/ui/PageHeader";
+import ExchangeRateChip from "../components/ui/ExchangeRateChip";
+import { EmptyState } from "../components/ui/States";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useState, useRef } from "react";
-import { formatNowGMT2, formatDateGMT2 } from "../utils/dateUtils";
+import { formatNowGMT2 } from "../utils/dateUtils";
 import { useAuth } from "../hooks/useAuth";
-import { DollarSign, RefreshCw, Calculator, Search } from "lucide-react";
+import { AlertTriangle, CheckCircle2, IdCard, Loader2, Lock, Minus, Package, PackageX, Plus, Search, ShoppingCart, Trash2, UserRound, XCircle } from "lucide-react";
 import { serverUrl } from "../utils/constants";
 import QRCode from "qrcode";
 import {
@@ -14,6 +17,7 @@ import {
   type PriceSnapshot,
   type SaleCurrency,
 } from "../utils/salePricing";
+import { buildSaleCustomer, isSaleCustomerValid, receiptCustomerName } from "../utils/saleCustomer";
 
 const compactFc = (value: number) => `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(value)}FC`;
 const compactDualUnit = (item: CartItem, rate?: number) => {
@@ -75,7 +79,7 @@ async function readJsonSafe(res: Response) {
 class PrintService {
   static async printReceipt(
     receiptData: any,
-    type: "sale" | "reservation" = "sale"
+    type: "sale" = "sale"
   ): Promise<boolean> {
     try {
       const response = await fetch(`${API_BASE}/print/receipt`, {
@@ -101,7 +105,7 @@ class PrintService {
 
   static async printStub(
     receiptData: any,
-    type: "sale" | "reservation" = "sale"
+    type: "sale" = "sale"
   ): Promise<boolean> {
     try {
       const response = await fetch(`${API_BASE}/print/stub`, {
@@ -162,7 +166,8 @@ export default function NewSale() {
     priceInFC: "",
     customerName: "",
     customerPhone: "",
-    isWalkIn: false,
+    // Ordinary counter sales are walk-in: selected by default.
+    isWalkIn: true,
     paymentMethod: "cash" as UiPayment,
     currencyMode: "usd" as "usd" | "fc",
     priceSource: "USD" as SaleCurrency,
@@ -170,6 +175,9 @@ export default function NewSale() {
 
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Presentation only: keyboard highlight in article search, feedback anchor.
+  const [activeResult, setActiveResult] = useState(-1);
+  const feedbackRef = useRef<HTMLDivElement>(null);
 
   // Check if user is admin
   const isAdmin = currentUser?.role === "admin";
@@ -325,10 +333,7 @@ export default function NewSale() {
     { USD: 0, FC: 0 }
   );
 
-  const isFormValid =
-    cart.length > 0 &&
-    (form.isWalkIn ||
-      (form.customerName.trim() !== "" && form.customerPhone.trim() !== ""));
+  const isFormValid = cart.length > 0 && isSaleCustomerValid(form);
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -336,13 +341,14 @@ export default function NewSale() {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
   }
 
-  function toggleWalkIn() {
-    setForm((f) => ({
-      ...f,
-      isWalkIn: !f.isWalkIn,
-      customerName: "",
-      customerPhone: "",
-    }));
+  // Switching customer type keeps the typed name (optional for a walk-in,
+  // required for a registered customer); a walk-in never keeps a phone.
+  function setCustomerType(isWalkIn: boolean) {
+    setForm((f) =>
+      f.isWalkIn === isWalkIn
+        ? f
+        : { ...f, isWalkIn, customerPhone: isWalkIn ? "" : f.customerPhone }
+    );
   }
 
   // Handle product selection from search
@@ -369,6 +375,29 @@ export default function NewSale() {
       setForm(prev => ({ ...prev, productId: "" }));
     }
   };
+
+  // Keyboard support for the article search (combobox pattern).
+  useEffect(() => setActiveResult(-1), [searchTerm, showSearchResults]);
+  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setShowSearchResults(true);
+      setActiveResult((index) => Math.min(index + 1, filteredProducts.length - 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveResult((index) => Math.max(index - 1, 0));
+    } else if (event.key === "Enter" && showSearchResults && filteredProducts[activeResult]) {
+      event.preventDefault();
+      handleProductSelect(filteredProducts[activeResult]);
+    } else if (event.key === "Escape") {
+      setShowSearchResults(false);
+    }
+  };
+
+  // Bring feedback into view: the checkout button may be far below it.
+  useEffect(() => {
+    if (message || error) feedbackRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [message, error]);
 
   // Check if adding to cart would result in negative stock
   const checkStockAfterAdd = (productId: string, quantityToAdd: number): boolean => {
@@ -449,24 +478,18 @@ export default function NewSale() {
     });
   }, [exchangeRate]);
 
-  // Function to display stock information based on user role
-  const renderStockInfo = (product: Product) => {
-    if (isAdmin) {
-      // Admin sees exact stock numbers
-      return `(Stock: ${product.stock})`;
-    } else {
-      // Staff sees stock status instead of exact numbers
-      if (product.stock === 0) {
-        return "(En rupture)";
-      } else if (product.stock <= 5) { // You can adjust this threshold
-        return "(Stock faible)";
-      } else {
-        return "(En stock)";
-      }
+  // Stock information by role: admins see exact quantities, other roles a
+  // status only (unchanged thresholds).
+  const renderStockInfo = (product: Product): { label: string; tone: "success" | "warning" | "danger" } => {
+    if (product.stock === 0) {
+      return { label: isAdmin ? `Stock : ${product.stock}` : "En rupture", tone: "danger" };
+    } else if (product.stock <= 5) { // You can adjust this threshold
+      return { label: isAdmin ? `Stock : ${product.stock}` : "Stock faible", tone: "warning" };
     }
+    return { label: isAdmin ? `Stock : ${product.stock}` : "En stock", tone: "success" };
   };
 
-  // Function to display available stock message based on user role
+  // Available-stock message for the selected article, by role.
   const renderAvailableStockMessage = (product: Product, quantity: number) => {
     const canAddToCart = product && quantity > 0 && checkStockAfterAdd(product._id, quantity);
     
@@ -479,56 +502,40 @@ export default function NewSale() {
       const availableStock = product.stock - currentCartQuantity;
       
       return (
-        <p className="text-sm text-gray-600 mb-4">
-          Stock disponible: <strong>{product.stock}</strong>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600 num" aria-live="polite">
+          <span>Stock disponible : <strong className="text-gray-900">{product.stock}</strong></span>
           {currentCartQuantity > 0 && (
-            <span className="ml-2 text-blue-600">
-              (Déjà dans panier: {currentCartQuantity})
-            </span>
+            <span className="text-blue-700">Déjà dans le panier : {currentCartQuantity}</span>
           )}
           {quantity > 0 && (
-            <span className={`ml-4 ${canAddToCart ? 'text-green-600' : 'text-red-600'}`}>
-              Stock restant après vente:{" "}
+            <span className={`inline-flex items-center gap-1 ${canAddToCart ? "text-green-700" : "text-red-700"}`}>
+              {canAddToCart ? <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> : <XCircle className="w-4 h-4" aria-hidden="true" />}
+              Stock restant après vente :{" "}
               {availableStock - quantity >= 0
                 ? availableStock - quantity
-                : "❌ pas assez de stock!"}
+                : "pas assez de stock"}
             </span>
           )}
-        </p>
+        </div>
       );
     } else {
       // Staff sees status messages
-      if (product.stock === 0) {
-        return (
-          <p className="text-sm text-red-600 mb-4">
-            <strong>❌ En rupture de stock</strong>
-          </p>
-        );
-      } else if (product.stock <= 5) {
-        return (
-          <p className="text-sm text-orange-600 mb-4">
-            <strong>⚠️ Stock faible</strong>
-          </p>
-        );
-      } else if (quantity > 0 && !canAddToCart) {
-        return (
-          <p className="text-sm text-red-600 mb-4">
-            <strong>❌ Quantité demandée non disponible</strong>
-          </p>
-        );
-      } else if (quantity > 0) {
-        return (
-          <p className="text-sm text-green-600 mb-4">
-            <strong>✅ Stock suffisant</strong>
-          </p>
-        );
-      } else {
-        return (
-          <p className="text-sm text-green-600 mb-4">
-            <strong>✅ En stock</strong>
-          </p>
-        );
-      }
+      const status =
+        product.stock === 0
+          ? { tone: "danger", text: "En rupture de stock" }
+          : product.stock <= 5
+          ? { tone: "warning", text: "Stock faible" }
+          : quantity > 0 && !canAddToCart
+          ? { tone: "danger", text: "Quantité demandée non disponible" }
+          : quantity > 0
+          ? { tone: "success", text: "Stock suffisant" }
+          : { tone: "success", text: "En stock" };
+      const Icon = status.tone === "success" ? CheckCircle2 : status.tone === "warning" ? AlertTriangle : XCircle;
+      return (
+        <span className={`badge badge-${status.tone}`} aria-live="polite">
+          <Icon aria-hidden="true" />{status.text}
+        </span>
+      );
     }
   };
 
@@ -614,6 +621,27 @@ export default function NewSale() {
     newCart.splice(index, 1);
     setCart(newCart);
 
+  }
+
+  // Cart quantity stepper: same stock guard and line-total formula as
+  // adding the same article again with handleAddToCart.
+  function changeCartQuantity(index: number, delta: 1 | -1) {
+    const item = cart[index];
+    if (!item) return;
+    const nextQuantity = item.quantity + delta;
+    if (nextQuantity < 1) return;
+    if (delta > 0 && !checkStockAfterAdd(item.productId, delta)) {
+      setError("Stock insuffisant pour ajouter cette quantité au panier");
+      return;
+    }
+    setError(null);
+    const updatedCart = [...cart];
+    updatedCart[index] = {
+      ...item,
+      quantity: nextQuantity,
+      total: nextQuantity * item.unitPrice,
+    };
+    setCart(updatedCart);
   }
 
   function authHeader(): Record<string, string> {
@@ -1471,13 +1499,8 @@ export default function NewSale() {
 
     try {
       const body = {
-        customer: form.isWalkIn
-          ? undefined
-          : {
-              name: form.customerName,
-              phone: form.customerPhone,
-              email: "",
-            },
+        // Walk-in: optional display name only (no phone, no customer record).
+        customer: buildSaleCustomer(form),
         isWalkIn: form.isWalkIn,
         items: cart.map((item) => ({
           productId: item.productId,
@@ -1535,7 +1558,7 @@ export default function NewSale() {
         shopNumber: shopSettings.shopNumber,
         shopRegistration: shopSettings.shopRegistration,
         receiptFooter: shopSettings.receiptFooter,
-        customerName: form.isWalkIn ? "Client de passage" : form.customerName,
+        customerName: receiptCustomerName(form),
         customerPhone: form.isWalkIn ? "" : form.customerPhone,
         items: cart,
         total: cartTotal,
@@ -1558,7 +1581,7 @@ export default function NewSale() {
         priceInFC: "",
         customerName: "",
         customerPhone: "",
-        isWalkIn: false,
+        isWalkIn: true,
         paymentMethod: form.paymentMethod,
         currencyMode: "usd",
         priceSource: "USD",
@@ -1567,7 +1590,7 @@ export default function NewSale() {
       setSearchTerm("");
 
       setMessage(
-        "✅ Vente effectuée avec succès ! Impression du reçu et de la souche..."
+        "Vente effectuée avec succès. Impression du reçu et de la souche…"
       );
     } catch (e: any) {
       setError(e?.message || "La vente n'a pas pu être effectuée");
@@ -1597,327 +1620,354 @@ export default function NewSale() {
     currentPrice !== null &&
     checkStockAfterAdd(product._id, quantity);
 
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const saleFcTotal = getSaleFcTotal(cartTotal, cart, exchangeRate?.rate);
+  const hasFcEntries = cartOriginalTotals.FC > 0;
+  const visibleResults = showSearchResults ? filteredProducts : [];
+  const checkoutHint = cart.length === 0
+    ? "Ajoutez au moins un article pour valider."
+    : !isFormValid
+    ? "Nom et téléphone du client enregistré requis."
+    : null;
+
+  const priceFormat = (item: CartItem) => item.enteredCurrency === "FC"
+    ? { main: formatFc(item.enteredPrice), alt: `≈ ${formatCurrency(item.priceUSD)}` }
+    : { main: formatCurrency(item.enteredPrice), alt: item.priceFC !== undefined ? `≈ ${formatFc(item.priceFC)}` : "" };
+  const lineFormat = (item: CartItem) => item.enteredCurrency === "FC"
+    ? { main: formatFc(item.enteredPrice * item.quantity), alt: `≈ ${formatCurrency(item.total)}` }
+    : { main: formatCurrency(item.enteredPrice * item.quantity), alt: item.priceFC !== undefined ? `≈ ${formatFc(item.priceFC * item.quantity)}` : "" };
+
+  const submitButton = (className: string) => (
+    <button
+      type="button"
+      onClick={handleSale}
+      disabled={!isFormValid || submitting}
+      className={`btn btn-success btn-lg ${className}`}
+      aria-describedby={checkoutHint ? "pos-checkout-hint" : undefined}
+    >
+      {submitting ? <Loader2 className="animate-spin" aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
+      {submitting ? "Enregistrement…" : "Valider la vente"}
+    </button>
+  );
+
   return (
-    <div className="flex-1 p-6 overflow-auto">
-      <div className="max-w-6xl mx-auto">
-        {/* Header with Exchange Rate */}
-        <div className="mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Nouvelle Vente</h2>
-              <p className="text-gray-600 mt-1">Créez une nouvelle vente avec gestion multi-devises</p>
-            </div>
-            
-            {/* Exchange Rate Display */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 w-full min-w-0 sm:w-auto sm:min-w-[280px]">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <DollarSign className="w-5 h-5 text-blue-600" />
-                  <span className="font-semibold text-blue-900">Taux du jour:</span>
-                </div>
-                {loadingRate ? (
-                  <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
-                ) : exchangeRate ? (
-                  <div className="text-right">
-                    <div className="font-bold text-blue-800 text-lg">
-                      1 USD = {new Intl.NumberFormat('fr-FR').format(exchangeRate.rate)} FC
-                    </div>
-                    <div className="text-xs text-blue-600">
-                      Effectif depuis {formatDateGMT2(exchangeRate.effectiveFrom)}
-                    </div>
-                  </div>
-                ) : (
-                  <span className="text-red-600 text-sm">Taux non disponible</span>
-                )}
-              </div>
-            </div>
-          </div>
+    <div className="page page-wide">
+      <PageHeader
+        title="Nouvelle vente"
+        description="Client, articles, panier puis encaissement."
+        actions={<ExchangeRateChip loading={loadingRate} rate={exchangeRate} />}
+      />
+
+      {(message || error) && (
+        <div ref={feedbackRef} className="grid gap-2 mb-4" style={{ scrollMarginTop: "1rem", scrollMarginBottom: "6rem" }}>
+          {message && (
+            <div className="alert alert-success" role="status"><CheckCircle2 aria-hidden="true" /><span>{message}</span></div>
+          )}
+          {error && (
+            <div className="alert alert-danger" role="alert"><AlertTriangle aria-hidden="true" /><span>{error}</span></div>
+          )}
         </div>
+      )}
 
-        {message && (
-          <div className="mb-4 p-3 bg-green-100 text-green-700 rounded">
-            {message}
+      <div className="pos-grid">
+        <div className="pos-main">
+        {/* 1 — Customer */}
+        <section className="card pos-area-customer" aria-labelledby="pos-customer-title">
+          <div className="card-header">
+            <h2 id="pos-customer-title" className="section-title"><span className="pos-step" aria-hidden="true">1</span>Client</h2>
+            <div className="segmented" role="group" aria-label="Type de client">
+              <button type="button" aria-pressed={form.isWalkIn} onClick={() => setCustomerType(true)}>
+                <UserRound aria-hidden="true" />De passage
+              </button>
+              <button type="button" aria-pressed={!form.isWalkIn} onClick={() => setCustomerType(false)}>
+                <IdCard aria-hidden="true" />Enregistré
+              </button>
+            </div>
           </div>
-        )}
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">{error}</div>
-        )}
-
-        <div className="bg-white shadow-lg rounded-xl p-6 mb-6 border border-gray-200">
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Ajouter les articles</h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="relative" ref={searchRef}>
-              <label className="block mb-2 font-medium text-gray-700">Articles</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <div className="card-body grid gap-4">
+            {form.isWalkIn ? (
+              <div className="field">
+                <label htmlFor="pos-walkin-name" className="field-label">
+                  Nom du client <span className="opt">(facultatif)</span>
+                </label>
                 <input
+                  id="pos-walkin-name"
                   type="text"
+                  name="customerName"
+                  value={form.customerName}
+                  onChange={handleChange}
+                  placeholder="Client de passage"
+                  autoComplete="off"
+                  maxLength={80}
+                  className="input"
+                  aria-describedby="pos-walkin-hint"
+                />
+                <p id="pos-walkin-hint" className="field-hint">
+                  Aucun téléphone requis. Le nom figure sur le reçu ; aucune fiche client n'est créée.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 pos-customer-fields">
+                <div className="field">
+                  <label htmlFor="pos-customer-name" className="field-label">
+                    Nom du client <span className="req" aria-hidden="true">*</span>
+                  </label>
+                  <input
+                    id="pos-customer-name"
+                    type="text"
+                    name="customerName"
+                    value={form.customerName}
+                    onChange={handleChange}
+                    placeholder="Nom complet"
+                    autoComplete="off"
+                    className="input"
+                    required
+                    aria-required="true"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="pos-customer-phone" className="field-label">
+                    Téléphone <span className="req" aria-hidden="true">*</span>
+                  </label>
+                  <input
+                    id="pos-customer-phone"
+                    type="tel"
+                    inputMode="tel"
+                    name="customerPhone"
+                    value={form.customerPhone}
+                    onChange={handleChange}
+                    placeholder="+243 …"
+                    autoComplete="off"
+                    className="input"
+                    required
+                    aria-required="true"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* 2 — Articles */}
+        <section className="card pos-area-products" aria-labelledby="pos-products-title">
+          <div className="card-header">
+            <h2 id="pos-products-title" className="section-title"><span className="pos-step" aria-hidden="true">2</span>Ajouter un article</h2>
+            {loadingProducts && <span className="badge"><Loader2 className="animate-spin" aria-hidden="true" />Chargement…</span>}
+          </div>
+          <div className="card-body grid gap-4">
+            <div className="field relative" ref={searchRef}>
+              <label htmlFor="pos-search" className="field-label">Article</label>
+              <div className="input-group">
+                <Search aria-hidden="true" />
+                <input
+                  id="pos-search"
+                  type="search"
+                  role="combobox"
+                  aria-expanded={visibleResults.length > 0}
+                  aria-controls="pos-search-results"
+                  aria-autocomplete="list"
+                  aria-activedescendant={activeResult >= 0 ? `pos-result-${activeResult}` : undefined}
                   value={searchTerm}
                   onChange={handleSearchChange}
                   onFocus={() => setShowSearchResults(true)}
-                  placeholder="Rechercher un article..."
-                  className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder={loadingProducts ? "Chargement des articles…" : "Nom ou référence de l'article"}
+                  autoComplete="off"
+                  className="input"
                   disabled={loadingProducts || products.length === 0}
                 />
               </div>
-              
-              {/* Search Results Dropdown */}
-              {showSearchResults && filteredProducts.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
-                  {filteredProducts.map((product) => (
-                    <div
-                      key={product._id}
-                      className="px-4 py-3 cursor-pointer hover:bg-blue-50 border-b border-gray-100 last:border-b-0"
-                      onClick={() => handleProductSelect(product)}
-                    >
-                      <div className="font-medium text-gray-900">{product.name}</div>
-                      <div className="text-sm text-gray-600 flex justify-between">
-                        <span>{product.sku && `SKU: ${product.sku}`}</span>
-                        <span className={product.stock === 0 ? "text-red-600" : product.stock <= 5 ? "text-orange-600" : "text-green-600"}>
-                          {renderStockInfo(product)}
+
+              {visibleResults.length > 0 && (
+                <div id="pos-search-results" role="listbox" aria-label="Articles trouvés" className="pos-results">
+                  {visibleResults.map((result, index) => {
+                    const stock = renderStockInfo(result);
+                    return (
+                      <button
+                        type="button"
+                        role="option"
+                        id={`pos-result-${index}`}
+                        aria-selected={index === activeResult}
+                        key={result._id}
+                        className="pos-result"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => handleProductSelect(result)}
+                      >
+                        <span className="min-w-0">
+                          <strong className="truncate">{result.name}</strong>
+                          {result.sku && <small>Réf. {result.sku}</small>}
                         </span>
-                      </div>
-                    </div>
-                  ))}
+                        <span className={`badge badge-${stock.tone} num`}>{stock.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
-              
-              {/* No Results Message */}
+
               {showSearchResults && searchTerm && filteredProducts.length === 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-4 text-center text-gray-500">
-                  Aucun article trouvé
+                <div className="pos-results" role="status">
+                  <p className="px-3 py-4 text-center text-sm text-gray-500">Aucun article ne correspond à « {searchTerm} ».</p>
                 </div>
               )}
             </div>
 
-            <div>
-              <label className="block mb-2 font-medium text-gray-700">Nombre de pièces</label>
-              <input
-                type="number"
-                name="quantity"
-                value={form.quantity}
-                onChange={handleChange}
-                placeholder="Entrer le nombre de pièces"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                min={1}
-              />
-            </div>
+            {!loadingProducts && products.length === 0 && (
+              <div className="alert alert-warning"><PackageX aria-hidden="true" /><span>Aucun article disponible à la vente pour le moment.</span></div>
+            )}
 
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block font-medium text-gray-700">Prix unitaire</label>
-                <button
-                  type="button"
-                  onClick={toggleCurrencyMode}
-                  className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                >
-                  <Calculator className="w-3 h-3" />
-                  {form.currencyMode === 'usd' ? 'USD → FC' : 'FC → USD'}
-                </button>
+            {product && (
+              <div className="pos-selected">
+                <Package className="w-5 h-5 text-blue-600 shrink-0" aria-hidden="true" />
+                <div className="min-w-0 flex-1 grid gap-1 justify-items-start">
+                  <strong className="text-sm font-semibold text-gray-900 truncate max-w-full">{product.name}</strong>
+                  {renderAvailableStockMessage(product, quantity)}
+                </div>
               </div>
-              
-              {!canEditPrice && (
-                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mb-2">
-                  Prix verrouillé — permission requise pour modifier les prix.
-                </p>
-              )}
-              {form.currencyMode === 'usd' ? (
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="field">
+                <label htmlFor="pos-quantity" className="field-label">Quantité</label>
                 <input
+                  id="pos-quantity"
                   type="number"
-                  step="0.01"
-                  name="unitPrice"
-                  value={form.unitPrice}
-                  onChange={(e) => canEditPrice && handleUsdPriceChange(e.target.value)}
-                  readOnly={!canEditPrice}
-                  placeholder={product?.price ? `ex: ${product.price}` : "Entrer le prix en USD"}
-                  className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${!canEditPrice ? "bg-gray-50 border-gray-200 cursor-not-allowed text-gray-500" : "border-gray-300"}`}
-                  min={0.01}
-                />
-              ) : (
-                <input
-                  type="number"
-                  name="priceInFC"
-                  value={form.priceInFC}
-                  onChange={(e) => canEditPrice && handleFcPriceChange(e.target.value)}
-                  readOnly={!canEditPrice}
-                  placeholder="Entrer le prix en FC"
-                  className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${!canEditPrice ? "bg-gray-50 border-gray-200 cursor-not-allowed text-gray-500" : "border-gray-300"}`}
+                  inputMode="numeric"
+                  name="quantity"
+                  value={form.quantity}
+                  onChange={handleChange}
+                  placeholder="0"
+                  className="input num"
                   min={1}
                 />
-              )}
-              
-              {/* Conversion Display */}
-              {form.unitPrice && form.currencyMode === 'usd' && exchangeRate && (
-                <p className="text-xs text-green-600 mt-1">
-                  ≈ {formatFc(parseFloat(form.unitPrice) * exchangeRate.rate)}
+              </div>
+
+              <div className="field">
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor="pos-price" className="field-label">
+                    Prix unitaire <span className="sr-only">en {form.currencyMode === "usd" ? "USD" : "FC"}</span>
+                  </label>
+                  <div className="segmented pos-currency" role="group" aria-label="Devise de saisie du prix">
+                    <button type="button" aria-pressed={form.currencyMode === "usd"} onClick={() => form.currencyMode !== "usd" && toggleCurrencyMode()}>USD</button>
+                    <button type="button" aria-pressed={form.currencyMode === "fc"} onClick={() => form.currencyMode !== "fc" && toggleCurrencyMode()}>FC</button>
+                  </div>
+                </div>
+                {form.currencyMode === "usd" ? (
+                  <input
+                    id="pos-price"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    name="unitPrice"
+                    value={form.unitPrice}
+                    onChange={(e) => canEditPrice && handleUsdPriceChange(e.target.value)}
+                    readOnly={!canEditPrice}
+                    placeholder={product?.price ? `ex : ${product.price}` : "Prix en USD"}
+                    className="input num"
+                    min={0.01}
+                    aria-describedby="pos-price-hint"
+                  />
+                ) : (
+                  <input
+                    id="pos-price"
+                    type="number"
+                    inputMode="numeric"
+                    name="priceInFC"
+                    value={form.priceInFC}
+                    onChange={(e) => canEditPrice && handleFcPriceChange(e.target.value)}
+                    readOnly={!canEditPrice}
+                    placeholder="Prix en FC"
+                    className="input num"
+                    min={1}
+                    aria-describedby="pos-price-hint"
+                  />
+                )}
+                <p id="pos-price-hint" className="field-hint num flex flex-wrap gap-x-3 gap-y-1">
+                  {!canEditPrice && <span className="inline-flex items-center gap-1 text-amber-700"><Lock className="w-3 h-3" aria-hidden="true" />Prix verrouillé (permission requise)</span>}
+                  {form.unitPrice && form.currencyMode === "usd" && exchangeRate && (
+                    <>≈ {formatFc(parseFloat(form.unitPrice) * exchangeRate.rate)}</>
+                  )}
+                  {form.priceInFC && form.currencyMode === "fc" && exchangeRate && (
+                    <>≈ {formatCurrency(parseFloat(form.priceInFC) / exchangeRate.rate)}</>
+                  )}
                 </p>
-              )}
-              {form.priceInFC && form.currencyMode === 'fc' && exchangeRate && (
-                <p className="text-xs text-green-600 mt-1">
-                  ≈ {formatCurrency(parseFloat(form.priceInFC) / exchangeRate.rate)}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {product && renderAvailableStockMessage(product, quantity)}
-
-          <button
-            type="button"
-            onClick={handleAddToCart}
-            disabled={!canAddToCart}
-            className={`w-full sm:w-auto px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
-              canAddToCart
-                ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-                : "bg-gray-400 cursor-not-allowed text-white"
-            } transition-colors`}
-          >
-            <RefreshCw className="w-4 h-4" />
-            Ajouter au panier
-          </button>
-
-          {cart.length > 0 && (
-            <div className="mt-6">
-              <h3 className="text-lg font-semibold mb-4 text-gray-900">Articles du panier</h3>
-              <div className="overflow-hidden rounded-lg border border-gray-200">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Articles</th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Pièces</th>
-                      <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Prix unitaire</th>
-                      <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Total</th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {cart.map((item, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-gray-900">{item.name}</td>
-                        <td className="px-4 py-3 text-sm text-center text-gray-600">{item.quantity}</td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-900">
-                          {item.enteredCurrency === "FC"
-                            ? formatFc(item.enteredPrice)
-                            : formatCurrency(item.enteredPrice)}
-                          {item.enteredCurrency === "FC" ? (
-                            <div className="text-xs text-gray-500">
-                              ≈ {formatCurrency(item.priceUSD)}
-                            </div>
-                          ) : item.priceFC !== undefined ? (
-                            <div className="text-xs text-gray-500">
-                              ≈ {formatFc(item.priceFC)}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-900">
-                          {item.enteredCurrency === "FC"
-                            ? formatFc(item.enteredPrice * item.quantity)
-                            : formatCurrency(item.enteredPrice * item.quantity)}
-                          {item.enteredCurrency === "FC" ? (
-                            <div className="text-xs text-gray-500">
-                              ≈ {formatCurrency(item.total)}
-                            </div>
-                          ) : item.priceFC !== undefined ? (
-                            <div className="text-xs text-gray-500">
-                              ≈ {formatFc(item.priceFC * item.quantity)}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => removeFromCart(index)}
-                            className="text-red-600 hover:text-red-800 text-sm font-medium"
-                          >
-                            Enlever
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-gray-50">
-                    <tr>
-                      <td colSpan={3} className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                        Total:
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                        {cartOriginalTotals.USD > 0 && (
-                          <div>{formatCurrency(cartOriginalTotals.USD)}</div>
-                        )}
-                        {cartOriginalTotals.FC > 0 && (
-                          <div>{formatFc(cartOriginalTotals.FC)}</div>
-                        )}
-                        {cartOriginalTotals.FC > 0 && (
-                          <div className="text-xs text-gray-500">
-                            Total reçu ≈ {formatCurrency(cartTotal)}
-                          </div>
-                        )}
-                      </td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                </table>
               </div>
             </div>
-          )}
+
+            <button
+              type="button"
+              onClick={handleAddToCart}
+              disabled={!canAddToCart}
+              className="btn btn-primary btn-lg w-full sm:w-auto sm:justify-self-start"
+            >
+              <Plus aria-hidden="true" />
+              Ajouter au panier
+            </button>
+          </div>
+        </section>
+
         </div>
 
-        <div className="bg-white shadow-lg rounded-xl p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">Informations du client</h3>
+        <div className="pos-side">
+        {/* 3 — Cart */}
+        <section className="card pos-area-cart" aria-labelledby="pos-cart-title">
+          <div className="card-header">
+            <h2 id="pos-cart-title" className="section-title"><span className="pos-step" aria-hidden="true">3</span>Panier</h2>
+            <span className="badge num" aria-live="polite">{cartCount} pièce{cartCount > 1 ? "s" : ""}</span>
+          </div>
+          <div className="card-body">
+            {cart.length === 0 ? (
+              <EmptyState title="Le panier est vide" icon={<ShoppingCart aria-hidden="true" />}>
+                Recherchez un article, indiquez la quantité puis ajoutez-le au panier.
+              </EmptyState>
+            ) : (
+              <ul className="pos-cart-list" aria-label="Articles du panier">
+                {cart.map((item, index) => {
+                  const unit = priceFormat(item);
+                  const line = lineFormat(item);
+                  return (
+                    <li key={index} className="pos-cart-item">
+                      <div className="min-w-0">
+                        <h3>{item.name}</h3>
+                        <div className="line-meta">{unit.main}{unit.alt && <> · {unit.alt}</>} / pièce</div>
+                      </div>
+                      <div className="line-total">
+                        {line.main}
+                        {line.alt && <div className="line-meta font-normal">{line.alt}</div>}
+                      </div>
+                      <div className="pos-qty" role="group" aria-label={`Quantité de ${item.name}`}>
+                        <button type="button" onClick={() => changeCartQuantity(index, -1)} disabled={item.quantity <= 1} aria-label={`Retirer une pièce de ${item.name}`}>
+                          <Minus aria-hidden="true" />
+                        </button>
+                        <output aria-live="polite">{item.quantity}</output>
+                        <button type="button" onClick={() => changeCartQuantity(index, 1)} aria-label={`Ajouter une pièce de ${item.name}`}>
+                          <Plus aria-hidden="true" />
+                        </button>
+                      </div>
+                      <button type="button" onClick={() => removeFromCart(index)} className="btn btn-ghost btn-sm justify-self-end text-red-700" aria-label={`Enlever ${item.name} du panier`}>
+                        <Trash2 aria-hidden="true" />Enlever
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </section>
 
-          <label className="flex items-center gap-2 mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={form.isWalkIn}
-              onChange={toggleWalkIn}
-              className="w-4 h-4"
-            />
-            <span className="text-sm font-medium text-gray-700">
-              Client de passage (vente sans coordonnées client)
-            </span>
-          </label>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div>
-              <label className="block mb-2 font-medium text-gray-700">
-                Nom du client {!form.isWalkIn && "*"}
-              </label>
-              <input
-                type="text"
-                name="customerName"
-                value={form.customerName}
-                onChange={handleChange}
-                placeholder={form.isWalkIn ? "Client de passage" : "Entrer le nom du client"}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400"
-                disabled={form.isWalkIn}
-                required={!form.isWalkIn}
-              />
-            </div>
-
-            <div>
-              <label className="block mb-2 font-medium text-gray-700">
-                Numéro de téléphone du client {!form.isWalkIn && "*"}
-              </label>
-              <input
-                type="tel"
-                name="customerPhone"
-                value={form.customerPhone}
-                onChange={handleChange}
-                placeholder={form.isWalkIn ? "—" : "Entrer le numéro de téléphone"}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400"
-                disabled={form.isWalkIn}
-              />
-            </div>
-
-            <div>
-              <label className="block mb-2 font-medium text-gray-700">
-                Méthode de paiement
-              </label>
+        {/* 4 — Payment & validation */}
+        <section className="card pos-area-payment" aria-labelledby="pos-payment-title">
+          <div className="card-header">
+            <h2 id="pos-payment-title" className="section-title"><span className="pos-step" aria-hidden="true">4</span>Encaissement</h2>
+          </div>
+          <div className="card-body grid gap-4">
+            <div className="field">
+              <label htmlFor="pos-payment-method" className="field-label">Méthode de paiement</label>
               <select
+                id="pos-payment-method"
                 name="paymentMethod"
                 value={form.paymentMethod}
                 onChange={handleChange}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="input"
                 required
               >
                 <option value="cash">Cash</option>
@@ -1927,32 +1977,41 @@ export default function NewSale() {
                 <option value="other">Autres</option>
               </select>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            onClick={handleSale}
-            disabled={!isFormValid || submitting}
-            className={`w-full sm:w-auto px-8 py-3 rounded-lg font-medium text-base sm:text-lg ${
-              isFormValid && !submitting
-                ? "bg-green-600 hover:bg-green-700 text-white shadow-sm"
-                : "bg-gray-400 cursor-not-allowed text-white"
-            } transition-colors`}
-          >
-            {submitting ? (
-              <span className="flex items-center gap-2">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                En cours d'enregistrement...
-              </span>
-            ) : (
-              "Enregistrer la vente"
-            )}
-          </button>
+            <div className="pos-total" aria-live="polite">
+              {hasFcEntries && cartOriginalTotals.USD > 0 && (
+                <div className="pos-total-row"><span>Saisi en USD</span><span>{formatCurrency(cartOriginalTotals.USD)}</span></div>
+              )}
+              {hasFcEntries && (
+                <div className="pos-total-row"><span>Saisi en FC</span><span>{formatFc(cartOriginalTotals.FC)}</span></div>
+              )}
+              <div className="pos-total-row is-grand"><span>{hasFcEntries ? "Total reçu" : "Total"}</span><strong>{formatCurrency(cartTotal)}</strong></div>
+              {saleFcTotal !== undefined && cart.length > 0 && (
+                <div className="pos-total-row"><span>Équivalent</span><span>≈ {formatFc(saleFcTotal)}</span></div>
+              )}
+            </div>
+
+            <div className="pos-submit-inline grid">
+              {submitButton("btn-block")}
+            </div>
+            {checkoutHint && <p id="pos-checkout-hint" className="field-hint text-center">{checkoutHint}</p>}
+          </div>
+        </section>
+
         </div>
 
-        {/* Hidden receipt container (keep as fallback) */}
-        <div ref={receiptRef} style={{ display: "none" }} />
+        {/* Phones & tablets: total and validation always within reach. */}
+        <div className="pos-checkout-bar">
+          <div className="summary">
+            <small className="truncate">{cartCount} pièce{cartCount > 1 ? "s" : ""} · {form.isWalkIn ? form.customerName.trim() || "Client de passage" : form.customerName.trim() || "Client enregistré"}</small>
+            <strong>{formatCurrency(cartTotal)}</strong>
+          </div>
+          {submitButton("")}
+        </div>
       </div>
+
+      {/* Hidden receipt container (keep as fallback) */}
+      <div ref={receiptRef} style={{ display: "none" }} />
     </div>
   );
 }

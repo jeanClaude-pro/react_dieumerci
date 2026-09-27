@@ -1,4 +1,7 @@
 "use client";
+import ResponsiveTable from "../components/ui/ResponsiveTable";
+import Dialog from "../components/ui/Dialog";
+import { EmptyState, LoadingState } from "../components/ui/States";
 
 import { useState, useEffect } from "react";
 import { formatDateTimeGMT2 } from "../utils/dateUtils";
@@ -19,8 +22,7 @@ import {
   ChevronRight,
   History,
   Filter,
-  Shield,
-} from "lucide-react";
+  Shield, X, CheckCircle, AlertTriangle } from "lucide-react";
 import jsPDF from "jspdf";
 
 interface EditHistoryEntry {
@@ -791,7 +793,7 @@ export default function EntryHistory() {
         const updatedEntry = await response.json();
         console.log("Updated entry:", updatedEntry);
 
-        setMessage("✅ Entrée mise à jour avec succès");
+        setMessage("Entrée mise à jour avec succès.");
         await fetchEntries();
         closeEditModal();
       } else {
@@ -831,7 +833,7 @@ export default function EntryHistory() {
       );
 
       if (response.ok) {
-        setMessage("✅ Entrée supprimée avec succès");
+        setMessage("Entrée supprimée avec succès.");
         await fetchEntries();
         setShowModal(false);
       } else {
@@ -851,165 +853,95 @@ export default function EntryHistory() {
     if (!summary || !isAdmin) return null;
 
     return (
-      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-blue-900 flex items-center gap-2">
-            <Shield className="w-5 h-5" />
-            Statistiques des Entrées (Vue Admin)
-          </h3>
-          {currentUser && (
-            <span className="text-sm text-blue-700 bg-blue-100 px-3 py-1 rounded-full">
-              Connecté en tant que: {currentUser.name || currentUser.username} ({currentUser.role})
-            </span>
-          )}
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Entrées</p>
-                <p className="text-2xl font-bold text-blue-600">{summary.totalRecords}</p>
-              </div>
-              <FileText className="w-8 h-8 text-blue-500" />
-            </div>
+      <section aria-labelledby="entries-summary-title" className="grid gap-3 pt-4 mt-4 border-t border-gray-200">
+        <h3 id="entries-summary-title" className="eyebrow">
+          <Shield aria-hidden="true" />
+          Synthèse de la période · vue administrateur
+        </h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="metric-card">
+            <span className="metric-label">Entrées</span>
+            <span className="metric-value">{summary.totalRecords}</span>
           </div>
-          
-          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Montant Total</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(summary.totalAmount)}</p>
-              </div>
-              <DollarSign className="w-8 h-8 text-green-500" />
-            </div>
+          <div className="metric-card">
+            <span className="metric-label">Montant total</span>
+            <span className="metric-value text-green-700">{formatCurrency(summary.totalAmount)}</span>
           </div>
-          
-          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Entrées Actives</p>
-                <p className="text-2xl font-bold text-green-600">{summary.active?.count || 0}</p>
-                <p className="text-sm text-gray-500">{formatCurrency(summary.active?.amount || 0)}</p>
-              </div>
-              <FileText className="w-8 h-8 text-green-500" />
-            </div>
+          <div className="metric-card">
+            <span className="metric-label">Entrées actives</span>
+            <span className="metric-value">{summary.active?.count || 0}</span>
+            <span className="text-xs text-gray-500 num">{formatCurrency(summary.active?.amount || 0)}</span>
           </div>
-          
-          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Méthodes de Paiement</p>
-                <p className="text-xl font-semibold text-purple-600">
-                  {Object.keys(summary.paymentMethods || {}).length}
-                </p>
-              </div>
-              <DollarSign className="w-8 h-8 text-purple-500" />
-            </div>
+          <div className="metric-card">
+            <span className="metric-label">Méthodes de paiement</span>
+            <span className="metric-value">{Object.keys(summary.paymentMethods || {}).length}</span>
           </div>
         </div>
-
-        {/* Detailed stats row */}
         {summary.paymentMethods && Object.keys(summary.paymentMethods).length > 0 && (
-          <div className="mt-4 pt-4 border-t border-blue-200">
-            <h4 className="font-medium text-blue-800 mb-3">Détails par méthode de paiement:</h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {Object.entries(summary.paymentMethods).map(([method, data]: [string, any]) => (
-                <div key={method} className="bg-white p-3 rounded-lg border border-gray-200">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium text-gray-700 capitalize">{method}:</span>
-                    <span className="font-semibold text-green-600">{data.count}</span>
-                  </div>
-                  <div className="text-sm text-gray-600 mt-1">
-                    Total: {formatCurrency(data.amount)}
-                  </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {Object.entries(summary.paymentMethods).map(([method, data]: [string, any]) => (
+              <div key={method} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm num">
+                <div className="flex justify-between gap-2">
+                  <span className="font-medium text-gray-700 capitalize truncate">{method}</span>
+                  <span className="font-semibold text-gray-900">{data.count}</span>
                 </div>
-              ))}
-            </div>
+                <div className="text-xs text-gray-500">{formatCurrency(data.amount)}</div>
+              </div>
+            ))}
           </div>
         )}
-
-        {/* Sources summary */}
-        {summary.sources && Object.keys(summary.sources).length > 0 && (
-          <div className="mt-4 pt-4 border-t border-blue-200">
-            <h4 className="font-medium text-blue-800 mb-3">Sources principales:</h4>
-            <div className="space-y-2">
-              {Object.entries(summary.sources)
-                .sort(([, a], [, b]) => (b as any).amount - (a as any).amount)
-                .slice(0, 3)
-                .map(([source, data]: [string, any]) => (
-                  <div key={source} className="flex justify-between items-center bg-white p-2 rounded border">
-                    <span className="text-gray-700">{source}</span>
-                    <div className="text-right">
-                      <div className="font-semibold text-gray-900">{data.count} entrées</div>
-                      <div className="text-sm text-green-600">{formatCurrency(data.amount)}</div>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
-      </div>
+      </section>
     );
   };
 
   return (
-    <div className="space-y-6 p-6 flex-1 overflow-auto">
-      <div className="flex items-center justify-between flex-wrap gap-4 overflow-auto">
+    <div className="page space-y-5">
+      <header className="page-header">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Historique des Entrées d'Argent
-          </h1>
-          <p className="text-gray-600">
-            Voir toutes les entrées d'argent enregistrées
-          </p>
+          <h1 className="page-title">Historique des entrées</h1>
+          <p className="page-subtitle">Entrées d'argent enregistrées, reçus et modifications.</p>
         </div>
-        <div className="flex gap-3">
-          {/* Edited Entries Filter Button */}
-          <button
-            onClick={() => setShowEditedEntries(!showEditedEntries)}
-            className={`px-4 py-2 rounded-lg border transition-all duration-200 flex items-center gap-2 ${
-              showEditedEntries
-                ? "bg-blue-500 text-white border-blue-500 shadow-sm"
-                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-            }`}
-          >
-            <Filter className="w-4 h-4" />
-            {showEditedEntries ? "Toutes les entrées" : "Entrées modifiées"}
-            {showEditedEntries && (
-              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-                {editedEntries.length}
-              </span>
-            )}
-          </button>
-
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Rechercher des entrées..."
-              className="pl-10 w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        <div className="page-actions w-full sm:w-auto">
+          <div className="input-group flex-1 sm:flex-none sm:w-72">
+            <Search aria-hidden="true" />
+            <input aria-label="Rechercher une entrée"
+              type="search"
+              placeholder="Identifiant, expéditeur, source…"
+              className="input"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+          <button
+            type="button"
+            onClick={() => setShowEditedEntries(!showEditedEntries)}
+            aria-pressed={showEditedEntries}
+            className={`btn ${showEditedEntries ? "btn-primary" : "btn-secondary"}`}
+          >
+            <Filter aria-hidden="true" />
+            {showEditedEntries ? "Toutes les entrées" : "Entrées modifiées"}
+            {showEditedEntries && (
+              <span className="badge num" style={{ background: "rgb(255 255 255 / 0.2)", color: "inherit", borderColor: "transparent" }}>
+                {editedEntries.length}
+              </span>
+            )}
+          </button>
         </div>
-      </div>
+      </header>
 
       {/* Timeframe Filter Section */}
-      <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
-            {showEditedEntries ? "Entrées modifiées" : "Toutes les entrées"} - {getTimeframeLabel()}
-          </h3>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+      <section className="card p-4 sm:p-5" aria-labelledby="entries-period-title">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <h2 id="entries-period-title" className="section-title flex items-center gap-2 min-w-0">
+            <Calendar className="w-4 h-4 text-gray-500 shrink-0" aria-hidden="true" />
+            <span className="truncate">{showEditedEntries ? "Entrées modifiées" : "Toutes les entrées"} · {getTimeframeLabel()}</span>
+          </h2>
+          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2">
             {/* Date Picker for Day View */}
             {timeframe === "day" && (
-              <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
-                <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                <label htmlFor="date-picker" className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">
-                  Date:
+              <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 pl-3 w-full sm:w-auto">
+                <label htmlFor="date-picker" className="text-sm font-medium text-gray-600 whitespace-nowrap">
+                  Date
                 </label>
                 <input
                   id="date-picker"
@@ -1022,16 +954,16 @@ export default function EntryHistory() {
             )}
             
             {timeframe === "year" && (
-              <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
-                <button
+              <div className="flex items-center justify-between gap-1 bg-white rounded-lg border border-gray-300 px-1 w-full sm:w-auto">
+                <button aria-label="Année précédente"
                   onClick={() => navigateYear('prev')}
                   disabled={getAvailableYears().indexOf(selectedYear) === getAvailableYears().length - 1}
                   className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
                 </button>
-                <span className="text-xs sm:text-sm font-medium text-gray-900 px-2 min-w-[60px] sm:min-w-[80px] text-center">{selectedYear}</span>
-                <button
+                <span className="text-sm font-semibold text-gray-900 px-2 min-w-[4.5rem] text-center num" aria-live="polite">{selectedYear}</span>
+                <button aria-label="Année suivante"
                   onClick={() => navigateYear('next')}
                   disabled={getAvailableYears().indexOf(selectedYear) === 0}
                   className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -1041,16 +973,13 @@ export default function EntryHistory() {
               </div>
             )}
             
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-full sm:w-auto">
+            <div className="segmented w-full sm:w-auto" role="group" aria-label="Période">
               {(["day", "week", "month", "year"] as const).map((period) => (
                 <button
                   key={period}
+                  type="button"
+                  aria-pressed={timeframe === period}
                   onClick={() => handleTimeframeChange(period)}
-                  className={`px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 flex-1 sm:flex-none ${
-                    timeframe === period
-                      ? "bg-blue-500 text-white shadow-sm"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                  }`}
                 >
                   {period === "day" && "Jour"}
                   {period === "week" && "Semaine"}
@@ -1061,71 +990,59 @@ export default function EntryHistory() {
             </div>
             
             {/* Refresh Button */}
-            <button
+            <button type="button" aria-label="Actualiser"
               onClick={fetchEntries}
               disabled={loading}
-              className="px-3 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors disabled:opacity-50"
+              className="btn btn-secondary"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={loading ? 'animate-spin' : ''} aria-hidden="true" />
+              <span className="sm:hidden">Actualiser</span>
             </button>
           </div>
         </div>
-        
+
         {/* Show summary statistics - Admin only */}
         <SummaryStats />
-      </div>
+      </section>
 
       {message && (
-        <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg border border-green-200">
-          {message}
-          <button
-            onClick={() => setMessage(null)}
-            className="float-right text-green-700 hover:text-green-900"
-          >
-            ×
+        <div className="alert alert-success" role="status">
+          <CheckCircle className="w-5 h-5" aria-hidden="true" />
+          <span className="flex-1">{message}</span>
+          <button type="button" aria-label="Fermer le message" onClick={() => setMessage(null)} className="btn btn-ghost btn-icon btn-sm -my-1 -mr-1">
+            <X aria-hidden="true" />
           </button>
         </div>
       )}
 
       {error && (
-        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-200">
-          {error}
-          <button
-            onClick={() => setError(null)}
-            className="float-right text-red-700 hover:text-red-900"
-          >
-            ×
+        <div className="alert alert-danger" role="alert">
+          <AlertTriangle className="w-5 h-5" aria-hidden="true" />
+          <span className="flex-1">{error}</span>
+          <button type="button" aria-label="Fermer le message" onClick={() => setError(null)} className="btn btn-ghost btn-icon btn-sm -my-1 -mr-1">
+            <X aria-hidden="true" />
           </button>
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            {showEditedEntries ? "Entrées modifiées" : "Entrées d'argent"} ({filteredEntries.length})
+      <section className="card" aria-labelledby="entries-list-title">
+        <div className="card-header">
+          <h2 id="entries-list-title" className="section-title flex items-center gap-2">
+            <FileText className="w-4 h-4 text-gray-500" aria-hidden="true" />
+            {showEditedEntries ? "Entrées modifiées" : "Entrées d'argent"}
+            <span className="badge num">{filteredEntries.length}</span>
           </h2>
         </div>
 
-        <div className="overflow-x-auto">
+        <div>
           {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="text-gray-500 mt-2">Chargement des entrées...</p>
-            </div>
+            <LoadingState label="Chargement des entrées…" />
           ) : filteredEntries.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>
-                {showEditedEntries 
-                  ? "Aucune entrée modifiée trouvée" 
-                  : "Aucune entrée trouvée"
-                }
-              </p>
-              <p className="text-sm">pour la période sélectionnée</p>
-            </div>
+            <EmptyState title={showEditedEntries ? "Aucune entrée modifiée" : "Aucune entrée trouvée"} icon={<FileText aria-hidden="true" />}>
+              Aucun résultat pour la période sélectionnée.
+            </EmptyState>
           ) : (
-            <table className="min-w-full divide-y divide-gray-200">
+            <ResponsiveTable className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1212,25 +1129,25 @@ export default function EntryHistory() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex gap-2">
                         {showEditedEntries ? (
-                          <button
+                          <button aria-label="Voir les détails des modifications"
                             onClick={() => viewEditedEntryDetails(entry)}
                             className="text-blue-600 hover:text-blue-900 p-1 rounded"
                             title="Voir les détails des modifications"
                           >
-                            <History className="w-4 h-4" />
+                            <History className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Modifications</span>
                           </button>
                         ) : (
-                          <button
+                          <button aria-label="Voir les détails"
                             onClick={() => viewEntryDetails(entry)}
                             className="text-blue-600 hover:text-blue-900 p-1 rounded"
                             title="Voir les détails"
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Détails</span>
                           </button>
                         )}
                         {!showEditedEntries && (
                           <>
-                            <button
+                            <button aria-label="Modifier l'entrée"
                               onClick={() => openEditModal(entry)}
                               disabled={entry.status === "deleted"}
                               className={`p-1 rounded ${
@@ -1240,23 +1157,23 @@ export default function EntryHistory() {
                               }`}
                               title="Modifier l'entrée"
                             >
-                              <Edit className="w-4 h-4" />
+                              <Edit className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Modifier</span>
                             </button>
-                            <button
+                            <button aria-label="Télécharger PDF"
                               onClick={() => generateEntryPDF(entry)}
                               className="text-green-600 hover:text-green-900 p-1 rounded"
                               title="Télécharger PDF"
                             >
-                              <Download className="w-4 h-4" />
+                              <Download className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">PDF</span>
                             </button>
-                            <button
+                            <button aria-label="Imprimer le reçu"
                               onClick={() => printEntryReceipt(entry)}
                               className="text-purple-600 hover:text-purple-900 p-1 rounded"
                               title="Imprimer le reçu"
                             >
-                              <Printer className="w-4 h-4" />
+                              <Printer className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Imprimer</span>
                             </button>
-                            <button
+                            <button aria-label="Supprimer l'entrée"
                               onClick={() => handleDeleteEntry(entry)}
                               disabled={entry.status === "deleted"}
                               className={`p-1 rounded ${
@@ -1266,7 +1183,7 @@ export default function EntryHistory() {
                               }`}
                               title="Supprimer l'entrée"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Supprimer</span>
                             </button>
                           </>
                         )}
@@ -1275,38 +1192,36 @@ export default function EntryHistory() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           )}
         </div>
-      </div>
+      </section>
 
       {pagination && pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-3">
-          <span className="text-sm text-gray-600">
+        <nav className="card flex flex-wrap items-center justify-between gap-3 px-4 py-3" aria-label="Pagination des entrées">
+          <span className="text-sm text-gray-600 num">
             Page {pagination.page} sur {pagination.totalPages} · {pagination.totalRecords} entrées
           </span>
           <div className="flex gap-2">
-            <button disabled={!pagination.hasPreviousPage} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} className="rounded border px-3 py-1.5 disabled:opacity-40">Précédent</button>
-            <button disabled={!pagination.hasNextPage} onClick={() => setCurrentPage((page) => page + 1)} className="rounded border px-3 py-1.5 disabled:opacity-40">Suivant</button>
+            <button type="button" disabled={!pagination.hasPreviousPage} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} className="btn btn-secondary btn-sm">Précédent</button>
+            <button type="button" disabled={!pagination.hasNextPage} onClick={() => setCurrentPage((page) => page + 1)} className="btn btn-secondary btn-sm">Suivant</button>
           </div>
-        </div>
+        </nav>
       )}
 
       {/* Entry Details Modal */}
       {showModal && selectedEntry && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <Dialog label="Détails de l'Entrée" onClose={() => setShowModal(false)}>
           <div className="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">
                 Détails de l'Entrée
               </h3>
-              <button
+              <button type="button" aria-label="Fermer"
                 onClick={() => setShowModal(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
@@ -1482,24 +1397,22 @@ export default function EntryHistory() {
               </div>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Edited Entry Details Modal */}
       {showEditedDetailsModal && selectedEditedEntry && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <Dialog label="Détails des modifications" onClose={() => setShowEditedDetailsModal(false)}>
           <div className="bg-white rounded-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">
                 Détails des modifications - {selectedEditedEntry.entryId}
               </h3>
-              <button
+              <button type="button" aria-label="Fermer"
                 onClick={() => setShowEditedDetailsModal(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
@@ -1627,24 +1540,22 @@ export default function EntryHistory() {
               </div>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Edit Entry Modal */}
       {showEditModal && editingEntry && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <Dialog label="Modifier l'Entrée" onClose={closeEditModal}>
           <div className="bg-white rounded-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">
                 Modifier l'Entrée - {editingEntry.entryId}
               </h3>
-              <button
+              <button type="button" aria-label="Fermer"
                 onClick={closeEditModal}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
@@ -1662,10 +1573,10 @@ export default function EntryHistory() {
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="entryhistory-field-71324" className="block text-sm font-medium text-gray-700 mb-1">
                       Montant (USD) *
                     </label>
-                    <input
+                    <input id="entryhistory-field-71324"
                       type="number"
                       step="0.01"
                       value={editForm.amount}
@@ -1680,10 +1591,10 @@ export default function EntryHistory() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="entryhistory-field-72035" className="block text-sm font-medium text-gray-700 mb-1">
                       Source *
                     </label>
-                    <select
+                    <select id="entryhistory-field-72035"
                       value={editForm.source}
                       onChange={(e) =>
                         setEditForm((prev) => ({
@@ -1703,10 +1614,10 @@ export default function EntryHistory() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="entryhistory-field-72973" className="block text-sm font-medium text-gray-700 mb-1">
                       Catégorie *
                     </label>
-                    <select
+                    <select id="entryhistory-field-72973"
                       value={editForm.category}
                       onChange={(e) =>
                         setEditForm((prev) => ({
@@ -1726,10 +1637,10 @@ export default function EntryHistory() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="entryhistory-field-73939" className="block text-sm font-medium text-gray-700 mb-1">
                       Méthode de Paiement *
                     </label>
-                    <select
+                    <select id="entryhistory-field-73939"
                       value={editForm.paymentMethod}
                       onChange={(e) =>
                         setEditForm((prev) => ({
@@ -1751,10 +1662,10 @@ export default function EntryHistory() {
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="entryhistory-field-74961" className="block text-sm font-medium text-gray-700 mb-1">
                   Description
                 </label>
-                <textarea
+                <textarea id="entryhistory-field-74961"
                   value={editForm.description}
                   onChange={(e) =>
                     setEditForm((prev) => ({
@@ -1774,10 +1685,10 @@ export default function EntryHistory() {
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="entryhistory-field-75884" className="block text-sm font-medium text-gray-700 mb-1">
                       Nom *
                     </label>
-                    <input
+                    <input id="entryhistory-field-75884"
                       type="text"
                       value={editForm.receivedFrom.name}
                       onChange={(e) =>
@@ -1791,10 +1702,10 @@ export default function EntryHistory() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="entryhistory-field-76593" className="block text-sm font-medium text-gray-700 mb-1">
                       Téléphone *
                     </label>
-                    <input
+                    <input id="entryhistory-field-76593"
                       type="tel"
                       value={editForm.receivedFrom.phone}
                       onChange={(e) =>
@@ -1808,10 +1719,10 @@ export default function EntryHistory() {
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="entryhistory-field-77323" className="block text-sm font-medium text-gray-700 mb-1">
                       Email
                     </label>
-                    <input
+                    <input id="entryhistory-field-77323"
                       type="email"
                       value={editForm.receivedFrom.email}
                       onChange={(e) =>
@@ -1831,7 +1742,7 @@ export default function EntryHistory() {
                 <h4 className="text-md font-medium text-gray-900 mb-3">
                   Raison de modification
                 </h4>
-                <textarea
+                <textarea aria-label="Veuillez indiquer une raison pour la modification de cette entrée..."
                   value={editForm.reason}
                   onChange={(e) =>
                     setEditForm((prev) => ({ ...prev, reason: e.target.value }))
@@ -1868,7 +1779,7 @@ export default function EntryHistory() {
               </div>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );
