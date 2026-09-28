@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { serverUrl } from "../utils/constants";
+import { apiFetch } from "../lib/api";
 import type { Category } from "../types";
 
 type Props = {
@@ -17,12 +17,7 @@ const CategoriesDropdown = ({
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await fetch(`${serverUrl}/categories`);
-        if (!response.ok) {
-          console.error("Failed to fetch categories:", await response.text());
-          return;
-        }
-        const data = await response.json();
+        const data = await apiFetch<Category[]>("categories");
         setCategories(data);
       } catch (error) {
         console.error("Error fetching categories:", error);

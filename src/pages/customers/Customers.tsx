@@ -7,6 +7,7 @@ import type React from "react";
 import { formatDateGMT2, formatDateTimeGMT2 } from "../../utils/dateUtils";
 import { useState, useEffect } from "react";
 import { serverUrl } from "../../utils/constants";
+import { apiRequest } from "../../lib/api";
 import {
   Users,
   Search,
@@ -57,8 +58,8 @@ export default function Customers() {
     try {
       setLoading(true);
       // Remove pagination - fetch ALL customers at once
-      const response = await fetch(
-        `${serverUrl}/customers?limit=0&timestamp=${Date.now()}`
+      const response = await apiRequest(
+        `customers?limit=0&timestamp=${Date.now()}`
       );
 
       if (!response.ok) {
@@ -98,15 +99,15 @@ export default function Customers() {
       console.log("Customers: Trying alternative fetch method...");
       
       const endpoints = [
-        `${serverUrl}/customers?limit=1000`,
-        `${serverUrl}/customers/all`,
+        "customers?limit=1000",
+        "customers/all",
       ];
       
       let allCustomers: Customer[] = [];
       
       for (const endpoint of endpoints) {
         try {
-          const response = await fetch(endpoint);
+          const response = await apiRequest(endpoint);
           if (response.ok) {
             const data = await response.json();
             if (Array.isArray(data)) {

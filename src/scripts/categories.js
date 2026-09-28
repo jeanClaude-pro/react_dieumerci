@@ -1,4 +1,4 @@
-import { serverUrl } from "../utils/constants";
+import { apiFetch } from "../lib/api";
 
 const categories = [
   {
@@ -37,15 +37,10 @@ const categories = [
 
 async function main() {
   try {
-    const response = await fetch(`${serverUrl}/categories`, {
+    const data = await apiFetch("categories", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
       body: JSON.stringify(categories),
     });
-    const data = await response.json();
     console.log("Categories:", data);
     console.log("Seeded categories successfully.");
   } catch (error) {
