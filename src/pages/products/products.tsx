@@ -5,12 +5,15 @@ import { EmptyState, LoadingState } from "../../components/ui/States";
 
 import type React from "react";
 import { useState, useEffect } from "react";
-import { Package, Plus, Search, Edit, Trash2, Eye, X } from "lucide-react";
+import { Package, Plus, Search, Edit, Trash2, Eye, X, ClipboardList, ArrowDownUp } from "lucide-react";
 import { getProductStatus } from "../../utils/constants";
 import { toast } from "react-toastify";
 import type { Product } from "../../types";
 import { units, serverUrl } from "../../utils/constants";
 import CategoriesDropdown from "../../components/CategoriesDropdown";
+import StockCardDialog from "../../components/inventory/StockCardDialog";
+import StockMovementDialog from "../../components/inventory/StockMovementDialog";
+import { isProductSellable } from "../../utils/productAvailability";
 
 interface User {
   _id: string;
@@ -29,6 +32,8 @@ export default function Products() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [stockCardProduct, setStockCardProduct] = useState<Product | null>(null);
+  const [movementProduct, setMovementProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<Partial<Product>>({
     name: "",
     description: "",
@@ -103,7 +108,7 @@ export default function Products() {
     }
   };
 
-  const updateProduct = async (id: string, productData: Partial<Product>) => {
+  const updateProduct = async (id: string, productData: Partial<Product>, expectedStock?: number) => {
     try {
       const response = await fetch(`${serverUrl}/products/${id}`, {
         method: "PUT",
@@ -111,7 +116,9 @@ export default function Products() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
-        body: JSON.stringify(productData),
+        // expectedStock = the quantity shown when the form opened: the server
+        // refuses the edit if a sale changed the stock in the meantime.
+        body: JSON.stringify({ ...productData, expectedStock }),
       });
       if (response.ok) {
         const updatedProduct = await response.json();
@@ -122,7 +129,8 @@ export default function Products() {
         resetForm();
         toast.success("Product updated successfully!");
       } else {
-        toast.error("Failed to update product");
+        const data = await response.json().catch(() => ({}));
+        toast.error(data?.error || "Failed to update product");
       }
     } catch (error) {
       console.error("Error updating product:", error);
@@ -174,7 +182,11 @@ export default function Products() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (showEditModal && selectedProduct) {
-      updateProduct(selectedProduct._id, formData);
+      // Send the quantity only when the administrator changed it; otherwise a
+      // sale made while the form was open would look like a conflicting edit.
+      const { stock, ...otherFields } = formData;
+      const stockChanged = stock !== selectedProduct.stock;
+      updateProduct(selectedProduct._id, stockChanged ? formData : otherFields, stockChanged ? selectedProduct.stock : undefined);
     } else {
       createProduct(formData);
     }
@@ -387,6 +399,9 @@ export default function Products() {
                       >
                         {getProductStatus(product.status)}
                       </span>
+                      {product.status === "active" && !isProductSellable(product) && (
+                        <span className="badge badge-danger ml-1" title="0 pièce : retiré automatiquement de la vente">Non vendable</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
@@ -398,6 +413,18 @@ export default function Products() {
                         </button>
                         {isAdmin && (
                           <>
+                            <button aria-label={`Fiche de stock de ${product.name}`} title="Fiche de stock"
+                              onClick={() => setStockCardProduct(product)}
+                              className="text-gray-700 hover:text-gray-900 p-1 rounded"
+                            >
+                              <ClipboardList className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Fiche de stock</span>
+                            </button>
+                            <button aria-label={`Mouvement de stock pour ${product.name}`} title="Mouvement de stock"
+                              onClick={() => setMovementProduct(product)}
+                              className="text-gray-700 hover:text-gray-900 p-1 rounded"
+                            >
+                              <ArrowDownUp className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Entrée / correction</span>
+                            </button>
                             <button aria-label={`Modifier ${product.name}`} title="Modifier"
                               onClick={() => openEditModal(product)}
                               className="text-gray-700 hover:text-gray-900 p-1 rounded"
@@ -587,6 +614,11 @@ export default function Products() {
                         }
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none focus:border-transparent"
                       />
+                      {showEditModal && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          Une modification ici est enregistrée comme correction. Pour une livraison, utilisez « Entrée / correction ».
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label htmlFor="products-field-22728" className="block text-sm font-medium text-gray-700 mb-1">
@@ -594,13 +626,14 @@ export default function Products() {
                       </label>
                       <select id="products-field-22728"
                         value={formData.unit}
+                        disabled={showEditModal}
                         onChange={(e) =>
                           setFormData((prev) => ({
                             ...prev,
                             unit: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none focus:border-transparent disabled:bg-gray-100 disabled:text-gray-600"
                       >
                         {units.map((unit, idx) => (
                           <option key={idx} value={unit}>
@@ -608,6 +641,9 @@ export default function Products() {
                           </option>
                         ))}
                       </select>
+                      {showEditModal && (
+                        <p className="mt-1 text-xs text-gray-500">L'unité reste fixe pour préserver l'historique de la fiche de stock.</p>
+                      )}
                     </div>
                   </div>
 
@@ -754,6 +790,16 @@ export default function Products() {
                   <button
                     onClick={() => {
                       setShowViewModal(false);
+                      setStockCardProduct(selectedProduct);
+                    }}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <ClipboardList className="w-4 h-4" />
+                    Fiche de stock
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowViewModal(false);
                       openEditModal(selectedProduct);
                     }}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
@@ -766,6 +812,26 @@ export default function Products() {
             </div>
           </div>
         </Dialog>
+      )}
+
+      {stockCardProduct && isAdmin && (
+        <StockCardDialog
+          productId={stockCardProduct._id}
+          productName={stockCardProduct.name}
+          onClose={() => setStockCardProduct(null)}
+        />
+      )}
+
+      {movementProduct && isAdmin && (
+        <StockMovementDialog
+          product={movementProduct}
+          onClose={() => setMovementProduct(null)}
+          onSaved={(updated) => {
+            setProducts((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
+            setMovementProduct(null);
+            toast.success("Mouvement de stock enregistré");
+          }}
+        />
       )}
     </div>
   );

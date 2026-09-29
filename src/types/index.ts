@@ -10,6 +10,8 @@ export interface Product {
   unit: string;
   weight: number;
   status: "active" | "inactive";
+  /** Last actual quantity change (not a name/price edit). */
+  lastStockUpdatedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

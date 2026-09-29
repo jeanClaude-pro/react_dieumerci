@@ -6,6 +6,7 @@ import { EmptyState, LoadingState } from "../components/ui/States";
 import { useState, useEffect } from "react";
 import { formatDateTimeGMT2 } from "../utils/dateUtils";
 import { serverUrl } from "../utils/constants";
+import { businessDate, businessTimeframeParams } from "../utils/businessTimeframe";
 import {
   Search,
   FileText,
@@ -99,50 +100,10 @@ interface EntrySummary {
 }
 
 // Helper function to get today's date in correct format
-const getTodayDate = (): string => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+const getTodayDate = (): string => businessDate();
 
 // Helper function to get date range for different timeframes
-const getTimeframeParams = (
-  timeframe: "day" | "week" | "month" | "year", 
-  selectedYear?: number, 
-  selectedDate?: string
-) => {
-  const params = new URLSearchParams();
-  const today = new Date();
-  
-  switch (timeframe) {
-    case "day":
-      params.set("date", selectedDate || getTodayDate());
-      break;
-      
-    case "week":
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      params.set("from", weekAgo.toISOString().split('T')[0]);
-      params.set("to", today.toISOString().split('T')[0]);
-      break;
-      
-    case "month":
-      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      params.set("from", firstDayOfMonth.toISOString().split('T')[0]);
-      params.set("to", lastDayOfMonth.toISOString().split('T')[0]);
-      break;
-      
-    case "year":
-      const year = selectedYear || today.getFullYear();
-      params.set("year", year.toString());
-      break;
-  }
-  
-  return params.toString();
-};
+const getTimeframeParams = businessTimeframeParams;
 
 export default function EntryHistory() {
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -310,6 +271,7 @@ export default function EntryHistory() {
   const fetchEntries = async () => {
     try {
       setLoading(true);
+      setError(null);
       
       // Build query parameters based on timeframe
       const timeframeParams = getTimeframeParams(timeframe, selectedYear, selectedDate);
@@ -430,13 +392,8 @@ export default function EntryHistory() {
   };
 
   // Filter entries based on search term
-  const filteredEntries = (showEditedEntries ? editedEntries : entries).filter(entry =>
-    entry.entryId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    entry.receivedFrom.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    entry.receivedFrom.phone.includes(searchTerm) ||
-    entry.source.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (entry.createdBy?.username && entry.createdBy.username.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Search is applied by the server before pagination and summary aggregation.
+  const filteredEntries = showEditedEntries ? editedEntries : entries;
 
   const formatDate = (dateString: string) => formatDateTimeGMT2(dateString);
 

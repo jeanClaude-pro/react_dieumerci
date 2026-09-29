@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import {
   ArrowLeftRight, BadgeCheck, ChartColumn, CircleArrowDown, CircleArrowUp, ClipboardCheck, FolderDown, FolderUp,
-  Home, Landmark, Package, ReceiptText, ScanLine, Shield, ShoppingCart, Users,
+  Home, Landmark, LayoutDashboard, Package, ReceiptText, ScanLine, Shield, ShoppingCart, Users,
 } from "lucide-react";
 import type { User } from "../types/auth";
 
@@ -55,6 +55,7 @@ export const navigationSections: NavigationSection[] = [
     { id: "payment-verification", label: "Contrôle sortie", shortLabel: "Contrôle", description: "Contrôler un reçu avant la sortie de marchandise", icon: BadgeCheck, path: "/payment-verification", roles: ["admin", "inventory_manager"], mobilePriority: 5 },
   ] },
   { title: "Pilotage", items: [
+    { id: "dashboard", label: "Tableau de bord", shortLabel: "Tableau", description: "Stock début / fin, sorties, entrées et alertes", icon: LayoutDashboard, path: "/dashboard", roles: ["admin"] },
     { id: "reports", label: "Rapports & analytique", shortLabel: "Rapports", description: "Indicateurs, périodes et rapports imprimables", icon: ChartColumn, path: "/reports", roles: ["admin"] },
     { id: "remboursements", label: "Remboursements", shortLabel: "Dettes", description: "Créanciers, emprunts et remboursements", icon: Landmark, path: "/remboursements", roles: ["admin"] },
     { id: "sale-edit-approvals", label: "Approbation des modifications", shortLabel: "Approbations", description: "Examiner les modifications de vente en attente", icon: ClipboardCheck, path: "/admin/sale-edit-approvals", roles: ["admin"] },
@@ -62,7 +63,8 @@ export const navigationSections: NavigationSection[] = [
   ] },
 ];
 
-const fixedRolePaths = new Set(["/admin", "/admin/sale-edit-approvals", "/payment-approval", "/payment-verification"]);
+// Role-fixed modules: custom page permissions can never open them to another role.
+const fixedRolePaths = new Set(["/admin", "/admin/sale-edit-approvals", "/payment-approval", "/payment-verification", "/dashboard"]);
 
 export function canAccessNavigationItem(item: NavigationItem, user: User | null): boolean {
   if (!user) return false;

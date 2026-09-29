@@ -36,6 +36,7 @@ const SaleEditApprovals = lazy(() => import("./pages/admin/SaleEditApprovals"));
 const ReceiptScannerPage = lazy(() => import("./components/ReceiptScannerPage"));
 const Remboursements = lazy(() => import("./pages/Remboursements"));
 const Welcome = lazy(() => import("./pages/Welcome"));
+const Dashboard = lazy(() => import("./pages/dashboard/Dashboard"));
 
 function RouteLoading() {
   return <LoadingState page />;
@@ -185,6 +186,10 @@ export default function App() {
                       </RequireRole>
                     </RequireAuth>
                   }
+                />
+                <Route
+                  path="/dashboard"
+                  element={<RequireAuth><RequireRole roles={["admin"]}><Dashboard /></RequireRole></RequireAuth>}
                 />
                 <Route
                   path="/remboursements"

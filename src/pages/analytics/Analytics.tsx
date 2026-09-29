@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { generateCompanyReport, type ReportSections } from "./reportGenerator";
 import { serverUrl } from "../../utils/constants";
+import { businessDate, businessTimeframeParams } from "../../utils/businessTimeframe";
 
 interface AnalyticsData {
   totalSales: number;
@@ -34,6 +35,7 @@ interface AnalyticsData {
   totalProducts: number;
   totalValidatedExpenses: number;
   totalEntries: number;
+  entryCount: number;
   netRevenue: number;
   reimbursement?: {
     borrowedDuringPeriod: number;
@@ -105,13 +107,7 @@ function TrendIndicator({ value }: { value: number | null }) {
 }
 
 // Helper function to get today's date in correct format
-const getTodayDate = (): string => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+const getTodayDate = (): string => businessDate();
 
 // Helper function to get user role from localStorage
 const getUserRole = (): string => {
@@ -163,45 +159,7 @@ const getHeaders = () => {
 };
 
 // Helper function to get timeframe parameters based on selection
-const getTimeframeParams = (
-  timeframe: "day" | "week" | "month" | "year", 
-  selectedYear?: number, 
-  selectedDate?: string
-) => {
-  const params = new URLSearchParams();
-  const today = new Date();
-  
-  switch (timeframe) {
-    case "day": {
-      params.set("date", selectedDate || getTodayDate());
-      break;
-    }
-      
-    case "week": {
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      params.set("from", weekAgo.toISOString().split('T')[0]);
-      params.set("to", today.toISOString().split('T')[0]);
-      break;
-    }
-      
-    case "month": {
-      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      params.set("from", firstDayOfMonth.toISOString().split('T')[0]);
-      params.set("to", lastDayOfMonth.toISOString().split('T')[0]);
-      break;
-    }
-      
-    case "year": {
-      const year = selectedYear || today.getFullYear();
-      params.set("year", year.toString());
-      break;
-    }
-  }
-  
-  return params.toString();
-};
+const getTimeframeParams = businessTimeframeParams;
 
 const describeTimeframe = (
   timeframe: "day" | "week" | "month" | "year",
@@ -796,7 +754,7 @@ export default function Analytics() {
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {formatCurrency(analytics.totalEntries)}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Total reçu</p>
+                <p className="text-xs text-gray-500 mt-1">{analytics.entryCount} entrée(s) enregistrée(s)</p>
               </div>
               <div className="metric-icon p-2 sm:p-3 rounded-full">
                 <FileText className="w-4 h-4 sm:w-6 sm:h-6 text-yellow-600" />

@@ -18,6 +18,7 @@ import {
   type SaleCurrency,
 } from "../utils/salePricing";
 import { buildSaleCustomer, isSaleCustomerValid, receiptCustomerName } from "../utils/saleCustomer";
+import { isProductSellable } from "../utils/productAvailability";
 
 const compactFc = (value: number) => `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(value)}FC`;
 const compactDualUnit = (item: CartItem, rate?: number) => {
@@ -39,6 +40,7 @@ interface Product {
   sku?: string;
   stock: number;
   price?: number;
+  status?: "active" | "inactive";
 }
 
 interface CartItem extends PriceSnapshot {
@@ -73,6 +75,32 @@ async function readJsonSafe(res: Response) {
   if (ct.includes("application/json")) return res.json();
   const text = await res.text();
   return { __nonJson: true, text };
+}
+
+// Only products that can be sold right now (active, stock > 0). The server
+// filters and still rejects any sale of an unavailable product; the client
+// filter only protects against a stale or older server response.
+async function fetchSellableProducts(): Promise<Product[]> {
+  const res = await fetch(`${API_BASE}/products?availability=sellable`, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+    },
+  });
+  const data = await readJsonSafe(res);
+  if (!res.ok) {
+    const msg =
+      (data as any)?.error ||
+      (data as any)?.text ||
+      `Products fetch failed: ${res.status}`;
+    throw new Error(msg);
+  }
+  const list: Product[] = Array.isArray((data as any)?.products)
+    ? (data as any).products
+    : Array.isArray(data) && !(data as any).__nonJson
+    ? (data as any)
+    : [];
+  return list.filter(isProductSellable);
 }
 
 // Simplified Print service for ESC/POS printing
@@ -263,25 +291,7 @@ export default function NewSale() {
 
     async function loadProducts() {
       try {
-        const res = await fetch(`${API_BASE}/products`, {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-          },
-        });
-        const data = await readJsonSafe(res);
-        if (!res.ok) {
-          const msg =
-            (data as any)?.error ||
-            (data as any)?.text ||
-            `Products fetch failed: ${res.status}`;
-          throw new Error(msg);
-        }
-        const list: Product[] = Array.isArray((data as any)?.products)
-          ? (data as any).products
-          : Array.isArray(data) && !(data as any).__nonJson
-          ? (data as any)
-          : [];
+        const list = await fetchSellableProducts();
         if (!cancelled) setProducts(list);
       } catch (e: any) {
         if (!cancelled) setError(e?.message || "Failed to load products");
@@ -1588,12 +1598,18 @@ export default function NewSale() {
       });
       setCart([]);
       setSearchTerm("");
+      // Fresh stock: an article that just reached 0 leaves the list at once.
+      fetchSellableProducts().then(setProducts).catch((reloadError) => {
+        console.warn("Could not refresh products after sale:", reloadError);
+      });
 
       setMessage(
         "Vente effectuée avec succès. Impression du reçu et de la souche…"
       );
     } catch (e: any) {
       setError(e?.message || "La vente n'a pas pu être effectuée");
+      // A refusal for stock or availability means the list is stale.
+      fetchSellableProducts().then(setProducts).catch(() => undefined);
     } finally {
       setSubmitting(false);
     }

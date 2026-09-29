@@ -7,6 +7,7 @@ import { useAuth } from "../hooks/useAuth";
 import { AlertTriangle, CheckCircle2, DollarSign, RefreshCw, FileText, User, Calculator } from "lucide-react";
 import { serverUrl } from "../utils/constants";
 import { createAmountSnapshot } from "../utils/salePricing";
+import { apiRequest } from "../lib/api";
 
 interface Entry {
   _id: string;
@@ -47,6 +48,16 @@ function uiToModelPayment(pm: UiPayment): "cash" | "card" | "transfer" | "other"
   return "other";
 }
 
+// User-typed text is written into the print window as HTML
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Safe JSON parser to handle HTML errors
 async function readJsonSafe(res: Response) {
   const ct = res.headers.get("content-type") || "";
@@ -61,6 +72,7 @@ export default function Entry() {
   const [exchangeRate, setExchangeRate] = useState<ExchangeRate | null>(null);
   const [loadingRate, setLoadingRate] = useState(true);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const submittingRef = useRef(false);
 
   const { user: currentUser } = useAuth();
 
@@ -154,8 +166,10 @@ export default function Entry() {
     }
   }, [form.amount, form.currencyMode, exchangeRate]);
 
-  const isFormValid = 
-    parseFloat(form.amount) > 0 && 
+  const enteredAmount = Number(form.currencyMode === "fc" ? form.amountInFC : form.amount);
+  const isFormValid =
+    Number.isFinite(enteredAmount) && enteredAmount > 0 &&
+    (form.currencyMode !== "fc" || (Number.isFinite(exchangeRate?.rate) && (exchangeRate?.rate ?? 0) > 0)) &&
     form.source.trim() !== "" && 
     form.category.trim() !== "" && 
     form.receivedFromName.trim() !== "" &&
@@ -176,11 +190,6 @@ export default function Entry() {
       amountInFC: ""
     }));
   };
-
-  function authHeader(): Record<string, string> {
-    const token = localStorage.getItem("token") || "";
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  }
 
   // Format function for FC display
   const formatFc = (amount: number) => {
@@ -436,17 +445,17 @@ export default function Entry() {
   <body>
     <div class="receipt-container">
       <div class="header">
-        <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
-        <div class="shop-details"><strong>${receiptData.shopAddress}</strong></div>
-        <div class="shop-details">TEL: <strong>${receiptData.shopNumber}</strong></div>
-        <div class="shop-details"><strong>${receiptData.shopRegistration}</strong></div>
+        <div class="shop-name"><strong>${escapeHtml(receiptData.shopName)}</strong></div>
+        <div class="shop-details"><strong>${escapeHtml(receiptData.shopAddress)}</strong></div>
+        <div class="shop-details">TEL: <strong>${escapeHtml(receiptData.shopNumber)}</strong></div>
+        <div class="shop-details"><strong>${escapeHtml(receiptData.shopRegistration)}</strong></div>
       </div>
       
       <div class="section-divider"></div>
       
       <div class="receipt-info">
-        <div class="shop-details">DATE: <strong>${receiptData.date}</strong></div>
-        <div class="shop-details">REÇU #: <strong>${receiptData.receiptNumber}</strong></div>
+        <div class="shop-details">DATE: <strong>${escapeHtml(receiptData.date)}</strong></div>
+        <div class="shop-details">REÇU #: <strong>${escapeHtml(receiptData.receiptNumber)}</strong></div>
       </div>
       
       <div class="entry-badge">
@@ -454,18 +463,18 @@ export default function Entry() {
       </div>
       
       <div class="sender-info">
-        <div class="sender-field">REÇU DE: <strong>${receiptData.receivedFrom.name.toUpperCase()}</strong></div>
-        <div class="sender-field">TÉLÉPHONE: <strong>${receiptData.receivedFrom.phone}</strong></div>
+        <div class="sender-field">REÇU DE: <strong>${escapeHtml(receiptData.receivedFrom.name.toUpperCase())}</strong></div>
+        <div class="sender-field">TÉLÉPHONE: <strong>${escapeHtml(receiptData.receivedFrom.phone)}</strong></div>
         ${
           receiptData.receivedFrom.email
-            ? `<div class="sender-field">EMAIL: <strong>${receiptData.receivedFrom.email}</strong></div>`
+            ? `<div class="sender-field">EMAIL: <strong>${escapeHtml(receiptData.receivedFrom.email)}</strong></div>`
             : ""
         }
       </div>
       
       ${receiptData.description ? `
         <div class="description">
-          <strong>DESCRIPTION:</strong> <strong>${receiptData.description}</strong>
+          <strong>DESCRIPTION:</strong> <strong>${escapeHtml(receiptData.description)}</strong>
         </div>
       ` : ''}
       
@@ -474,15 +483,15 @@ export default function Entry() {
       <div class="details-section">
         <div class="detail-row">
           <div class="detail-label"><strong>SOURCE:</strong></div>
-          <div class="detail-value"><strong>${receiptData.source}</strong></div>
+          <div class="detail-value"><strong>${escapeHtml(receiptData.source)}</strong></div>
         </div>
         <div class="detail-row">
           <div class="detail-label"><strong>CATÉGORIE:</strong></div>
-          <div class="detail-value"><strong>${receiptData.category}</strong></div>
+          <div class="detail-value"><strong>${escapeHtml(receiptData.category)}</strong></div>
         </div>
         <div class="detail-row">
           <div class="detail-label"><strong>MÉTHODE PAIEMENT:</strong></div>
-          <div class="detail-value"><strong>${receiptData.paymentMethod.toUpperCase()}</strong></div>
+          <div class="detail-value"><strong>${escapeHtml(receiptData.paymentMethod.toUpperCase())}</strong></div>
         </div>
       </div>
       
@@ -494,7 +503,7 @@ export default function Entry() {
         ${
           receiptData.enteredCurrency === "FC"
             ? `<div class="amount-row">
-                 <div><strong>ÉQUIVALENT FC:</strong></div>
+                 <div><strong>ÉQUIVALENT USD:</strong></div>
                  <div><strong>$${receiptData.amountUSD.toFixed(2)}</strong></div>
                </div>`
             : ''
@@ -502,7 +511,7 @@ export default function Entry() {
       </div>
       
       <div class="agent-info">
-        Enregistré par: <strong>${receiptData.agent.toUpperCase()}</strong>
+        Enregistré par: <strong>${escapeHtml(receiptData.agent.toUpperCase())}</strong>
       </div>
       
       <div class="footer">
@@ -774,30 +783,30 @@ export default function Entry() {
   <body>
     <div class="stub-container">
       <div class="header">
-        <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
-        <div class="shop-details"><strong>${receiptData.shopAddress}</strong></div>
-        <div class="shop-details">TEL: <strong>${receiptData.shopNumber}</strong></div>
+        <div class="shop-name"><strong>${escapeHtml(receiptData.shopName)}</strong></div>
+        <div class="shop-details"><strong>${escapeHtml(receiptData.shopAddress)}</strong></div>
+        <div class="shop-details">TEL: <strong>${escapeHtml(receiptData.shopNumber)}</strong></div>
       </div>
       
       <div class="section-divider"></div>
       
       <div class="receipt-info">
-        <div class="shop-details">DATE: <strong>${receiptData.date}</strong></div>
-        <div class="shop-details">REÇU #: <strong>${receiptData.receiptNumber}</strong></div>
+        <div class="shop-details">DATE: <strong>${escapeHtml(receiptData.date)}</strong></div>
+        <div class="shop-details">REÇU #: <strong>${escapeHtml(receiptData.receiptNumber)}</strong></div>
       </div>
       
       <div class="stub-number">
-        <strong>SOUCHE ENTRÉE N°${receiptData.stubNumber}</strong>
+        <strong>SOUCHE ENTRÉE N°${escapeHtml(receiptData.stubNumber)}</strong>
       </div>
       
       <div class="sender-info">
-        <div class="sender-field">REÇU DE: <strong>${receiptData.receivedFrom.name.toUpperCase()}</strong></div>
-        <div class="sender-field">TÉLÉPHONE: <strong>${receiptData.receivedFrom.phone}</strong></div>
+        <div class="sender-field">REÇU DE: <strong>${escapeHtml(receiptData.receivedFrom.name.toUpperCase())}</strong></div>
+        <div class="sender-field">TÉLÉPHONE: <strong>${escapeHtml(receiptData.receivedFrom.phone)}</strong></div>
       </div>
       
       ${receiptData.description ? `
         <div class="description">
-          <strong>DESCRIPTION:</strong> <strong>${receiptData.description}</strong>
+          <strong>DESCRIPTION:</strong> <strong>${escapeHtml(receiptData.description)}</strong>
         </div>
       ` : ''}
       
@@ -806,15 +815,15 @@ export default function Entry() {
       <div class="details-section">
         <div class="detail-row">
           <div class="detail-label"><strong>SOURCE:</strong></div>
-          <div class="detail-value"><strong>${receiptData.source}</strong></div>
+          <div class="detail-value"><strong>${escapeHtml(receiptData.source)}</strong></div>
         </div>
         <div class="detail-row">
           <div class="detail-label"><strong>CATÉGORIE:</strong></div>
-          <div class="detail-value"><strong>${receiptData.category}</strong></div>
+          <div class="detail-value"><strong>${escapeHtml(receiptData.category)}</strong></div>
         </div>
         <div class="detail-row">
           <div class="detail-label"><strong>MÉTHODE PAIEMENT:</strong></div>
-          <div class="detail-value"><strong>${receiptData.paymentMethod.toUpperCase()}</strong></div>
+          <div class="detail-value"><strong>${escapeHtml(receiptData.paymentMethod.toUpperCase())}</strong></div>
         </div>
       </div>
       
@@ -826,16 +835,16 @@ export default function Entry() {
       </div>
       
       <div class="agent-info">
-        Enregistré par: <strong>${receiptData.agent.toUpperCase()}</strong>
+        Enregistré par: <strong>${escapeHtml(receiptData.agent.toUpperCase())}</strong>
       </div>
       
       <div class="stub-footer">
         <div class="thank-you"><strong>SOUCHE ENTRÉE D'ARGENT</strong></div>
-        <div class="warning"><strong>${receiptData.shopName}</strong></div>
+        <div class="warning"><strong>${escapeHtml(receiptData.shopName)}</strong></div>
         <div class="warning"><strong>Conserver cette souche</strong></div>
-        <div class="warning">Reçu #: <strong>${receiptData.receiptNumber}</strong></div>
-        <div class="warning">Date: <strong>${receiptData.date}</strong></div>
-        <div class="warning">Source: <strong>${receiptData.source}</strong></div>
+        <div class="warning">Reçu #: <strong>${escapeHtml(receiptData.receiptNumber)}</strong></div>
+        <div class="warning">Date: <strong>${escapeHtml(receiptData.date)}</strong></div>
+        <div class="warning">Source: <strong>${escapeHtml(receiptData.source)}</strong></div>
         <div class="warning">Montant: <strong>${receiptData.enteredCurrency === "FC" ? `${receiptData.enteredAmount.toLocaleString("fr-FR")} FC` : `$${receiptData.enteredAmount.toFixed(2)}`}</strong></div>
       </div>
       
@@ -887,8 +896,9 @@ export default function Entry() {
 
   async function handleEntry(e: React.FormEvent) {
     e.preventDefault();
-    if (!isFormValid) return;
+    if (!isFormValid || submittingRef.current) return;
 
+    submittingRef.current = true;
     setSubmitting(true);
     setMessage(null);
     setError(null);
@@ -916,14 +926,8 @@ export default function Entry() {
         }
       };
 
-      console.log("Sending entry data:", body);
-
-      const res = await fetch(`${API_BASE}/entries`, {
+      const res = await apiRequest("entries", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authHeader(),
-        },
         body: JSON.stringify(body),
       });
 
@@ -931,11 +935,9 @@ export default function Entry() {
       const data = await readJsonSafe(res);
       
       if (!res.ok) {
-        const msg = data?.error || data?.text || `Échec de l'enregistrement (${res.status})`;
+        const msg = data?.error || data?.message || data?.text || `Échec de l'enregistrement (${res.status})`;
         throw new Error(msg);
       }
-
-      console.log("Entry created successfully:", data);
 
       // Get the entry ID from the API response
       const entryId = data.entryId || data._id;
@@ -981,12 +983,13 @@ export default function Entry() {
       });
 
       setMessage(
-        "Entrée d'argent enregistrée avec succès. Impression du reçu et de la souche…"
+        `Entrée ${entryId} enregistrée avec succès. Impression du reçu et de la souche…`
       );
     } catch (e: any) {
       console.error("Error creating entry:", e);
       setError(e?.message || "L'entrée d'argent n'a pas pu être enregistrée");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
@@ -1002,7 +1005,14 @@ export default function Entry() {
 
         {message && (
           <div className="alert alert-success mb-4" role="status">
-            <CheckCircle2 aria-hidden="true" /><span>{message}</span>
+            <CheckCircle2 aria-hidden="true" /><span>{message} <a href="/entryhistory" className="underline">Voir l'historique des entrées</a></span>
+            {receiptData && (
+              // Auto-print runs outside a click, so the browser may block the popups; these reprint on demand.
+              <span className="flex gap-2 ml-auto">
+                <button type="button" onClick={printReceiptOnly} className="underline">Réimprimer le reçu</button>
+                <button type="button" onClick={printStubOnly} className="underline">Réimprimer la souche</button>
+              </span>
+            )}
           </div>
         )}
         {error && (
