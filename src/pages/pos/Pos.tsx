@@ -94,7 +94,7 @@ export default function Pos() {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(`${serverUrl}/products`, {
+        const res = await fetch(`${serverUrl}/products?availability=sellable`, {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${localStorage.getItem("token") || ""}`,

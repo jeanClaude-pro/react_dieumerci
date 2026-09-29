@@ -2,10 +2,13 @@
 import ResponsiveTable from "../../components/ui/ResponsiveTable";
 import Dialog from "../../components/ui/Dialog";
 import { EmptyState, LoadingState } from "../../components/ui/States";
+import PeriodPicker from "../../components/inventory/PeriodPicker";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { formatDateTimeGMT2, formatMonthNameGMT2 } from "../../utils/dateUtils";
+import { initialPeriodSelection, usePeriodRange } from "../../hooks/usePeriodRange";
+import { describePeriod } from "../../utils/dashboardPeriod";
 import { serverUrl } from "../../utils/constants";
 import {
   Search,
@@ -58,6 +61,8 @@ interface SaleItem {
   priceFC?: number;
   exchangeRate?: number;
 }
+
+const SHOW_LEGACY_PERIOD_CONTROLS = false;
 
 interface EditHistoryEntry {
   editedBy: string;
@@ -263,6 +268,8 @@ export default function SalesHistory() {
   const [timeframeType, setTimeframeType] = useState<
     "custom" | "day" | "month" | "year" | "today"
   >("today");
+  const [periodSelection, setPeriodSelection] = useState(() => initialPeriodSelection("today"));
+  const periodRange = usePeriodRange(periodSelection);
   
   // Query parameters for timeframe
   const [queryParams, setQueryParams] = useState({
@@ -284,12 +291,11 @@ export default function SalesHistory() {
   const [showEditedDetailsModal, setShowEditedDetailsModal] = useState(false);
 
   // Timeframe metadata
-  const [timeframeMetadata, setTimeframeMetadata] = useState<TimeframeMetadata | null>(null);
+  const [, setTimeframeMetadata] = useState<TimeframeMetadata | null>(null);
   const [summaryStats, setSummaryStats] = useState<any>(null);
   const [appliedFilters, setAppliedFilters] = useState<any>(null);
 
   // UI state
-  const [showFilters, setShowFilters] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<SalesResponse["pagination"] | null>(null);
@@ -348,6 +354,19 @@ export default function SalesHistory() {
   useEffect(() => {
     setCurrentPage(1);
   }, [queryParams, searchTerm]);
+
+  useEffect(() => {
+    if (!periodRange) return;
+    setTimeframeType("custom");
+    setQueryParams((previous) => ({
+      ...previous,
+      from: periodRange.from,
+      to: periodRange.to,
+      date: "",
+      year: "",
+      month: "",
+    }));
+  }, [periodRange]);
 
   // Fetch current user from localStorage (with API fallback)
   const fetchCurrentUser = async () => {
@@ -509,66 +528,18 @@ export default function SalesHistory() {
     setEditedSales(sortedEditedSales);
   };
 
-  // Handle timeframe type change
-  const handleTimeframeTypeChange = (type: "custom" | "day" | "month" | "year" | "today") => {
-    setTimeframeType(type);
-    
-    // Reset specific query params based on type
-    const newParams = { ...queryParams };
-    
-    switch(type) {
-      case "today":
-        // Reset all specific date params
-        newParams.date = getTodayDate();
-        newParams.from = "";
-        newParams.to = "";
-        newParams.year = getCurrentYear().toString();
-        newParams.month = getCurrentMonth().split('-')[1];
-        break;
-      case "day":
-        newParams.date = getTodayDate();
-        newParams.from = "";
-        newParams.to = "";
-        break;
-      case "month":
-        newParams.year = getCurrentYear().toString();
-        newParams.month = getCurrentMonth().split('-')[1];
-        newParams.date = "";
-        newParams.from = "";
-        newParams.to = "";
-        break;
-      case "year":
-        newParams.year = getCurrentYear().toString();
-        newParams.month = "";
-        newParams.date = "";
-        newParams.from = "";
-        newParams.to = "";
-        break;
-      case "custom":
-        // Keep existing values or set defaults
-        if (!newParams.from) {
-          const today = new Date();
-          const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-          newParams.from = firstDay.toISOString().split('T')[0];
-        }
-        if (!newParams.to) {
-          newParams.to = new Date().toISOString().split('T')[0];
-        }
-        newParams.date = "";
-        newParams.year = "";
-        newParams.month = "";
-        break;
-    }
-    
-    setQueryParams(newParams);
-  };
-
   // Handle query parameter changes
   const handleQueryParamChange = (key: keyof typeof queryParams, value: string) => {
     setQueryParams(prev => ({
       ...prev,
       [key]: value
     }));
+  };
+
+  // Kept for the legacy, non-rendered period controls while all visible date
+  // selection is standardized on PeriodPicker.
+  const handleTimeframeTypeChange = (type: "custom" | "day" | "month" | "year" | "today") => {
+    setTimeframeType(type);
   };
 
   // Clear all filters
@@ -585,6 +556,7 @@ export default function SalesHistory() {
       controlStatus: ""
     });
     setTimeframeType("today");
+    setPeriodSelection(initialPeriodSelection("today"));
     setShowEditedSales(false);
     setSearchTerm("");
   };
@@ -656,7 +628,7 @@ export default function SalesHistory() {
   const fetchProducts = async () => {
     try {
       setLoadingProducts(true);
-      const res = await fetch(`${serverUrl}/products?limit=0`, {
+      const res = await fetch(`${serverUrl}/products?availability=sellable`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
@@ -740,37 +712,6 @@ export default function SalesHistory() {
     getItemOriginalCurrency(item) === "FC"
       ? formatFc(getItemOriginalTotal(item))
       : formatCurrency(getItemOriginalTotal(item));
-
-  // Get human-readable timeframe description
-  const getTimeframeDescription = () => {
-    if (timeframeMetadata) {
-      return timeframeMetadata.description;
-    }
-    
-    switch(timeframeType) {
-      case "today":
-        return "Today";
-      case "day":
-        return queryParams.date ? `Day: ${queryParams.date}` : "Today";
-      case "month":
-        return queryParams.year && queryParams.month 
-          ? `Month: ${queryParams.year}-${queryParams.month.padStart(2, '0')}`
-          : "This month";
-      case "year":
-        return queryParams.year ? `Year: ${queryParams.year}` : "This year";
-      case "custom":
-        if (queryParams.from && queryParams.to) {
-          return `Range: ${queryParams.from} to ${queryParams.to}`;
-        } else if (queryParams.from) {
-          return `From: ${queryParams.from}`;
-        } else if (queryParams.to) {
-          return `Until: ${queryParams.to}`;
-        }
-        return "Custom range";
-      default:
-        return "Today";
-    }
-  };
 
   // NEW: Function to view edited sale details
   const viewEditedSaleDetails = (sale: Sale) => {
@@ -1805,19 +1746,9 @@ export default function SalesHistory() {
         <div className="card-header">
           <h2 id="sales-period-title" className="section-title flex items-center gap-2 min-w-0">
             <Calendar className="w-4 h-4 text-gray-500 shrink-0" aria-hidden="true" />
-            <span className="truncate">{showEditedSales ? "Ventes modifiées" : "Toutes les ventes"} · {getTimeframeDescription()}</span>
+            <span className="truncate">{showEditedSales ? "Ventes modifiées" : "Toutes les ventes"} · {periodRange ? describePeriod(periodRange) : "Période invalide"}</span>
           </h2>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setShowFilters(!showFilters)}
-              aria-expanded={showFilters}
-              className="btn btn-secondary btn-sm"
-            >
-              <Filter aria-hidden="true" />
-              {showFilters ? "Masquer les filtres" : "Filtres"}
-              <ChevronDown className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} aria-hidden="true" />
-            </button>
             <button type="button" onClick={clearAllFilters} className="btn btn-ghost btn-sm">
               <RefreshCw aria-hidden="true" />
               Réinitialiser
@@ -1826,8 +1757,25 @@ export default function SalesHistory() {
         </div>
         <div className="card-body empty:hidden">
 
+        <PeriodPicker value={periodSelection} onChange={setPeriodSelection} range={periodRange} />
+
+        <div className="mt-4">
+          <button type="button" onClick={() => setShowAdvancedFilters(!showAdvancedFilters)} aria-expanded={showAdvancedFilters} className="btn btn-ghost btn-sm -ml-3 text-blue-700">
+            {showAdvancedFilters ? "Masquer les filtres avancés" : "Filtres avancés"}
+            <ChevronDown className={`w-4 h-4 transition-transform ${showAdvancedFilters ? "rotate-180" : ""}`} />
+          </button>
+          {showAdvancedFilters && (
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-gray-50 border border-gray-200 rounded-xl">
+              <label className="field"><span className="field-label">Contrôle du reçu</span><select value={queryParams.controlStatus} onChange={(event) => handleQueryParamChange("controlStatus", event.target.value)} className="input"><option value="">Tous</option><option value="payment_pending">Paiement en attente</option><option value="payment_approved">Paiement approuvé</option><option value="exit_unverified">Sortie non contrôlée</option><option value="exit_verified">Sortie vérifiée</option></select></label>
+              <label className="field"><span className="field-label">Type</span><select value={queryParams.type} onChange={(event) => handleQueryParamChange("type", event.target.value)} className="input"><option value="">Tous les types</option><option value="sale">Vente</option><option value="expense">Dépense</option></select></label>
+              <label className="field"><span className="field-label">Statut</span><select value={queryParams.status} onChange={(event) => handleQueryParamChange("status", event.target.value)} className="input"><option value="">Tous les statuts</option><option value="completed">Terminée</option><option value="pending">En attente</option><option value="expense">Dépense</option></select></label>
+              <label className="field"><span className="field-label">Téléphone du client</span><input type="text" value={queryParams.customerPhone} onChange={(event) => handleQueryParamChange("customerPhone", event.target.value)} placeholder="+243 …" className="input" /></label>
+            </div>
+          )}
+        </div>
+
         {/* Timeframe Selection */}
-        {showFilters && (
+        {SHOW_LEGACY_PERIOD_CONTROLS && (
           <div className="space-y-4">
             <div>
               <span className="field-label block mb-2" id="sales-timeframe-label">Période</span>

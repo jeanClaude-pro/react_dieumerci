@@ -6,7 +6,9 @@ import { EmptyState, LoadingState } from "../components/ui/States";
 import { useState, useEffect } from "react";
 import { formatDateTimeGMT2 } from "../utils/dateUtils";
 import { serverUrl } from "../utils/constants";
-import { businessDate, businessTimeframeParams } from "../utils/businessTimeframe";
+import PeriodPicker from "../components/inventory/PeriodPicker";
+import { initialPeriodSelection, usePeriodRange } from "../hooks/usePeriodRange";
+import { describePeriod, periodQuery } from "../utils/dashboardPeriod";
 import {
   Search,
   FileText,
@@ -19,8 +21,6 @@ import {
   RefreshCw,
   Printer,
   Calendar,
-  ChevronLeft,
-  ChevronRight,
   History,
   Filter,
   Shield, X, CheckCircle, AlertTriangle } from "lucide-react";
@@ -99,11 +99,7 @@ interface EntrySummary {
   sources: Record<string, EntrySummaryGroup>;
 }
 
-// Helper function to get today's date in correct format
-const getTodayDate = (): string => businessDate();
 
-// Helper function to get date range for different timeframes
-const getTimeframeParams = businessTimeframeParams;
 
 export default function EntryHistory() {
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -137,11 +133,10 @@ export default function EntryHistory() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Timeframe state
-  const [timeframe, setTimeframe] = useState<"day" | "week" | "month" | "year">("day");
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
-  const [initialLoad, setInitialLoad] = useState(true);
-  const [timeframeDescription, setTimeframeDescription] = useState<string>("");
+  // Same period calendar as the Fiche de stock.
+  const [periodSelection, setPeriodSelection] = useState(() => initialPeriodSelection("today"));
+  const periodRange = usePeriodRange(periodSelection);
+  const periodKey = periodRange ? periodQuery(periodRange) : null;
 
   // Edited entries filter state
   const [showEditedEntries, setShowEditedEntries] = useState(false);
@@ -174,13 +169,6 @@ export default function EntryHistory() {
     "Autre Catégorie"
   ];
 
-  // Effect to automatically set to today's date when timeframe changes to "day"
-  useEffect(() => {
-    if (!initialLoad && timeframe === "day") {
-      const today = getTodayDate();
-      setSelectedDate(today);
-    }
-  }, [timeframe, initialLoad]);
 
   // Fetch current user on component mount
   useEffect(() => {
@@ -209,11 +197,11 @@ export default function EntryHistory() {
     if (currentUser !== null) { // Only fetch entries after user data is loaded
       fetchEntries();
     }
-  }, [timeframe, selectedYear, selectedDate, showEditedEntries, currentUser, currentPage, searchTerm]);
+  }, [periodKey, showEditedEntries, currentUser, currentPage, searchTerm]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [timeframe, selectedYear, selectedDate, showEditedEntries, searchTerm]);
+  }, [periodKey, showEditedEntries, searchTerm]);
 
   // Update edited entries when entries change
   useEffect(() => {
@@ -269,12 +257,13 @@ export default function EntryHistory() {
   };
 
   const fetchEntries = async () => {
+    if (!periodKey) return;
     try {
       setLoading(true);
       setError(null);
       
       // Build query parameters based on timeframe
-      const timeframeParams = getTimeframeParams(timeframe, selectedYear, selectedDate);
+      const timeframeParams = periodKey;
       
       // Add status filter for edited entries view
       const statusParam = showEditedEntries ? "&status=all" : "&status=active";
@@ -303,8 +292,6 @@ export default function EntryHistory() {
           setEntries(fetchedEntries);
           setPagination(data.pagination || null);
           
-          // Set timeframe description
-          setTimeframeDescription(data.timeframe?.description || "");
           
           // Set summary data
           if (data.summary) {
@@ -330,66 +317,9 @@ export default function EntryHistory() {
       setEntries([]);
     } finally {
       setLoading(false);
-      setInitialLoad(false);
     }
   };
 
-  // Get available years from API or default
-  const getAvailableYears = (): number[] => {
-    // Start with current year
-    const currentYear = new Date().getFullYear();
-    const years = [currentYear];
-    
-    // Add previous years (up to 5 years back)
-    for (let i = 1; i <= 5; i++) {
-      years.push(currentYear - i);
-    }
-    
-    return years.sort((a, b) => b - a);
-  };
-
-  const navigateYear = (direction: 'prev' | 'next') => {
-    const years = getAvailableYears();
-    const currentIndex = years.indexOf(selectedYear);
-    
-    if (direction === 'prev' && currentIndex < years.length - 1) {
-      setSelectedYear(years[currentIndex + 1]);
-    } else if (direction === 'next' && currentIndex > 0) {
-      setSelectedYear(years[currentIndex - 1]);
-    }
-  };
-
-  const getTimeframeLabel = () => {
-    if (timeframeDescription) {
-      return timeframeDescription;
-    }
-    
-    switch (timeframe) {
-      case "day":
-        if (selectedDate) {
-          const date = new Date(selectedDate);
-          return date.toLocaleDateString("fr-FR", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        }
-        return "Aujourd'hui";
-      case "week":
-        return "Cette Semaine";
-      case "month":
-        return "Ce Mois";
-      case "year":
-        return `Année ${selectedYear}`;
-      default:
-        return "Cette Semaine";
-    }
-  };
-
-  const handleTimeframeChange = (period: "day" | "week" | "month" | "year") => {
-    setTimeframe(period);
-    
-    if (period === "year") {
-      const years = getAvailableYears();
-      setSelectedYear(years[0] || new Date().getFullYear());
-    }
-  };
 
   // Filter entries based on search term
   // Search is applied by the server before pagination and summary aggregation.
@@ -891,61 +821,9 @@ export default function EntryHistory() {
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           <h2 id="entries-period-title" className="section-title flex items-center gap-2 min-w-0">
             <Calendar className="w-4 h-4 text-gray-500 shrink-0" aria-hidden="true" />
-            <span className="truncate">{showEditedEntries ? "Entrées modifiées" : "Toutes les entrées"} · {getTimeframeLabel()}</span>
+            <span className="truncate">{showEditedEntries ? "Entrées modifiées" : "Toutes les entrées"} · {periodRange ? describePeriod(periodRange) : "Période invalide"}</span>
           </h2>
           <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2">
-            {/* Date Picker for Day View */}
-            {timeframe === "day" && (
-              <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 pl-3 w-full sm:w-auto">
-                <label htmlFor="date-picker" className="text-sm font-medium text-gray-600 whitespace-nowrap">
-                  Date
-                </label>
-                <input
-                  id="date-picker"
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="ml-2 px-2 py-1 border-none bg-transparent text-xs sm:text-sm focus:outline-none focus:ring-0 text-gray-900 font-medium w-full"
-                />
-              </div>
-            )}
-            
-            {timeframe === "year" && (
-              <div className="flex items-center justify-between gap-1 bg-white rounded-lg border border-gray-300 px-1 w-full sm:w-auto">
-                <button aria-label="Année précédente"
-                  onClick={() => navigateYear('prev')}
-                  disabled={getAvailableYears().indexOf(selectedYear) === getAvailableYears().length - 1}
-                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
-                </button>
-                <span className="text-sm font-semibold text-gray-900 px-2 min-w-[4.5rem] text-center num" aria-live="polite">{selectedYear}</span>
-                <button aria-label="Année suivante"
-                  onClick={() => navigateYear('next')}
-                  disabled={getAvailableYears().indexOf(selectedYear) === 0}
-                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
-                </button>
-              </div>
-            )}
-            
-            <div className="segmented w-full sm:w-auto" role="group" aria-label="Période">
-              {(["day", "week", "month", "year"] as const).map((period) => (
-                <button
-                  key={period}
-                  type="button"
-                  aria-pressed={timeframe === period}
-                  onClick={() => handleTimeframeChange(period)}
-                >
-                  {period === "day" && "Jour"}
-                  {period === "week" && "Semaine"}
-                  {period === "month" && "Mois"}
-                  {period === "year" && "Année"}
-                </button>
-              ))}
-            </div>
-            
             {/* Refresh Button */}
             <button type="button" aria-label="Actualiser"
               onClick={fetchEntries}
@@ -956,6 +834,10 @@ export default function EntryHistory() {
               <span className="sm:hidden">Actualiser</span>
             </button>
           </div>
+        </div>
+
+        <div className="mt-4">
+          <PeriodPicker value={periodSelection} onChange={setPeriodSelection} range={periodRange} />
         </div>
 
         {/* Show summary statistics - Admin only */}

@@ -4,6 +4,7 @@ import {
   History, Info, LayoutDashboard, PackageCheck, PackageX, RefreshCw, TrendingDown, WifiOff,
 } from "lucide-react";
 import PageHeader from "../../components/ui/PageHeader";
+import ResponsiveTable from "../../components/ui/ResponsiveTable";
 import { EmptyState, ErrorState, Skeleton } from "../../components/ui/States";
 import StockBridge from "../../components/inventory/StockBridge";
 import StockLevelChart from "../../components/inventory/StockLevelChart";
@@ -217,6 +218,51 @@ export default function Dashboard() {
                 detail={partial ? partialNote : flows && flows.newProducts > 0 ? `dont ${formatQuantity(flows.newProducts)} via nouveaux articles` : "Réapprovisionnements et nouveaux articles"}
               />
             </div>
+            <div className="card mt-4">
+              <header className="card-header">
+                <div>
+                  <h3 className="section-title">Mouvements par article vendu</h3>
+                  <p className="text-sm text-gray-500">Une ligne agrégée par article, dans son unité propre. Les ventes annulées sur la période sont neutralisées.</p>
+                </div>
+              </header>
+              <div className="card-body">
+                {data.soldProductMovements.length > 0 ? (
+                  <ResponsiveTable stack="lg" className="dash-sold-table" aria-label="Mouvements par article vendu">
+                    <thead>
+                      <tr>
+                        <th className="is-text">Article</th>
+                        <th className="is-text">Unité</th>
+                        <th className="is-num">Vendu</th>
+                        <th className="is-num">Retours</th>
+                        <th className="is-num">Entrées</th>
+                        <th className="is-num">Corrections</th>
+                        <th className="is-num">Stock actuel</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.soldProductMovements.map((row) => {
+                        const corrections = row.flows.adjustmentsIn - row.flows.adjustmentsOut;
+                        return (
+                          <tr key={row.productId}>
+                            <td className="is-text"><strong>{row.name}</strong>{row.category && <small className="block text-gray-500">{row.category}</small>}</td>
+                            <td className="is-text whitespace-nowrap">{row.unit}</td>
+                            <td className="num is-num">{formatQuantity(row.flows.piecesOut)}</td>
+                            <td className="num is-num">{formatQuantity(row.flows.returns)}</td>
+                            <td className="num is-num">{formatQuantity(row.flows.entries)}</td>
+                            <td className="num is-num">{corrections > 0 ? "+" : corrections < 0 ? "−" : ""}{formatQuantity(Math.abs(corrections))}</td>
+                            <td className="num is-num"><strong>{formatQuantity(row.currentStock)}</strong></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </ResponsiveTable>
+                ) : (
+                  <EmptyState title="Aucun article vendu" icon={<Boxes aria-hidden="true" />}>
+                    Aucun mouvement de vente net n'a été enregistré sur cette période.
+                  </EmptyState>
+                )}
+              </div>
+            </div>
           </section>
 
           <section aria-labelledby="dash-health-title">
@@ -266,7 +312,7 @@ export default function Dashboard() {
                   <>
                     <StockBridge opening={data.stock.opening} closing={data.stock.closing} flows={flows} unit={pieceUnit} closingLabel={endIsNow ? "Stock actuel" : "Stock en fin de période"} />
                     <dl className="dash-activity">
-                      <div><dt>Ventes</dt><dd className="num">{formatQuantity(activity.sale ?? 0)}</dd></div>
+                      <div><dt>Ventes</dt><dd className="num">{formatQuantity(data.transactions.sales)}</dd></div>
                       <div><dt>Annulations</dt><dd className="num">{formatQuantity((activity.sale_void ?? 0) + (activity.sale_delete ?? 0))}</dd></div>
                       <div><dt>Réappro.</dt><dd className="num">{formatQuantity(activity.restock ?? 0)}</dd></div>
                       <div><dt>Corrections</dt><dd className="num">{formatQuantity((activity.adjustment ?? 0) + (activity.product_delete ?? 0))}</dd></div>

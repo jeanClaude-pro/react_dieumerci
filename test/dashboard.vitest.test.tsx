@@ -26,6 +26,11 @@ function summary(overrides: Partial<DashboardSummary> = {}): DashboardSummary {
     stock: { unit: "piece", opening: 10466, closing: 10468, current: 10468, flows },
     health: { products: 6, pieceProducts: 6, active: 4, inactive: 2, sellable: 3, outOfStock: 1, lowStock: 2, becameOutOfStock: 1 },
     activity: { sale: 3, restock: 1, sale_void: 1, adjustment: 1 },
+    soldProductMovements: [
+      { productId: "P1", name: "Sac noir", category: "Sacs", unit: "pcs", unitKey: "piece", currentStock: 0, flows: { ...flows, entries: 0, piecesOut: 5, adjustmentsOut: 0, net: -5 } },
+      { productId: "PACK", name: "Carton", category: "Emballages", unit: "packs", unitKey: "packs", currentStock: 101, flows: { ...flows, entries: 0, piecesOut: 4, adjustmentsOut: 0, net: -4 } },
+    ],
+    transactions: { sales: 2 },
     series: [{ key: "2026-09-29", net: 2, level: 10468 }],
     categories: [{ category: "Sacs", pieces: 10468, products: 6 }],
     units: [{ unit: "pcs", dimension: "piece", products: 4, quantity: 10468 }],
@@ -53,7 +58,7 @@ test("no figure is shown while loading; server figures appear once loaded", asyn
   expect(within(flowsSection).getByText("10 468")).toBeInTheDocument();
   expect(within(flowsSection).getByText("17")).toBeInTheDocument();
   expect(within(flowsSection).getByText("20")).toBeInTheDocument();
-  expect(screen.getByText("Sac noir")).toBeInTheDocument();
+  expect(screen.getAllByText("Sac noir").length).toBeGreaterThan(0);
 });
 
 test("history the ledger cannot prove is shown as “—”, never as a number", async () => {
@@ -80,6 +85,10 @@ test("mixed inventory units are never added to the pieces KPIs", async () => {
   expect(screen.getByText(/50 kg/)).toBeInTheDocument();
   expect(screen.getByText(/20 lbs/)).toBeInTheDocument();
   expect(screen.queryByText(/10 538/)).toBeNull();
+  const productMovements = screen.getByRole("table", { name: "Mouvements par article vendu" });
+  expect(within(productMovements).getByText("Sac noir")).toBeInTheDocument();
+  expect(within(productMovements).getByText("Carton")).toBeInTheDocument();
+  expect(within(productMovements).getByText("packs")).toBeInTheDocument();
 });
 
 test("an API error offers a retry that refetches", async () => {
@@ -121,14 +130,17 @@ test("the fiche de stock shows its empty message and the last real stock update"
     summary: { opening: 12, closing: 12, flows: { ...flows, entries: 0, piecesOut: 0, adjustmentsOut: 0, net: 0 }, currentStock: 12, lastStockUpdatedAt: "2026-08-15T09:00:00.000Z" },
     coverage: { trackingStartedAt: "2026-01-01T00:00:00.000Z", baselineAt: null, openingKnown: true, closingKnown: true, flowsComplete: true, flowsAvailable: true },
     integrity: { ledgerStock: 12, consistent: true },
-    movements: [],
-    pagination: { page: 1, limit: 25, totalRecords: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false },
   };
   fetchMock.mockResolvedValue(Response.json(card));
   render(<StockCardDialog productId="P1" productName="Sac noir" onClose={vi.fn()} />);
-  expect(await screen.findByText("Aucun mouvement de stock pour cette période.")).toBeInTheDocument();
+  const movementSummary = await screen.findByLabelText("Résumé des mouvements de stock");
+  expect(within(movementSummary).getByText("Entrées en stock")).toBeInTheDocument();
+  expect(within(movementSummary).getByText("Retours")).toBeInTheDocument();
+  expect(within(movementSummary).getByText("Sorties")).toBeInTheDocument();
+  expect(within(movementSummary).getByText("Solde de reprise")).toBeInTheDocument();
   expect(screen.getByText(/15 août 2026/)).toBeInTheDocument();
   expect(calledPaths()[0]).toMatch(/^products\/P1\/stock-card\?from=\d{4}-\d{2}-01&to=/);
+  expect(calledPaths()[0]).not.toMatch(/page=|limit=/);
 });
 
 test("NewSale asks for sellable products and never offers a product at 0 pieces", async () => {

@@ -5,7 +5,7 @@ import { EmptyState, LoadingState } from "../../components/ui/States";
 
 import type React from "react";
 import { useState, useEffect } from "react";
-import { Package, Plus, Search, Edit, Trash2, Eye, X, ClipboardList, ArrowDownUp } from "lucide-react";
+import { Package, Plus, Search, Edit, Eye, X, ClipboardList, ArrowDownUp } from "lucide-react";
 import { getProductStatus } from "../../utils/constants";
 import { toast } from "react-toastify";
 import type { Product } from "../../types";
@@ -65,7 +65,7 @@ export default function Products() {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${serverUrl}/products`, {
+      const response = await fetch(`${serverUrl}/products?includeInactive=true`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
@@ -135,28 +135,6 @@ export default function Products() {
     } catch (error) {
       console.error("Error updating product:", error);
       toast.error("Error updating product");
-    }
-  };
-
-  const deleteProduct = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this product?")) return;
-    try {
-      const response = await fetch(`${serverUrl}/products/${id}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
-      });
-      if (response.ok) {
-        setProducts((prev) => prev.filter((p) => p._id !== id));
-        toast.success("Product deleted");
-      } else {
-        toast.error("Failed to delete product");
-      }
-    } catch (error) {
-      console.error("Error deleting product:", error);
-      toast.error("Error deleting product");
     }
   };
 
@@ -430,12 +408,6 @@ export default function Products() {
                               className="text-gray-700 hover:text-gray-900 p-1 rounded"
                             >
                               <Edit className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Modifier</span>
-                            </button>
-                            <button aria-label={`Supprimer ${product.name}`} title="Supprimer"
-                              onClick={() => deleteProduct(product._id)}
-                              className="text-red-600 hover:text-red-800 p-1 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Supprimer</span>
                             </button>
                           </>
                         )}
@@ -734,7 +706,7 @@ export default function Products() {
                           : "bg-red-100 text-red-800"
                       }`}
                     >
-                      {selectedProduct.status}
+                      {getProductStatus(selectedProduct.status)}
                     </span>
                   </div>
                 </div>

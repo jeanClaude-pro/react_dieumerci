@@ -14,8 +14,6 @@ import {
   ArrowUp,
   ArrowDown,
   Calendar,
-  ChevronLeft,
-  ChevronRight,
   Receipt,
   Calculator,
   Shield,
@@ -26,7 +24,10 @@ import {
 } from "lucide-react";
 import { generateCompanyReport, type ReportSections } from "./reportGenerator";
 import { serverUrl } from "../../utils/constants";
-import { businessDate, businessTimeframeParams } from "../../utils/businessTimeframe";
+import { businessDate } from "../../utils/businessTimeframe";
+import PeriodPicker from "../../components/inventory/PeriodPicker";
+import { initialPeriodSelection, usePeriodRange } from "../../hooks/usePeriodRange";
+import { describePeriod, type PeriodRange } from "../../utils/dashboardPeriod";
 
 interface AnalyticsData {
   totalSales: number;
@@ -149,6 +150,20 @@ const shouldSeeOnlyTodayData = (): boolean => {
   return !isAdmin();
 };
 
+type AnalyticsTimeframe = "day" | "week" | "month" | "year";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// The chart granularity follows the length of the period chosen in the
+// shared calendar (same PeriodPicker as the Fiche de stock).
+const timeframeForRange = (range: PeriodRange): AnalyticsTimeframe => {
+  const days = (Date.parse(range.to) - Date.parse(range.from)) / DAY_MS + 1;
+  if (days <= 1) return "day";
+  if (days <= 7) return "week";
+  if (days <= 62) return "month";
+  return "year";
+};
+
 // Helper function to get headers
 const getHeaders = () => {
   const token = localStorage.getItem("token");
@@ -158,41 +173,18 @@ const getHeaders = () => {
   };
 };
 
-// Helper function to get timeframe parameters based on selection
-const getTimeframeParams = businessTimeframeParams;
-
-const describeTimeframe = (
-  timeframe: "day" | "week" | "month" | "year",
-  selectedDate: string,
-  selectedYear: number
-) => {
-  if (timeframe === "day") {
-    return new Date(selectedDate).toLocaleDateString("fr-FR", {
-      timeZone: "Africa/Lubumbashi",
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  }
-  if (timeframe === "week") return "Cette Semaine";
-  if (timeframe === "month") return "Ce Mois";
-  return `Année ${selectedYear}`;
-};
 
 export default function Analytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [timeframe, setTimeframe] = useState<"day" | "week" | "month" | "year">(
-    "day"
-  );
-  const [selectedYear, setSelectedYear] = useState<number>(
-    new Date().getFullYear()
-  );
-  const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());
+  const [periodSelection, setPeriodSelection] = useState(() => initialPeriodSelection("today"));
+  const selectedRange = usePeriodRange(periodSelection);
+  const periodFrom = shouldSeeOnlyTodayData() ? getTodayDate() : selectedRange?.from ?? null;
+  const periodTo = shouldSeeOnlyTodayData() ? getTodayDate() : selectedRange?.to ?? null;
+  const periodRange: PeriodRange | null = periodFrom && periodTo ? { from: periodFrom, to: periodTo } : null;
+  const timeframe: AnalyticsTimeframe = periodRange ? timeframeForRange(periodRange) : "day";
+  const selectedYear = Number((periodTo ?? getTodayDate()).slice(0, 4));
   const [timeframeData, setTimeframeData] = useState<TimeframeData | null>(null);
-  const [initialLoad, setInitialLoad] = useState(true);
-  const [availableYears, setAvailableYears] = useState<number[]>([]);
 
   // ── Company / shop settings ───────────────────────────────────────────
   const [shopSettings, setShopSettings] = useState({
@@ -227,28 +219,6 @@ export default function Analytics() {
   const [printPasswordError, setPrintPasswordError] = useState("");
   const [printPasswordLoading, setPrintPasswordLoading] = useState(false);
 
-  // Effect to automatically set to today's date when timeframe changes to "day"
-  useEffect(() => {
-    if (!initialLoad && timeframe === "day") {
-      const today = getTodayDate();
-      setSelectedDate(today);
-    }
-  }, [timeframe, initialLoad]);
-
-  // Effect to mark initial load as complete
-  useEffect(() => {
-    if (analytics) {
-      setInitialLoad(false);
-    }
-  }, [analytics]);
-
-  // Effect to enforce day-only view for non-admin users
-  useEffect(() => {
-    if (shouldSeeOnlyTodayData() && timeframe !== "day") {
-      setTimeframe("day");
-      setSelectedDate(getTodayDate());
-    }
-  }, [timeframe]);
 
   // Fetch shop settings once on mount
   useEffect(() => {
@@ -270,13 +240,10 @@ export default function Analytics() {
   // Fetch analytics data with server-side timeframe filtering
   const fetchAnalytics = useCallback(async () => {
     try {
+      if (!periodFrom || !periodTo) return;
       setLoading(true);
-      const effectiveTimeframe = shouldSeeOnlyTodayData() ? "day" : timeframe;
-      const effectiveDate = shouldSeeOnlyTodayData() ? getTodayDate() : selectedDate;
-      const params = new URLSearchParams(
-        getTimeframeParams(effectiveTimeframe, selectedYear, effectiveDate)
-      );
-      params.set("timeframe", effectiveTimeframe);
+      const effectiveTimeframe = timeframe;
+      const params = new URLSearchParams({ from: periodFrom, to: periodTo, timeframe: effectiveTimeframe });
       const response = await fetch(`${serverUrl}/analytics/summary?${params}`, {
         headers: getHeaders(),
       });
@@ -313,44 +280,23 @@ export default function Analytics() {
       };
       setAnalytics(normalized);
       setTimeframeData({
-        description: describeTimeframe(
-          effectiveTimeframe,
-          effectiveDate,
-          selectedYear
-        ),
+        description: describePeriod({ from: periodFrom, to: periodTo }),
         start: payload.timeframe.start,
         end: payload.timeframe.end,
       });
-      setAvailableYears(extractAvailableYears());
     } catch (error) {
       console.error("Error fetching analytics:", error);
       setAnalytics(null);
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, selectedYear, timeframe]);
+  }, [periodFrom, periodTo, selectedYear, timeframe]);
 
   // Analytics has one request per selected period and never walks sales pages.
   useEffect(() => {
     fetchAnalytics();
   }, [fetchAnalytics]);
 
-  // Extract available years from data
-  const extractAvailableYears = (): number[] => {
-    const yearsSet = new Set<number>();
-    const now = new Date();
-    
-    // Add current year
-    yearsSet.add(now.getFullYear());
-    
-    // Add previous 5 years as options
-    for (let i = 1; i <= 5; i++) {
-      yearsSet.add(now.getFullYear() - i);
-    }
-    
-    // Sort descending
-    return Array.from(yearsSet).sort((a, b) => b - a);
-  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -359,64 +305,8 @@ export default function Analytics() {
     }).format(amount);
   };
 
-  const navigateYear = (direction: "prev" | "next") => {
-    const currentIndex = availableYears.indexOf(selectedYear);
-    
-    if (direction === "prev" && currentIndex < availableYears.length - 1) {
-      setSelectedYear(availableYears[currentIndex + 1]);
-    } else if (direction === "next" && currentIndex > 0) {
-      setSelectedYear(availableYears[currentIndex - 1]);
-    }
-  };
-
-  const getTimeframeLabel = () => {
-    if (timeframeData?.description) {
-      return timeframeData.description;
-    }
-    
-    switch (timeframe) {
-      case "day": {
-        if (selectedDate) {
-          const date = new Date(selectedDate);
-          return date.toLocaleDateString("fr-FR", {
-            timeZone: "Africa/Lubumbashi",
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          });
-        }
-        return "Aujourd'hui";
-      }
-      case "week":
-        return "Cette Semaine";
-      case "month":
-        return "Ce Mois";
-      case "year":
-        return `Année ${selectedYear}`;
-      default:
-        return "Cette Semaine";
-    }
-  };
-
-  const handleTimeframeChange = (period: "day" | "week" | "month" | "year") => {
-    // For non-admin users, only allow "day" timeframe
-    if (shouldSeeOnlyTodayData() && period !== "day") {
-      return;
-    }
-
-    setTimeframe(period);
-
-    if (period === "year") {
-      // Set to current year if available
-      const currentYear = new Date().getFullYear();
-      if (availableYears.length > 0 && availableYears.includes(currentYear)) {
-        setSelectedYear(currentYear);
-      } else if (availableYears.length > 0) {
-        setSelectedYear(availableYears[0]);
-      }
-    }
-  };
+  const getTimeframeLabel = () =>
+    timeframeData?.description ?? (periodRange ? describePeriod(periodRange) : "Période invalide");
 
   // Verify admin password against the server
   const verifyPassword = async (password: string): Promise<boolean> => {
@@ -646,69 +536,10 @@ export default function Analytics() {
               <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
               Période d'analyse: {getTimeframeLabel()}
             </h3>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              {/* Date Picker for Day View */}
-              {timeframe === "day" && (
-                <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
-                  <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                  <label
-                    htmlFor="date-picker"
-                    className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap"
-                  >
-                    Date:
-                  </label>
-                  <input
-                    id="date-picker"
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="ml-2 px-2 py-1 border-none bg-transparent text-xs sm:text-sm focus:outline-none focus:ring-0 text-gray-900 font-medium w-full"
-                    disabled={shouldSeeOnlyTodayData()}
-                  />
-                </div>
-              )}
-
-              {timeframe === "year" && availableYears.length > 1 && (
-                <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 px-3 py-2 shadow-sm w-full sm:w-auto">
-                  <button type="button" aria-label="Année précédente"
-                    onClick={() => navigateYear("prev")}
-                    disabled={availableYears.indexOf(selectedYear) === availableYears.length - 1}
-                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
-                  </button>
-                  <span className="text-xs sm:text-sm font-medium text-gray-900 px-2 min-w-[60px] sm:min-w-[80px] text-center">
-                    {selectedYear}
-                  </span>
-                  <button type="button" aria-label="Année suivante"
-                    onClick={() => navigateYear("next")}
-                    disabled={availableYears.indexOf(selectedYear) === 0}
-                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
-                  </button>
-                </div>
-              )}
-
-              <div className="segmented w-full sm:w-auto" role="group" aria-label="Période">
-                {(["day", "week", "month", "year"] as const).map((period) => (
-                  <button
-                    key={period}
-                    type="button"
-                    aria-pressed={timeframe === period}
-                    onClick={() => handleTimeframeChange(period)}
-                    className={shouldSeeOnlyTodayData() && period !== "day" ? "opacity-50 !cursor-not-allowed" : ""}
-                    disabled={shouldSeeOnlyTodayData() && period !== "day"}
-                  >
-                    {period === "day" && "Jour"}
-                    {period === "week" && "Semaine"}
-                    {period === "month" && "Mois"}
-                    {period === "year" && "Année"}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
+          {!shouldSeeOnlyTodayData() && (
+            <PeriodPicker value={periodSelection} onChange={setPeriodSelection} range={periodRange} />
+          )}
         </div>
 
         {/* Key Metrics */}

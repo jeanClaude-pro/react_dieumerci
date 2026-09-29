@@ -3497,3 +3497,17 @@ button.dash-health:active {
     overflow: visible;
   }
 }
+
+/* Dashboard: movements per sold product. Every header shares its column's
+   alignment (text left, quantities right) so labels sit over their values. */
+.dash-sold-table :is(th, td) {
+  padding: 0.625rem 0.75rem;
+  vertical-align: middle;
+}
+.dash-sold-table :is(th, td).is-text {
+  text-align: left;
+}
+.dash-sold-table :is(th, td).is-num {
+  text-align: right;
+  white-space: nowrap;
+}

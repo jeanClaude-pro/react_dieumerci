@@ -86,6 +86,17 @@ test("a product edit sends the stock only when the administrator changed it", ()
   assert.match(products, /const stockChanged = stock !== selectedProduct\.stock/);
   assert.match(products, /stockChanged \? formData : otherFields, stockChanged \? selectedProduct\.stock : undefined/);
   assert.match(products, /expectedStock/);
+  assert.doesNotMatch(products, /deleteProduct|method:\s*"DELETE"|Trash2/);
+  assert.match(products, /products\?includeInactive=true/);
+});
+
+test("history screens share the Fiche de stock calendar and have no show-filters control", () => {
+  for (const file of ["../src/pages/history/SalesHistory.tsx", "../src/pages/SortieHistory.tsx"]) {
+    const page = read(file);
+    assert.match(page, /import PeriodPicker/);
+    assert.match(page, /<PeriodPicker/);
+    assert.doesNotMatch(page, /showFilters|setShowFilters/);
+  }
 });
 
 test("chart ticks always enclose the data, including a flat series (regression)", async () => {

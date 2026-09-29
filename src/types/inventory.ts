@@ -77,6 +77,16 @@ export interface DashboardSummary {
     becameOutOfStock: number;
   };
   activity: Partial<Record<StockMovementType, number>>;
+  soldProductMovements: {
+    productId: string;
+    name: string;
+    category: string;
+    unit: string;
+    unitKey: string;
+    currentStock: number | null;
+    flows: StockFlows;
+  }[];
+  transactions: { sales: number };
   series: StockSeriesPoint[];
   categories: { category: string; pieces: number; products: number; grouped?: boolean }[];
   units: { unit: string; dimension: string; products: number; quantity: number }[];
@@ -119,6 +129,4 @@ export interface StockCardResponse {
   };
   coverage: LedgerCoverage;
   integrity: { ledgerStock: number | null; consistent: boolean | null };
-  movements: StockMovementRow[];
-  pagination: Pagination;
 }

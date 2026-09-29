@@ -1,23 +1,19 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, ClipboardList, Info, X } from "lucide-react";
 import Dialog from "../ui/Dialog";
-import ResponsiveTable from "../ui/ResponsiveTable";
 import { EmptyState, ErrorState, LoadingState } from "../ui/States";
-import Pager from "./Pager";
 import PeriodPicker from "./PeriodPicker";
 import { initialPeriodSelection, usePeriodRange, type PeriodSelection } from "../../hooks/usePeriodRange";
 import StockBridge from "./StockBridge";
 import type { StockCardResponse } from "../../types/inventory";
 import { periodQuery } from "../../utils/dashboardPeriod";
-import { MOVEMENT_LABELS, formatDateTime, formatQuantity, formatSigned, requestJson } from "../../utils/inventoryFormat";
+import { formatDateTime, formatQuantity, requestJson } from "../../utils/inventoryFormat";
 import { productAvailabilityLabel } from "../../utils/productAvailability";
-
-const PAGE_SIZE = 25;
 
 /**
  * Fiche de stock: what happened to the physical quantity of one product.
- * Inventory movements only (one row per stock change, running balance) —
- * customer invoices stay in the sales history.
+ * Movements are summarized by inventory meaning; individual sale rows stay
+ * in Sales History.
  */
 export default function StockCardDialog({ productId, productName, onClose }: {
   productId: string;
@@ -26,7 +22,6 @@ export default function StockCardDialog({ productId, productName, onClose }: {
 }) {
   const [selection, setSelection] = useState<PeriodSelection>(() => initialPeriodSelection("month"));
   const range = usePeriodRange(selection);
-  const [page, setPage] = useState(1);
   const [card, setCard] = useState<StockCardResponse | null>(null);
   // The period the displayed card belongs to: another period never shows its figures.
   const [cardKey, setCardKey] = useState<string | null>(null);
@@ -35,19 +30,17 @@ export default function StockCardDialog({ productId, productName, onClose }: {
   const [attempt, setAttempt] = useState(0);
   const rangeKey = range ? periodQuery(range) : null;
 
-  useEffect(() => { setPage(1); }, [rangeKey]);
-
   useEffect(() => {
     if (!rangeKey) return;
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    requestJson<StockCardResponse>(`products/${productId}/stock-card?${rangeKey}&page=${page}&limit=${PAGE_SIZE}`, { signal: controller.signal })
+    requestJson<StockCardResponse>(`products/${productId}/stock-card?${rangeKey}`, { signal: controller.signal })
       .then((result) => { setCard(result); setCardKey(rangeKey); })
       .catch((reason: Error) => { if (reason.name !== "AbortError") setError(reason.message); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [productId, rangeKey, page, attempt]);
+  }, [productId, rangeKey, attempt]);
 
   const product = card?.product;
   const status = product ? productAvailabilityLabel(product) : null;
@@ -121,38 +114,15 @@ export default function StockCardDialog({ productId, productName, onClose }: {
               )}
 
               <h3 className="section-title mt-5 mb-2">Mouvements</h3>
-              {card.movements.length === 0 ? (
+              {!card.summary.flows ? (
                 <EmptyState title="Aucun mouvement de stock pour cette période." icon={<ClipboardList aria-hidden="true" />} />
               ) : (
-                <>
-                  <ResponsiveTable>
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Mouvement</th>
-                        <th>Quantité</th>
-                        <th>Avant</th>
-                        <th>Après</th>
-                        <th>Origine</th>
-                        <th>Par</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {card.movements.map((movement) => (
-                        <tr key={movement._id}>
-                          <td className="num">{formatDateTime(movement.occurredAt)}</td>
-                          <td>{MOVEMENT_LABELS[movement.type] || movement.type}</td>
-                          <td className={`num stock-qty ${movement.quantity > 0 ? "is-in" : movement.quantity < 0 ? "is-out" : ""}`}>{formatSigned(movement.quantity)}</td>
-                          <td className="num">{formatQuantity(movement.stockBefore)}</td>
-                          <td className="num"><strong>{formatQuantity(movement.stockAfter)}</strong></td>
-                          <td>{movement.saleNumber ? `Vente ${movement.saleNumber}` : movement.reason || "—"}</td>
-                          <td>{movement.userName || "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </ResponsiveTable>
-                  <Pager pagination={card.pagination} onPage={setPage} disabled={loading} />
-                </>
+                <dl className="stock-card-facts" aria-label="Résumé des mouvements de stock">
+                  <div><dt>Entrées en stock</dt><dd className="num">{formatQuantity(card.summary.flows.entries)} {unit}</dd></div>
+                  <div><dt>Retours</dt><dd className="num">{formatQuantity(card.summary.flows.returns)} {unit}</dd></div>
+                  <div><dt>Sorties</dt><dd className="num">{formatQuantity(card.summary.flows.piecesOut)} {unit}</dd></div>
+                  <div><dt>Solde de reprise</dt><dd className="num">{formatQuantity(card.summary.flows.baseline)} {unit}</dd></div>
+                </dl>
               )}
             </div>
           )}

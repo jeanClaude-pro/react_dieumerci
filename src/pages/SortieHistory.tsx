@@ -2,10 +2,13 @@
 import ResponsiveTable from "../components/ui/ResponsiveTable";
 import Dialog from "../components/ui/Dialog";
 import { EmptyState, LoadingState } from "../components/ui/States";
+import PeriodPicker from "../components/inventory/PeriodPicker";
 
 import { useState, useEffect } from "react";
 import { formatDateTimeGMT2, formatTimeGMT2, formatMonthNameGMT2 } from "../utils/dateUtils";
 import { serverUrl } from "../utils/constants";
+import { initialPeriodSelection, usePeriodRange } from "../hooks/usePeriodRange";
+import { describePeriod } from "../utils/dashboardPeriod";
 import {
   Search,
   FileText,
@@ -23,7 +26,6 @@ import {
   X,
   AlertCircle,
   History,
-  Filter,
   ChevronDown,
   Shield,
   Lock,
@@ -53,6 +55,8 @@ interface ExpenseItem {
   expenseType?: "normal" | "repayment";
   creditorSnapshot?: { name?: string; type?: string };
 }
+
+const SHOW_LEGACY_PERIOD_CONTROLS = false;
 
 interface ExpensesResponse {
   success: boolean;
@@ -179,6 +183,8 @@ export default function SortieHistory() {
   const [timeframeType, setTimeframeType] = useState<
     "custom" | "day" | "month" | "year" | "today"
   >("today");
+  const [periodSelection, setPeriodSelection] = useState(() => initialPeriodSelection("today"));
+  const periodRange = usePeriodRange(periodSelection);
   
   const [queryParams, setQueryParams] = useState({
     from: "",
@@ -196,7 +202,6 @@ export default function SortieHistory() {
   const [summaryStats, setSummaryStats] = useState<any>(null);
   const [appliedFilters, setAppliedFilters] = useState<any>(null);
   const [timeframeDescription, setTimeframeDescription] = useState<string>("Today");
-  const [showFilters, setShowFilters] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<ExpensesResponse["pagination"] | null>(null);
@@ -264,6 +269,19 @@ export default function SortieHistory() {
   useEffect(() => {
     setCurrentPage(1);
   }, [queryParams, searchTerm]);
+
+  useEffect(() => {
+    if (!userPermissions.isAdmin || !periodRange) return;
+    setTimeframeType("custom");
+    setQueryParams((previous) => ({
+      ...previous,
+      from: periodRange.from,
+      to: periodRange.to,
+      date: "",
+      year: "",
+      month: "",
+    }));
+  }, [periodRange, userPermissions.isAdmin]);
 
   // Effect to automatically set to today's date when timeframe changes to "day"
   useEffect(() => {
@@ -486,6 +504,7 @@ export default function SortieHistory() {
       search: ""
     });
     setTimeframeType("today");
+    setPeriodSelection(initialPeriodSelection("today"));
     setSearchTerm("");
     setShowAdvancedFilters(false);
   };
@@ -1282,19 +1301,9 @@ export default function SortieHistory() {
         <div className="card-header">
           <h2 id="expenses-period-title" className="section-title flex items-center gap-2 min-w-0">
             <Calendar className="w-4 h-4 text-gray-500 shrink-0" aria-hidden="true" />
-            <span className="truncate">Période · {getTimeframeLabel()}</span>
+            <span className="truncate">Période · {userPermissions.isAdmin && periodRange ? describePeriod(periodRange) : getTimeframeLabel()}</span>
           </h2>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setShowFilters(!showFilters)}
-              aria-expanded={showFilters}
-              className="btn btn-secondary btn-sm"
-            >
-              <Filter aria-hidden="true" />
-              {showFilters ? "Masquer les filtres" : "Filtres"}
-              <ChevronDown className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} aria-hidden="true" />
-            </button>
             <button
               type="button"
               onClick={clearAllFilters}
@@ -1307,8 +1316,26 @@ export default function SortieHistory() {
         </div>
         <div className="card-body empty:hidden">
 
+        {userPermissions.isAdmin && <PeriodPicker value={periodSelection} onChange={setPeriodSelection} range={periodRange} />}
+
+        {userPermissions.isAdmin && (
+          <div className="mt-4">
+            <button type="button" onClick={() => setShowAdvancedFilters(!showAdvancedFilters)} aria-expanded={showAdvancedFilters} className="btn btn-ghost btn-sm -ml-3 text-blue-700">
+              {showAdvancedFilters ? "Masquer les filtres avancés" : "Filtres avancés"}
+              <ChevronDown className={`w-4 h-4 transition-transform ${showAdvancedFilters ? "rotate-180" : ""}`} />
+            </button>
+            {showAdvancedFilters && (
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                <label className="field"><span className="field-label">Statut</span><select value={queryParams.status} onChange={(event) => handleQueryParamChange("status", event.target.value)} className="input"><option value="">Tous les statuts</option><option value="pending">En attente</option><option value="validated">Validées</option><option value="rejected">Rejetées</option></select></label>
+                <label className="field"><span className="field-label">Mode de paiement</span><select value={queryParams.paymentMethod} onChange={(event) => handleQueryParamChange("paymentMethod", event.target.value)} className="input"><option value="">Tous</option><option value="cash">Espèces</option><option value="card">Carte</option><option value="transfer">Transfert</option><option value="other">Autre</option></select></label>
+                <label className="field"><span className="field-label">Enregistré par</span><input type="text" value={queryParams.recordedBy} onChange={(event) => handleQueryParamChange("recordedBy", event.target.value)} className="input" /></label>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Timeframe Selection */}
-        {showFilters && (
+        {SHOW_LEGACY_PERIOD_CONTROLS && (
           <div className="space-y-4">
             <div>
               <span className="field-label block mb-2" id="expenses-timeframe-label">Type de période</span>
