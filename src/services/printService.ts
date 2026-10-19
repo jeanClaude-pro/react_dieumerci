@@ -1,3 +1,4 @@
+import { tr } from '../i18n/translate';
 import { serverUrl } from "../utils/constants";
 
 export interface PrintReceiptData {
@@ -35,7 +36,7 @@ export class PrintService {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to print receipt');
+        throw new Error(tr('newSale.printReceiptFailed', 'Impression du reçu impossible'));
       }
 
       const result = await response.json();
@@ -58,7 +59,7 @@ export class PrintService {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to print stub');
+        throw new Error(tr('newSale.printStubFailed', 'Impression de la souche impossible'));
       }
 
       const result = await response.json();

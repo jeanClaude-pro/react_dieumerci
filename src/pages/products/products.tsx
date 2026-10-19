@@ -1,164 +1,150 @@
-"use client";
+import type React from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowDownUp, Boxes, ClipboardList, Edit, Eye, Package, Plus, Search, TrendingDown, X,
+} from "lucide-react";
+import { toast } from "react-toastify";
+import { useTranslation } from "react-i18next";
 import ResponsiveTable from "../../components/ui/ResponsiveTable";
 import Dialog from "../../components/ui/Dialog";
+import PageHeader from "../../components/ui/PageHeader";
 import { EmptyState, LoadingState } from "../../components/ui/States";
-
-import type React from "react";
-import { useState, useEffect } from "react";
-import { Package, Plus, Search, Edit, Eye, X, ClipboardList, ArrowDownUp } from "lucide-react";
-import { getProductStatus } from "../../utils/constants";
-import { toast } from "react-toastify";
 import type { Product } from "../../types";
 import { units, serverUrl } from "../../utils/constants";
 import CategoriesDropdown from "../../components/CategoriesDropdown";
 import StockCardDialog from "../../components/inventory/StockCardDialog";
 import StockMovementDialog from "../../components/inventory/StockMovementDialog";
-import { isProductSellable } from "../../utils/productAvailability";
+import { isProductSellable, stockHealth } from "../../utils/productAvailability";
+import { formatNumber } from "../../i18n/format";
 
-interface User {
-  _id: string;
-  name: string;
-  email: string;
-  role: "admin" | "staff";
+interface StoredUser {
+  role?: string;
+}
+
+type StatusFilter = "all" | "available" | "low" | "out" | "inactive";
+
+const EMPTY_FORM: Partial<Product> = {
+  name: "",
+  description: "",
+  category: "",
+  brand: "",
+  stock: 0,
+  minStock: 0,
+  unit: "pcs",
+  weight: 0,
+  status: "active",
+};
+
+function readUser(): StoredUser | null {
+  try {
+    const raw = localStorage.getItem("user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
 }
 
 export default function Products() {
+  const { t } = useTranslation();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [stockCardProduct, setStockCardProduct] = useState<Product | null>(null);
   const [movementProduct, setMovementProduct] = useState<Product | null>(null);
-  const [formData, setFormData] = useState<Partial<Product>>({
-    name: "",
-    description: "",
-    price: 0,
-    category: "",
-    brand: "",
-    stock: 0,
-    minStock: 0,
-    unit: "pcs",
-    weight: 0,
-    status: "active",
-  });
+  const [formData, setFormData] = useState<Partial<Product>>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [currentUser] = useState<StoredUser | null>(readUser);
 
-  // Get current user from localStorage
-  useEffect(() => {
-    const userData = localStorage.getItem("user");
-    if (userData) {
-      try {
-        setCurrentUser(JSON.parse(userData));
-      } catch (error) {
-        console.error("Error parsing user data:", error);
-      }
-    }
-  }, []);
-
+  // Display only: the server refuses every product write from a non-admin.
   const isAdmin = currentUser?.role === "admin";
+  const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem("token") || ""}` });
 
-  // API Functions
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${serverUrl}/products?includeInactive=true`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
-      });
+      const response = await fetch(`${serverUrl}/products?includeInactive=true`, { headers: authHeaders() });
       if (response.ok) {
         const data = await response.json();
-        setProducts(data);
+        setProducts(Array.isArray(data) ? data : []);
       } else {
-        console.error("Failed to fetch products:", await response.text());
+        toast.error(t("products.toast.loadError"));
       }
     } catch (error) {
       console.error("Error fetching products:", error);
+      toast.error(t("products.toast.loadError"));
     } finally {
       setLoading(false);
     }
   };
+  // Latest fetchProducts for the mount effect below.
+  const fetchProductsRef = useRef(fetchProducts);
+  fetchProductsRef.current = fetchProducts;
+  useEffect(() => { fetchProductsRef.current(); }, []);
+
+  const closeForm = () => {
+    setShowAddModal(false);
+    setShowEditModal(false);
+    setFormData(EMPTY_FORM);
+  };
 
   const createProduct = async (productData: Partial<Product>) => {
+    setSaving(true);
     try {
       const response = await fetch(`${serverUrl}/products`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify(productData),
       });
+      const data = await response.json().catch(() => ({}));
       if (response.ok) {
-        const newProduct = await response.json();
-        setProducts((prev) => [...prev, newProduct]);
-        setShowAddModal(false);
-        resetForm();
-        toast.success("Article ajouté avec succès!");
+        setProducts((previous) => [data, ...previous]);
+        closeForm();
+        toast.success(t("products.toast.created"));
       } else {
-        toast.error("echec de l'ajout de l'Article");
+        toast.error(data?.error || t("products.toast.createError"));
       }
     } catch (error) {
-      console.error("erreur d'ajout de l'Article:", error);
-      toast.error("Error creating product");
+      console.error("Error creating product:", error);
+      toast.error(t("products.toast.createError"));
+    } finally {
+      setSaving(false);
     }
   };
 
   const updateProduct = async (id: string, productData: Partial<Product>, expectedStock?: number) => {
+    setSaving(true);
     try {
       const response = await fetch(`${serverUrl}/products/${id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         // expectedStock = the quantity shown when the form opened: the server
         // refuses the edit if a sale changed the stock in the meantime.
         body: JSON.stringify({ ...productData, expectedStock }),
       });
+      const data = await response.json().catch(() => ({}));
       if (response.ok) {
-        const updatedProduct = await response.json();
-        setProducts((prev) =>
-          prev.map((p) => (p._id === id ? updatedProduct : p))
-        );
-        setShowEditModal(false);
-        resetForm();
-        toast.success("Product updated successfully!");
+        setProducts((previous) => previous.map((product) => (product._id === id ? data : product)));
+        closeForm();
+        toast.success(t("products.toast.updated"));
       } else {
-        const data = await response.json().catch(() => ({}));
-        toast.error(data?.error || "Failed to update product");
+        toast.error(data?.error || t("products.toast.updateError"));
       }
     } catch (error) {
       console.error("Error updating product:", error);
-      toast.error("Error updating product");
+      toast.error(t("products.toast.updateError"));
+    } finally {
+      setSaving(false);
     }
   };
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
-
-  const resetForm = () => {
-    setFormData({
-      name: "",
-      description: "",
-      price: 0,
-      category: "",
-      brand: "",
-      stock: 0,
-      minStock: 0,
-      unit: "pcs",
-      weight: 0,
-      status: "active",
-    });
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
     if (showEditModal && selectedProduct) {
       // Send the quantity only when the administrator changed it; otherwise a
       // sale made while the form was open would look like a conflicting edit.
@@ -172,7 +158,19 @@ export default function Products() {
 
   const openEditModal = (product: Product) => {
     setSelectedProduct(product);
-    setFormData(product);
+    // Prices are never managed here: every selling price is typed at the till.
+    setFormData({
+      ...EMPTY_FORM,
+      name: product.name,
+      description: product.description,
+      category: product.category,
+      brand: product.brand,
+      stock: product.stock,
+      minStock: product.minStock,
+      unit: product.unit,
+      weight: product.weight,
+      status: product.status,
+    });
     setShowEditModal(true);
   };
 
@@ -181,617 +179,262 @@ export default function Products() {
     setShowViewModal(true);
   };
 
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch = product.name
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase());
-    const matchesCategory =
-      !selectedCategory || product.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  // Function to display stock information based on user role
-  const renderStockInfo = (product: Product) => {
-    if (isAdmin) {
-      // Admin sees exact stock numbers
-      return (
-        <span
-          className={`text-sm ${
-            product.stock <= product.minStock
-              ? "text-red-600 font-medium"
-              : "text-gray-900"
-          }`}
-        >
-          {product.stock} {product.unit}
-        </span>
-      );
-    } else {
-      // Staff sees stock status instead of exact numbers
-      if (product.stock === 0) {
-        return (
-          <span className="text-sm text-red-600 font-medium">En rupture</span>
-        );
-      } else if (product.stock <= product.minStock) {
-        return (
-          <span className="text-sm text-orange-600 font-medium">Stock faible</span>
-        );
-      } else {
-        return (
-          <span className="text-sm text-green-600 font-medium">En stock</span>
-        );
-      }
+  const matchesStatus = (product: Product, filter: StatusFilter) => {
+    const health = stockHealth(product);
+    switch (filter) {
+      case "available": return product.status === "active" && health !== "out";
+      case "low": return product.status === "active" && health === "low";
+      case "out": return product.status === "active" && health === "out";
+      case "inactive": return product.status !== "active";
+      default: return true;
     }
   };
 
-  // Function to display stock details in view modal based on user role
-  const renderStockDetails = (product: Product) => {
-    if (isAdmin) {
-      // Admin sees all stock details
-      return (
-        <>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Stock Actuel:</span>
-            <span
-              className={`font-medium ${
-                product.stock <= product.minStock
-                  ? "text-red-600"
-                  : "text-gray-900"
-              }`}
-            >
-              {product.stock} {product.unit}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Stock minimal:</span>
-            <span className="font-medium">
-              {product.minStock} {product.unit}
-            </span>
-          </div>
-        </>
-      );
-    } else {
-      // Staff sees only stock status
-      return (
-        <div className="flex justify-between">
-          <span className="text-gray-600">Statut du stock:</span>
-          {product.stock === 0 ? (
-            <span className="font-medium text-red-600">En rupture</span>
-          ) : product.stock <= product.minStock ? (
-            <span className="font-medium text-orange-600">Stock faible</span>
-          ) : (
-            <span className="font-medium text-green-600">En stock</span>
-          )}
-        </div>
-      );
+  const filteredProducts = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return products.filter((product) =>
+      (!term || product.name.toLowerCase().includes(term) || (product.brand || "").toLowerCase().includes(term))
+      && (!selectedCategory || product.category === selectedCategory)
+      && matchesStatus(product, statusFilter));
+  }, [products, searchTerm, selectedCategory, statusFilter]);
+
+  // Catalogue summary over the loaded list (the server already returned every product).
+  const summary = useMemo(() => {
+    const counts: Record<StatusFilter, number> = { all: products.length, available: 0, low: 0, out: 0, inactive: 0 };
+    for (const product of products) {
+      (["available", "low", "out", "inactive"] as StatusFilter[]).forEach((key) => { if (matchesStatus(product, key)) counts[key] += 1; });
     }
+    return { counts };
+  }, [products]);
+
+  const stockLabel = (product: Product) => {
+    const health = stockHealth(product);
+    if (isAdmin) {
+      return <span className={`num ${health === "ok" ? "" : health === "out" ? "text-loss" : "stock-low"}`}><strong>{formatNumber(product.stock, 3)}</strong> {product.unit}</span>;
+    }
+    // Other roles see availability, not exact quantities (unchanged rule).
+    return health === "out"
+      ? <span className="badge badge-danger">{t("products.stock.out")}</span>
+      : health === "low" ? <span className="badge badge-warning">{t("products.stock.low")}</span>
+        : <span className="badge badge-success">{t("products.stock.in")}</span>;
   };
+
+  const chips: StatusFilter[] = ["all", "available", "low", "out", "inactive"];
 
   return (
-    <div className="page space-y-5">
-      <header className="page-header">
-        <div>
-          <h1 className="page-title">Articles</h1>
-          <p className="page-subtitle">Catalogue, prix et disponibilité des articles.</p>
-        </div>
-        <div className="page-actions">
-          {/* The add/edit dialog is admin-only (unchanged), so is its trigger. */}
-          {isAdmin ? (
-            <button type="button" onClick={() => setShowAddModal(true)} className="btn btn-primary">
-              <Plus aria-hidden="true" />
-              Nouvel article
-            </button>
-          ) : (
-            <span className="badge"><Eye aria-hidden="true" />Consultation</span>
-          )}
-        </div>
-      </header>
+    <div className="page products-page">
+      <PageHeader
+        eyebrow={t("nav.sections.stock")}
+        icon={<Package aria-hidden="true" />}
+        title={t("products.title")}
+        description={t("products.subtitle")}
+        actions={isAdmin ? (
+          <button type="button" onClick={() => { setFormData(EMPTY_FORM); setShowAddModal(true); }} className="btn btn-primary">
+            <Plus aria-hidden="true" />{t("products.add")}
+          </button>
+        ) : (
+          <span className="badge"><Eye aria-hidden="true" />{t("products.readOnly")}</span>
+        )}
+      />
 
-      {/* Filters */}
-      <div className="card p-4">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1">
-            <div className="input-group">
-              <Search aria-hidden="true" />
-              <input aria-label="Rechercher un article"
-                type="search"
-                placeholder="Rechercher un article par nom…"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="input"
-              />
-            </div>
-          </div>
-          <div className="sm:w-64">
-            <CategoriesDropdown
-              selectedCategory={selectedCategory}
-              setSelectedCategory={setSelectedCategory}
-            />
-          </div>
+      <section className="product-kpis" aria-label={t("products.kpi.label")}>
+        <div className="product-kpi">
+          <span className="product-kpi-icon"><Boxes aria-hidden="true" /></span>
+          <span><small>{t("products.kpi.catalogue")}</small><strong>{formatNumber(summary.counts.all, 0)}</strong><em>{t("products.kpi.catalogueDetail", { available: summary.counts.available, inactive: summary.counts.inactive })}</em></span>
+        </div>
+        <button type="button" className={`product-kpi is-button ${summary.counts.low + summary.counts.out ? "is-warning" : ""}`} onClick={() => setStatusFilter(summary.counts.out ? "out" : "low")}>
+          <span className="product-kpi-icon"><TrendingDown aria-hidden="true" /></span>
+          <span><small>{t("products.kpi.attention")}</small><strong>{formatNumber(summary.counts.low + summary.counts.out, 0)}</strong><em>{t("products.kpi.attentionDetail", { low: summary.counts.low, out: summary.counts.out })}</em></span>
+        </button>
+      </section>
+
+      <div className="card product-filters">
+        <div className="input-group product-search">
+          <Search aria-hidden="true" />
+          <input aria-label={t("products.searchLabel")} type="search" placeholder={t("products.searchPlaceholder")}
+            value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="input" />
+        </div>
+        <div className="product-category">
+          <CategoriesDropdown selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} />
+        </div>
+        <div className="chip-row" role="radiogroup" aria-label={t("products.filterLabel")}>
+          {chips.map((chip) => (
+            <button key={chip} type="button" role="radio" aria-checked={statusFilter === chip} className={`filter-chip ${statusFilter === chip ? "is-active" : ""}`} onClick={() => setStatusFilter(chip)}>
+              {t(`products.filters.${chip}`)}<span className="filter-chip-count">{summary.counts[chip]}</span>
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Products Grid */}
-      <section className="card" aria-label="Liste des articles">
+      <section className="card" aria-label={t("products.listLabel")}>
         {loading ? (
-          <LoadingState label="Chargement des articles…" />
+          <LoadingState label={t("products.loading")} />
         ) : filteredProducts.length === 0 ? (
-          <EmptyState title="Aucun article trouvé" icon={<Package aria-hidden="true" />}>
-            Modifiez la recherche ou la catégorie sélectionnée.
-          </EmptyState>
+          <EmptyState title={t("products.emptyTitle")} icon={<Package aria-hidden="true" />}>{t("products.emptyBody")}</EmptyState>
         ) : (
-          <div>
-            <ResponsiveTable className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    #
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Article
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Catégorie
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Stock
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Statut
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredProducts.map((product, idx) => (
-                  <tr key={product._id ?? idx} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {idx + 1}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {product.name}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {product.brand}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {product.category}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {renderStockInfo(product)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`badge ${
-                          product.status === "active"
-                            ? "badge-success"
-                            : "badge-danger"
-                        }`}
-                      >
-                        {getProductStatus(product.status)}
-                      </span>
-                      {product.status === "active" && !isProductSellable(product) && (
-                        <span className="badge badge-danger ml-1" title="0 pièce : retiré automatiquement de la vente">Non vendable</span>
+          <ResponsiveTable className="w-full products-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>{t("products.col.product")}</th>
+                <th>{t("products.col.category")}</th>
+                <th>{t("products.col.stock")}</th>
+                <th>{t("products.col.status")}</th>
+                <th>{t("common.actions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredProducts.map((product, index) => (
+                <tr key={product._id ?? index}>
+                  <td className="text-gray-500 num">{index + 1}</td>
+                  <td>
+                    <strong className="block">{product.name}</strong>
+                    {product.brand && <small className="text-gray-500">{product.brand}</small>}
+                  </td>
+                  <td>{product.category}</td>
+                  <td>{stockLabel(product)}</td>
+                  <td>
+                    <span className={`badge ${product.status === "active" ? "badge-success" : "badge-danger"}`}>{product.status === "active" ? t("common.active") : t("common.inactive")}</span>
+                    {product.status === "active" && !isProductSellable(product) && (
+                      <span className="badge badge-danger ml-1" title={t("products.notSellableHint")}>{t("products.notSellable")}</span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="flex items-center gap-1">
+                      <button type="button" aria-label={t("products.actions.viewAria", { name: product.name })} title={t("common.details")} onClick={() => openViewModal(product)} className="btn btn-ghost btn-sm">
+                        <Eye aria-hidden="true" /><span className="ui-action-label">{t("common.details")}</span>
+                      </button>
+                      {isAdmin && (
+                        <>
+                          <button type="button" aria-label={t("products.actions.cardAria", { name: product.name })} title={t("products.actions.card")} onClick={() => setStockCardProduct(product)} className="btn btn-ghost btn-sm">
+                            <ClipboardList aria-hidden="true" /><span className="ui-action-label">{t("products.actions.card")}</span>
+                          </button>
+                          <button type="button" aria-label={t("products.actions.movementAria", { name: product.name })} title={t("products.actions.movement")} onClick={() => setMovementProduct(product)} className="btn btn-ghost btn-sm">
+                            <ArrowDownUp aria-hidden="true" /><span className="ui-action-label">{t("products.actions.movement")}</span>
+                          </button>
+                          <button type="button" aria-label={t("products.actions.editAria", { name: product.name })} title={t("common.edit")} onClick={() => openEditModal(product)} className="btn btn-ghost btn-sm">
+                            <Edit aria-hidden="true" /><span className="ui-action-label">{t("common.edit")}</span>
+                          </button>
+                        </>
                       )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center gap-2">
-                        <button aria-label={`Voir les détails de ${product.name}`} title="Détails"
-                          onClick={() => openViewModal(product)}
-                          className="text-blue-600 hover:text-blue-900 p-1 rounded"
-                        >
-                          <Eye className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Détails</span>
-                        </button>
-                        {isAdmin && (
-                          <>
-                            <button aria-label={`Fiche de stock de ${product.name}`} title="Fiche de stock"
-                              onClick={() => setStockCardProduct(product)}
-                              className="text-gray-700 hover:text-gray-900 p-1 rounded"
-                            >
-                              <ClipboardList className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Fiche de stock</span>
-                            </button>
-                            <button aria-label={`Mouvement de stock pour ${product.name}`} title="Mouvement de stock"
-                              onClick={() => setMovementProduct(product)}
-                              className="text-gray-700 hover:text-gray-900 p-1 rounded"
-                            >
-                              <ArrowDownUp className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Entrée / correction</span>
-                            </button>
-                            <button aria-label={`Modifier ${product.name}`} title="Modifier"
-                              onClick={() => openEditModal(product)}
-                              className="text-gray-700 hover:text-gray-900 p-1 rounded"
-                            >
-                              <Edit className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Modifier</span>
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </ResponsiveTable>
-          </div>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </ResponsiveTable>
         )}
       </section>
 
-      {/* Add/Edit Product Modal - Only for Admin */}
       {(showAddModal || showEditModal) && isAdmin && (
-        <Dialog label={showEditModal ? "Modifier l'article" : "Nouvel article"} onClose={() => {
-                    setShowAddModal(false);
-                    setShowEditModal(false);
-                    resetForm();
-                  }}>
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  {showEditModal ? "Modifier l'Article" : "Ajouter un Article"}
-                </h2>
-                <button aria-label="Fermer"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setShowEditModal(false);
-                    resetForm();
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-6 h-6" />
-                </button>
+        <Dialog label={showEditModal ? t("products.form.editTitle") : t("products.form.addTitle")} onClose={closeForm}>
+          <div className="dialog-panel product-form-panel">
+            <header className="dialog-head">
+              <div>
+                <h2 className="dialog-title">{showEditModal ? t("products.form.editTitle") : t("products.form.addTitle")}</h2>
+                <p className="dialog-subtitle">{t("products.form.subtitle")}</p>
               </div>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Basic Information */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    Information Basique
-                  </h3>
-
-                  <div>
-                    <label htmlFor="products-field-16985" className="block text-sm font-medium text-gray-700 mb-1">
-                      Nom de l'Article *
-                    </label>
-                    <input id="products-field-16985"
-                      type="text"
-                      required
-                      value={formData.name}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          name: e.target.value,
-                        }))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none focus:border-transparent"
-                    />
+              <button type="button" className="btn btn-ghost btn-icon" aria-label={t("common.close")} onClick={closeForm}><X aria-hidden="true" /></button>
+            </header>
+            <form onSubmit={handleSubmit}>
+              <div className="dialog-body product-form-grid">
+                <fieldset className="form-section">
+                  <legend>{t("products.form.identity")}</legend>
+                  <label className="field">
+                    <span className="field-label">{t("products.form.name")} *</span>
+                    <input className="input" type="text" required value={formData.name} onChange={(event) => setFormData((previous) => ({ ...previous, name: event.target.value }))} />
+                  </label>
+                  <div className="field">
+                    <span className="field-label">{t("products.form.category")} *</span>
+                    <CategoriesDropdown selectedCategory={formData.category || ""} setSelectedCategory={(category) => setFormData((previous) => ({ ...previous, category }))} />
                   </div>
-
-                  <div>
-                    <label htmlFor="products-field-17739" className="block text-sm font-medium text-gray-700 mb-1">
-                      Description
+                  <div className="form-row">
+                    <label className="field">
+                      <span className="field-label">{t("products.form.brand")}</span>
+                      <input className="input" type="text" value={formData.brand} onChange={(event) => setFormData((previous) => ({ ...previous, brand: event.target.value }))} />
                     </label>
-                    <textarea id="products-field-17739"
-                      rows={3}
-                      value={formData.description}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          description: e.target.value,
-                        }))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Categorie *
-                    </label>
-                    <CategoriesDropdown
-                      selectedCategory={formData.category || ""}
-                      setSelectedCategory={(categoryName) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          category: categoryName,
-                        }))
-                      }
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="products-field-19059" className="block text-sm font-medium text-gray-700 mb-1">
-                      Marques
-                    </label>
-                    <input id="products-field-19059"
-                      type="text"
-                      value={formData.brand}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          brand: e.target.value,
-                        }))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="products-field-19778" className="block text-sm font-medium text-gray-700 mb-1">
-                      Statut
-                    </label>
-                    <select id="products-field-19778"
-                      value={formData.status}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          status: e.target.value as "active" | "inactive",
-                        }))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none focus:border-transparent"
-                    >
-                      <option value="active">Actif</option>
-                      <option value="inactive">Inactif</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Pricing & Inventory */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    Prix & Stock
-                  </h3>
-
-                  <div>
-                    <label htmlFor="products-field-20897" className="block text-sm font-medium text-gray-700 mb-1">
-                      Prix par défaut (USD)
-                    </label>
-                    <input id="products-field-20897"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formData.price}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          price: Number.parseFloat(e.target.value) || 0,
-                        }))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none focus:border-transparent"
-                    />
-                    <p className="mt-1 text-xs text-gray-500">
-                      Ce prix préremplit la vente; les utilisateurs autorisés peuvent le modifier.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="products-field-21956" className="block text-sm font-medium text-gray-700 mb-1">
-                        Stock Total
-                      </label>
-                      <input id="products-field-21956"
-                        type="number"
-                        value={formData.stock}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            stock: Number.parseInt(e.target.value) || 0,
-                          }))
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none focus:border-transparent"
-                      />
-                      {showEditModal && (
-                        <p className="mt-1 text-xs text-gray-500">
-                          Une modification ici est enregistrée comme correction. Pour une livraison, utilisez « Entrée / correction ».
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <label htmlFor="products-field-22728" className="block text-sm font-medium text-gray-700 mb-1">
-                        Unité
-                      </label>
-                      <select id="products-field-22728"
-                        value={formData.unit}
-                        disabled={showEditModal}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            unit: e.target.value,
-                          }))
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none focus:border-transparent disabled:bg-gray-100 disabled:text-gray-600"
-                      >
-                        {units.map((unit, idx) => (
-                          <option key={idx} value={unit}>
-                            {unit}
-                          </option>
-                        ))}
+                    <label className="field">
+                      <span className="field-label">{t("products.form.status")}</span>
+                      <select className="input" value={formData.status} onChange={(event) => setFormData((previous) => ({ ...previous, status: event.target.value as "active" | "inactive" }))}>
+                        <option value="active">{t("common.active")}</option>
+                        <option value="inactive">{t("common.inactive")}</option>
                       </select>
-                      {showEditModal && (
-                        <p className="mt-1 text-xs text-gray-500">L'unité reste fixe pour préserver l'historique de la fiche de stock.</p>
-                      )}
-                    </div>
+                    </label>
                   </div>
+                  <label className="field">
+                    <span className="field-label">{t("products.form.description")}</span>
+                    <textarea className="input" rows={2} value={formData.description} onChange={(event) => setFormData((previous) => ({ ...previous, description: event.target.value }))} />
+                  </label>
+                </fieldset>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="products-field-23780" className="block text-sm font-medium text-gray-700 mb-1">
-                        Stock minimum
-                      </label>
-                      <input id="products-field-23780"
-                        type="number"
-                        value={formData.minStock}
-                        onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            minStock: Number.parseInt(e.target.value) || 0,
-                          }))
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none focus:border-transparent"
-                      />
-                    </div>
+                <fieldset className="form-section">
+                  <legend>{t("products.form.stockSection")}</legend>
+                  <div className="form-row">
+                    <label className="field">
+                      <span className="field-label">{t("products.form.stock")}</span>
+                      <input className="input num" type="number" value={formData.stock} onChange={(event) => setFormData((previous) => ({ ...previous, stock: Number.parseInt(event.target.value) || 0 }))} />
+                      {showEditModal && <span className="field-hint">{t("products.form.stockHint")}</span>}
+                    </label>
+                    <label className="field">
+                      <span className="field-label">{t("products.form.unit")}</span>
+                      <select className="input" value={formData.unit} disabled={showEditModal} onChange={(event) => setFormData((previous) => ({ ...previous, unit: event.target.value }))}>
+                        {units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                      </select>
+                      {showEditModal && <span className="field-hint">{t("products.form.unitHint")}</span>}
+                    </label>
                   </div>
-                </div>
+                  <label className="field">
+                    <span className="field-label">{t("products.form.minStock")}</span>
+                    <input className="input num" type="number" value={formData.minStock} onChange={(event) => setFormData((previous) => ({ ...previous, minStock: Number.parseInt(event.target.value) || 0 }))} />
+                    <span className="field-hint">{t("products.form.minStockHint")}</span>
+                  </label>
+                </fieldset>
               </div>
-
-              {/* Form Actions */}
-              <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setShowEditModal(false);
-                    resetForm();
-                  }}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                >
-                  {showEditModal ? "Mettre à jour l'Article" : "Ajouter l'Article"}
-                </button>
-              </div>
+              <footer className="dialog-foot">
+                <button type="button" onClick={closeForm} className="btn btn-secondary">{t("common.cancel")}</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{showEditModal ? t("products.form.update") : t("products.form.create")}</button>
+              </footer>
             </form>
           </div>
         </Dialog>
       )}
 
-      {/* Quick View Modal */}
       {showViewModal && selectedProduct && (
-        <Dialog label="Détails de l'Article" onClose={() => setShowViewModal(false)}>
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Détails de l'Article
-                </h2>
-                <button aria-label="Fermer"
-                  onClick={() => setShowViewModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-6 h-6" />
+        <Dialog label={t("products.view.title")} onClose={() => setShowViewModal(false)}>
+          <div className="dialog-panel product-view-panel">
+            <header className="dialog-head">
+              <div>
+                <h2 className="dialog-title">{selectedProduct.name}</h2>
+                <p className="dialog-subtitle">{[selectedProduct.brand, selectedProduct.category].filter(Boolean).join(" · ")}</p>
+              </div>
+              <button type="button" className="btn btn-ghost btn-icon" aria-label={t("common.close")} onClick={() => setShowViewModal(false)}><X aria-hidden="true" /></button>
+            </header>
+            <div className="dialog-body product-view">
+              {selectedProduct.description && <p className="product-view-desc">{selectedProduct.description}</p>}
+              <dl className="product-facts">
+                <div><dt>{t("products.form.unit")}</dt><dd>{selectedProduct.unit}</dd></div>
+                <div><dt>{t("products.col.status")}</dt><dd>{selectedProduct.status === "active" ? t("common.active") : t("common.inactive")}</dd></div>
+                <div><dt>{t("products.col.stock")}</dt><dd>{stockLabel(selectedProduct)}</dd></div>
+                {isAdmin && <div><dt>{t("products.form.minStock")}</dt><dd className="num">{formatNumber(selectedProduct.minStock, 3)} {selectedProduct.unit}</dd></div>}
+                {selectedProduct.weight > 0 && <div><dt>{t("products.view.weight")}</dt><dd className="num">{formatNumber(selectedProduct.weight)} kg</dd></div>}
+              </dl>
+            </div>
+            {isAdmin && (
+              <footer className="dialog-foot">
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowViewModal(false); setStockCardProduct(selectedProduct); }}>
+                  <ClipboardList aria-hidden="true" />{t("products.actions.card")}
                 </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6">
-              <div className="flex items-start gap-6">
-                <div className="flex-1">
-                  <h3 className="text-2xl font-bold text-gray-900">
-                    {selectedProduct.name}
-                  </h3>
-                  <p className="text-gray-600 mt-1">{selectedProduct.brand}</p>
-                  <p className="text-gray-700 mt-2">
-                    {selectedProduct.description}
-                  </p>
-                  <div className="mt-4 flex items-center gap-4">
-                    {typeof selectedProduct.price === "number" && (
-                      <span className="text-2xl font-bold text-green-600">
-                        ${selectedProduct.price.toFixed(2)}
-                      </span>
-                    )}
-                    <span
-                      className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        selectedProduct.status === "active"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-red-100 text-red-800"
-                      }`}
-                    >
-                      {getProductStatus(selectedProduct.status)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-3">
-                  <h4 className="font-semibold text-gray-900">
-                    Informations sur l'Article
-                  </h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Categorie:</span>
-                      <span className="font-medium">
-                        {selectedProduct.category}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Unité:</span>
-                      <span className="font-medium">
-                        {selectedProduct.unit}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <h4 className="font-semibold text-gray-900">Stock</h4>
-                  <div className="space-y-2 text-sm">
-                    {renderStockDetails(selectedProduct)}
-                  </div>
-                </div>
-              </div>
-
-              {selectedProduct.weight > 0 && (
-                <div className="space-y-3">
-                  <h4 className="font-semibold text-gray-900">
-                    Propriétés physiques
-                  </h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Poids:</span>
-                      <span className="font-medium">
-                        {selectedProduct.weight} kg
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {isAdmin && (
-                <div className="flex justify-end gap-4 pt-6 border-t border-gray-200">
-                  <button
-                    onClick={() => {
-                      setShowViewModal(false);
-                      setStockCardProduct(selectedProduct);
-                    }}
-                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg transition-colors flex items-center gap-2"
-                  >
-                    <ClipboardList className="w-4 h-4" />
-                    Fiche de stock
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowViewModal(false);
-                      openEditModal(selectedProduct);
-                    }}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
-                  >
-                    <Edit className="w-4 h-4" />
-                    Modifier l'Article
-                  </button>
-                </div>
-              )}
-            </div>
+                <button type="button" className="btn btn-primary" onClick={() => { setShowViewModal(false); openEditModal(selectedProduct); }}>
+                  <Edit aria-hidden="true" />{t("products.view.edit")}
+                </button>
+              </footer>
+            )}
           </div>
         </Dialog>
       )}
 
       {stockCardProduct && isAdmin && (
-        <StockCardDialog
-          productId={stockCardProduct._id}
-          productName={stockCardProduct.name}
-          onClose={() => setStockCardProduct(null)}
-        />
+        <StockCardDialog productId={stockCardProduct._id} productName={stockCardProduct.name} onClose={() => setStockCardProduct(null)} />
       )}
 
       {movementProduct && isAdmin && (
@@ -799,9 +442,9 @@ export default function Products() {
           product={movementProduct}
           onClose={() => setMovementProduct(null)}
           onSaved={(updated) => {
-            setProducts((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
+            setProducts((previous) => previous.map((product) => (product._id === updated._id ? updated : product)));
             setMovementProduct(null);
-            toast.success("Mouvement de stock enregistré");
+            toast.success(t("products.toast.movementSaved"));
           }}
         />
       )}

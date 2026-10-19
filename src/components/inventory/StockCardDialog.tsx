@@ -9,6 +9,7 @@ import type { StockCardResponse } from "../../types/inventory";
 import { periodQuery } from "../../utils/dashboardPeriod";
 import { formatDateTime, formatQuantity, requestJson } from "../../utils/inventoryFormat";
 import { productAvailabilityLabel } from "../../utils/productAvailability";
+import { useTranslation } from "react-i18next";
 
 /**
  * Fiche de stock: what happened to the physical quantity of one product.
@@ -20,6 +21,7 @@ export default function StockCardDialog({ productId, productName, onClose }: {
   productName: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [selection, setSelection] = useState<PeriodSelection>(() => initialPeriodSelection("month"));
   const range = usePeriodRange(selection);
   const [card, setCard] = useState<StockCardResponse | null>(null);
@@ -48,14 +50,14 @@ export default function StockCardDialog({ productId, productName, onClose }: {
   const sameRange = card !== null && cardKey === rangeKey;
 
   return (
-    <Dialog label={`Fiche de stock — ${productName}`} onClose={onClose}>
+    <Dialog label={t("inventory.card.dialog", { name: productName })} onClose={onClose}>
       <section className="max-w-4xl stock-card">
         <header className="alerts-dialog-header">
           <div className="min-w-0">
-            <p className="eyebrow"><ClipboardList aria-hidden="true" />Fiche de stock</p>
+            <p className="eyebrow"><ClipboardList aria-hidden="true" />{t("products.actions.card")}</p>
             <h2 className="section-title truncate">{productName}</h2>
           </div>
-          <button type="button" className="btn btn-ghost btn-icon" aria-label="Fermer" onClick={onClose}><X aria-hidden="true" /></button>
+          <button type="button" className="btn btn-ghost btn-icon" aria-label={t("common.close")} onClick={onClose}><X aria-hidden="true" /></button>
         </header>
 
         <div className="alerts-dialog-body">
@@ -64,14 +66,14 @@ export default function StockCardDialog({ productId, productName, onClose }: {
             {product.deleted && (
               <div className="alert alert-info mb-3" role="note">
                 <Info aria-hidden="true" />
-                <span>Cet article a été supprimé du catalogue. Sa fiche historique reste disponible à partir des instantanés du registre.</span>
+                <span>{t("inventory.card.deleted")}</span>
               </div>
             )}
             <dl className="stock-card-facts">
-              <div><dt>Stock actuel</dt><dd className="num">{formatQuantity(product.stock)} {unit}</dd></div>
-              <div><dt>Stock minimum</dt><dd className="num">{product.minStock ? `${formatQuantity(product.minStock)} ${unit}` : "Non défini"}</dd></div>
-              <div><dt>Dernière mise à jour du stock</dt><dd>{card?.summary.lastStockUpdatedAt ? formatDateTime(card.summary.lastStockUpdatedAt) : "Aucune depuis le début du suivi"}</dd></div>
-              <div><dt>Statut</dt><dd>{status && <span className={`badge badge-${status.tone === "neutral" ? "info" : status.tone}`}>{status.label}</span>}</dd></div>
+              <div><dt>{t("inventory.current")}</dt><dd className="num">{formatQuantity(product.stock)} {unit}</dd></div>
+              <div><dt>{t("products.form.minStock")}</dt><dd className="num">{product.minStock ? `${formatQuantity(product.minStock)} ${unit}` : t("inventory.card.notSet")}</dd></div>
+              <div><dt>{t("inventory.card.lastUpdate")}</dt><dd>{card?.summary.lastStockUpdatedAt ? formatDateTime(card.summary.lastStockUpdatedAt) : t("inventory.card.noUpdate")}</dd></div>
+              <div><dt>{t("common.status")}</dt><dd>{status && <span className={`badge badge-${status.tone === "neutral" ? "info" : status.tone}`}>{status.label}</span>}</dd></div>
             </dl>
             </>
           )}
@@ -79,15 +81,15 @@ export default function StockCardDialog({ productId, productName, onClose }: {
           <PeriodPicker value={selection} onChange={setSelection} range={range} />
 
           {error ? (
-            <ErrorState title="Impossible de charger la fiche de stock" action={<button type="button" className="btn btn-secondary" onClick={() => setAttempt((value) => value + 1)}>Réessayer</button>}>{error}</ErrorState>
+            <ErrorState title={t("inventory.card.error")} action={<button type="button" className="btn btn-secondary" onClick={() => setAttempt((value) => value + 1)}>{t("common.retry")}</button>}>{error}</ErrorState>
           ) : !card || !sameRange ? (
-            range ? <LoadingState label="Chargement de la fiche de stock…" /> : null
+            range ? <LoadingState label={t("inventory.card.loading")} /> : null
           ) : (
             <div className={loading ? "is-refreshing" : ""} aria-busy={loading}>
               {card.integrity.consistent === false && (
                 <div className="alert alert-danger mb-3" role="alert">
                   <AlertTriangle aria-hidden="true" />
-                  <span>Écart détecté : le stock enregistré ({formatQuantity(card.summary.currentStock)}) ne correspond pas à la somme des mouvements ({formatQuantity(card.integrity.ledgerStock)}). Le stock a été modifié hors de l'application ; vérifiez-le par un inventaire.</span>
+                  <span>{t("inventory.card.mismatch", { stock: formatQuantity(card.summary.currentStock), ledger: formatQuantity(card.integrity.ledgerStock) })}</span>
                 </div>
               )}
               {!card.coverage.openingKnown && (
@@ -95,8 +97,8 @@ export default function StockCardDialog({ productId, productName, onClose }: {
                   <Info aria-hidden="true" />
                   <span>
                     {card.coverage.baselineAt
-                      ? <>Le suivi de cet article a commencé le <strong>{formatDateTime(card.coverage.baselineAt)}</strong> avec un solde de reprise. Le stock antérieur n'est pas connu avec exactitude.</>
-                      : <>Cet article n'est pas encore couvert par le suivi du stock.</>}
+                      ? t("inventory.card.trackingSince", { date: formatDateTime(card.coverage.baselineAt) })
+                      : t("inventory.card.notTracked")}
                   </span>
                 </div>
               )}
@@ -107,21 +109,21 @@ export default function StockCardDialog({ productId, productName, onClose }: {
                   closing={card.summary.closing}
                   flows={card.summary.flows}
                   unit={unit}
-                  closingLabel={new Date(card.period.end) >= new Date() ? "Stock actuel" : "Stock en fin de période"}
+                  closingLabel={new Date(card.period.end) >= new Date() ? t("inventory.current") : t("inventory.closingPeriod")}
                 />
               ) : (
-                <EmptyState title="Période antérieure au suivi de cet article" icon={<Info aria-hidden="true" />} />
+                <EmptyState title={t("inventory.card.beforeTracking")} icon={<Info aria-hidden="true" />} />
               )}
 
-              <h3 className="section-title mt-5 mb-2">Mouvements</h3>
+              <h3 className="section-title mt-5 mb-2">{t("inventory.card.movements")}</h3>
               {!card.summary.flows ? (
-                <EmptyState title="Aucun mouvement de stock pour cette période." icon={<ClipboardList aria-hidden="true" />} />
+                <EmptyState title={t("inventory.card.noMovement")} icon={<ClipboardList aria-hidden="true" />} />
               ) : (
-                <dl className="stock-card-facts" aria-label="Résumé des mouvements de stock">
-                  <div><dt>Entrées en stock</dt><dd className="num">{formatQuantity(card.summary.flows.entries)} {unit}</dd></div>
-                  <div><dt>Retours</dt><dd className="num">{formatQuantity(card.summary.flows.returns)} {unit}</dd></div>
-                  <div><dt>Sorties</dt><dd className="num">{formatQuantity(card.summary.flows.piecesOut)} {unit}</dd></div>
-                  <div><dt>Solde de reprise</dt><dd className="num">{formatQuantity(card.summary.flows.baseline)} {unit}</dd></div>
+                <dl className="stock-card-facts" aria-label={t("inventory.card.summaryAria")}>
+                  <div><dt>{t("inventory.bridge.restock")}</dt><dd className="num">{formatQuantity(card.summary.flows.entries)} {unit}</dd></div>
+                  <div><dt>{t("inventory.bridge.returns")}</dt><dd className="num">{formatQuantity(card.summary.flows.returns)} {unit}</dd></div>
+                  <div><dt>{t("inventory.bridge.out")}</dt><dd className="num">{formatQuantity(card.summary.flows.piecesOut)} {unit}</dd></div>
+                  <div><dt>{t("inventory.bridge.baseline")}</dt><dd className="num">{formatQuantity(card.summary.flows.baseline)} {unit}</dd></div>
                 </dl>
               )}
             </div>

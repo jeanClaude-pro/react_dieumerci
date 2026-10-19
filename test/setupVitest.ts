@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom/vitest";
+import "../src/i18n";
 
 // jsdom doesn't implement the Media Capture APIs at all. Component tests stub
 // navigator.mediaDevices.getUserMedia per-test, but `instanceof MediaStream`

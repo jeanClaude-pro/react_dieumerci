@@ -19,8 +19,13 @@ import {
 } from "../utils/salePricing";
 import { buildSaleCustomer, isSaleCustomerValid, receiptCustomerName } from "../utils/saleCustomer";
 import { isProductSellable } from "../utils/productAvailability";
+import { useTranslation } from "react-i18next";
+import { formatFC, formatUSD } from "../i18n/format";
+import { activeLocale, tr } from "../i18n/translate";
+import { serverMessage } from "../i18n/serverMessages";
+import { WALK_IN_LABEL } from "../utils/saleCustomer";
 
-const compactFc = (value: number) => `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(value)}FC`;
+const compactFc = (value: number) => `${new Intl.NumberFormat(activeLocale(), { maximumFractionDigits: 0 }).format(value)}FC`;
 const compactDualUnit = (item: CartItem, rate?: number) => {
   const fc = getItemFcUnitPrice(item, rate);
   return `${item.priceUSD.toFixed(2)}$${fc === undefined ? "" : ` / ${compactFc(fc)}`}`;
@@ -92,8 +97,8 @@ async function fetchSellableProducts(): Promise<Product[]> {
     const msg =
       (data as any)?.error ||
       (data as any)?.text ||
-      `Products fetch failed: ${res.status}`;
-    throw new Error(msg);
+      tr("newSale.productsFailed", "Chargement des articles impossible ({{status}})", { status: res.status });
+    throw new Error(serverMessage(msg));
   }
   const list: Product[] = Array.isArray((data as any)?.products)
     ? (data as any).products
@@ -120,7 +125,7 @@ class PrintService {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to print receipt");
+        throw new Error(tr("newSale.printReceiptFailed", "Impression du reçu impossible"));
       }
 
       const result = await response.json();
@@ -146,7 +151,7 @@ class PrintService {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to print stub");
+        throw new Error(tr("newSale.printStubFailed", "Impression de la souche impossible"));
       }
 
       const result = await response.json();
@@ -159,6 +164,7 @@ class PrintService {
 }
 
 export default function NewSale() {
+  const { t } = useTranslation();
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -173,7 +179,8 @@ export default function NewSale() {
     shopAddress: "Av Manono Coin Munama N°39, C. Kenya, Lubumbashi",
     shopNumber: "+243 977 771 421 / +243 853 549 102",
     shopRegistration: "RCCM: 14-A-017885",
-    receiptFooter: "Merci pour votre confiance ! À bientôt.",
+    // Empty = the printed footer uses the translated default.
+    receiptFooter: "",
   });
   const receiptRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -283,7 +290,7 @@ export default function NewSale() {
           loadShopSettings(),
         ]);
       } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Failed to load initial data");
+        if (!cancelled) setError(e?.message || tr("newSale.loadFailed", "Chargement initial impossible"));
       } finally {
         if (!cancelled) setLoadingProducts(false);
       }
@@ -294,7 +301,7 @@ export default function NewSale() {
         const list = await fetchSellableProducts();
         if (!cancelled) setProducts(list);
       } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Failed to load products");
+        if (!cancelled) setError(e?.message || tr("newSale.loadProductsFailed", "Chargement des articles impossible"));
       }
     }
 
@@ -492,11 +499,11 @@ export default function NewSale() {
   // status only (unchanged thresholds).
   const renderStockInfo = (product: Product): { label: string; tone: "success" | "warning" | "danger" } => {
     if (product.stock === 0) {
-      return { label: isAdmin ? `Stock : ${product.stock}` : "En rupture", tone: "danger" };
+      return { label: isAdmin ? t("newSale.stockCount", { count: product.stock }) : t("newSale.stockOut"), tone: "danger" };
     } else if (product.stock <= 5) { // You can adjust this threshold
-      return { label: isAdmin ? `Stock : ${product.stock}` : "Stock faible", tone: "warning" };
+      return { label: isAdmin ? t("newSale.stockCount", { count: product.stock }) : t("newSale.stockLow"), tone: "warning" };
     }
-    return { label: isAdmin ? `Stock : ${product.stock}` : "En stock", tone: "success" };
+    return { label: isAdmin ? t("newSale.stockCount", { count: product.stock }) : t("newSale.inStock"), tone: "success" };
   };
 
   // Available-stock message for the selected article, by role.
@@ -513,17 +520,17 @@ export default function NewSale() {
       
       return (
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600 num" aria-live="polite">
-          <span>Stock disponible : <strong className="text-gray-900">{product.stock}</strong></span>
+          <span>{t("newSale.available")} <strong className="text-gray-900">{product.stock}</strong></span>
           {currentCartQuantity > 0 && (
-            <span className="text-blue-700">Déjà dans le panier : {currentCartQuantity}</span>
+            <span className="text-blue-700">{t("newSale.alreadyInCart", { count: currentCartQuantity })}</span>
           )}
           {quantity > 0 && (
             <span className={`inline-flex items-center gap-1 ${canAddToCart ? "text-green-700" : "text-red-700"}`}>
               {canAddToCart ? <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> : <XCircle className="w-4 h-4" aria-hidden="true" />}
-              Stock restant après vente :{" "}
+              {t("newSale.remainingAfter")}{" "}
               {availableStock - quantity >= 0
                 ? availableStock - quantity
-                : "pas assez de stock"}
+                : t("newSale.notEnough")}
             </span>
           )}
         </div>
@@ -532,14 +539,14 @@ export default function NewSale() {
       // Staff sees status messages
       const status =
         product.stock === 0
-          ? { tone: "danger", text: "En rupture de stock" }
+          ? { tone: "danger", text: t("newSale.outOfStock") }
           : product.stock <= 5
-          ? { tone: "warning", text: "Stock faible" }
+          ? { tone: "warning", text: t("newSale.stockLow") }
           : quantity > 0 && !canAddToCart
-          ? { tone: "danger", text: "Quantité demandée non disponible" }
+          ? { tone: "danger", text: t("newSale.qtyUnavailable") }
           : quantity > 0
-          ? { tone: "success", text: "Stock suffisant" }
-          : { tone: "success", text: "En stock" };
+          ? { tone: "success", text: t("newSale.stockEnough") }
+          : { tone: "success", text: t("newSale.inStock") };
       const Icon = status.tone === "success" ? CheckCircle2 : status.tone === "warning" ? AlertTriangle : XCircle;
       return (
         <span className={`badge badge-${status.tone}`} aria-live="polite">
@@ -552,23 +559,23 @@ export default function NewSale() {
   function handleAddToCart() {
     // Comprehensive validation
     if (!product) {
-      setError("Veuillez sélectionner un produit");
+      setError(t("newSale.selectProduct"));
       return;
     }
 
     if (quantity <= 0) {
-      setError("La quantité doit être supérieure à zéro");
+      setError(t("newSale.qtyPositive"));
       return;
     }
 
     if (!currentPrice) {
-      setError("Le prix unitaire doit être supérieur à zéro");
+      setError(t("newSale.pricePositive"));
       return;
     }
 
     // Check if adding this quantity would result in negative stock
     if (!checkStockAfterAdd(product._id, quantity)) {
-      setError("Stock insuffisant pour ajouter cette quantité au panier");
+      setError(t("newSale.insufficient"));
       return;
     }
 
@@ -641,7 +648,7 @@ export default function NewSale() {
     const nextQuantity = item.quantity + delta;
     if (nextQuantity < 1) return;
     if (delta > 0 && !checkStockAfterAdd(item.productId, delta)) {
-      setError("Stock insuffisant pour ajouter cette quantité au panier");
+      setError(t("newSale.insufficient"));
       return;
     }
     setError(null);
@@ -667,7 +674,7 @@ export default function NewSale() {
       printWindow.document.write(`
 <html>
   <head>
-    <title>Sale Receipt</title>
+    <title>${t("newSale.receipt.title")}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
       * {
@@ -956,31 +963,31 @@ export default function NewSale() {
       <div class="header">
         <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
         <div class="shop-details"><strong>${receiptData.shopAddress}</strong></div>
-        <div class="shop-details">TEL: <strong>${receiptData.shopNumber}</strong></div>
+        <div class="shop-details">${t("receipt.tel")}: <strong>${receiptData.shopNumber}</strong></div>
         <div class="shop-details"><strong>${receiptData.shopRegistration}</strong></div>
       </div>
       
       <div class="section-divider"></div>
       
       <div class="receipt-info">
-        <div class="shop-details">DATE: <strong>${receiptData.date}</strong></div>
-        <div class="shop-details">RECU #: <strong>${receiptData.receiptNumber}</strong></div>
+        <div class="shop-details">${t("receipt.date")}: <strong>${receiptData.date}</strong></div>
+        <div class="shop-details">${t("newSale.receipt.receiptNo")}: <strong>${receiptData.receiptNumber}</strong></div>
       </div>
       
       <div class="customer-info">
-        <div class="customer-field">CLIENT: <strong>${receiptData.customerName.toUpperCase()}</strong></div>
+        <div class="customer-field">${t("newSale.receipt.customer")}: <strong>${(receiptData.customerName === WALK_IN_LABEL ? t("newSale.walkInName") : receiptData.customerName).toUpperCase()}</strong></div>
         ${
           receiptData.customerPhone
-            ? `<div class="customer-field">TELEPHONE: <strong>${receiptData.customerPhone}</strong></div>`
+            ? `<div class="customer-field">${t("newSale.receipt.phone")}: <strong>${receiptData.customerPhone}</strong></div>`
             : ""
         }
       </div>
 
-      <div class="receipt-title">ARTICLES ACHETES</div>
+      <div class="receipt-title">${t("newSale.receipt.itemsBought")}</div>
       
       <div class="items-col-header">
-        <span class="col-article">Article</span>
-        <span class="col-qte">Qte</span>
+        <span class="col-article">${t("newSale.receipt.item")}</span>
+        <span class="col-qte">${t("newSale.receipt.qty")}</span>
       </div>
       
       <div class="items-section">
@@ -999,29 +1006,29 @@ export default function NewSale() {
       
       <div class="total-section">
         <div class="total-row">
-          <div><strong>SOUS-TOTAL:</strong></div>
+          <div><strong>${t("newSale.receipt.subtotal")}:</strong></div>
           <div><strong>${compactDualSaleTotal(receiptData.total, receiptData.items, receiptData.exchangeRate)}</strong></div>
         </div>
         <div class="total-row">
-          <div><strong>TOTAL:</strong></div>
+          <div><strong>${t("newSale.receipt.total")}:</strong></div>
           <div><strong>${compactDualSaleTotal(receiptData.total, receiptData.items, receiptData.exchangeRate)}</strong></div>
         </div>
         <div class="total-row">
-          <div><strong>PAIEMENT:</strong></div>
+          <div><strong>${t("receipt.payment")}:</strong></div>
           <div class="payment-method"><strong>${receiptData.paymentMethod.toUpperCase()}</strong></div>
         </div>
       </div>
       
       <div class="sales-person">
-        Agent: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
+        ${t("newSale.receipt.agent")}: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
       </div>
 
-      ${receiptData.qrDataUrl ? `<div class="receipt-qr"><img src="${receiptData.qrDataUrl}" alt="QR de contrôle du paiement" /><div class="qr-promo"><div><strong>UN SYSTÈME POUR VOTRE BOUTIQUE OU ENTREPRISE ?</strong></div><div>Gestion, ventes, stock & bien plus</div><div><strong>WhatsApp : +243 844 311 550</strong></div></div></div>` : ""}
+      ${receiptData.qrDataUrl ? `<div class="receipt-qr"><img src="${receiptData.qrDataUrl}" alt="${t("newSale.receipt.qrAlt")}" /><div class="qr-promo"><div><strong>${t("newSale.receipt.promoTitle")}</strong></div><div>${t("newSale.receipt.promoBody")}</div><div><strong>WhatsApp : +243 844 311 550</strong></div></div></div>` : ""}
       
       <div class="footer">
-        <div class="thank-you"><strong>${receiptData.receiptFooter || "MERCI POUR VOTRE ACHAT !"}</strong></div>
-        <div class="warning"><strong>Article non echangeable</strong></div>
-        <div class="warning"><strong>Non remboursable</strong></div>
+        <div class="thank-you"><strong>${receiptData.receiptFooter || t("newSale.receipt.thanks")}</strong></div>
+        <div class="warning"><strong>${t("newSale.receipt.noExchange")}</strong></div>
+        <div class="warning"><strong>${t("newSale.receipt.noRefund")}</strong></div>
       </div>
 
       <!-- PAPER CUT INDICATOR -->
@@ -1056,7 +1063,7 @@ export default function NewSale() {
       printWindow.document.write(`
 <html>
   <head>
-    <title>Sale Stub</title>
+    <title>${t("newSale.receipt.stubTitle")}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
       * {
@@ -1355,34 +1362,34 @@ export default function NewSale() {
       <div class="header">
         <div class="shop-name"><strong>${receiptData.shopName}</strong></div>
         <div class="shop-details"><strong>${receiptData.shopAddress}</strong></div>
-        <div class="shop-details">TEL: <strong>${receiptData.shopNumber}</strong></div>
+        <div class="shop-details">${t("receipt.tel")}: <strong>${receiptData.shopNumber}</strong></div>
       </div>
       
       <div class="section-divider"></div>
       
       <div class="receipt-info">
-        <div class="shop-details">DATE: <strong>${receiptData.date}</strong></div>
-        <div class="shop-details">RECU #: <strong>${receiptData.receiptNumber}</strong></div>
+        <div class="shop-details">${t("receipt.date")}: <strong>${receiptData.date}</strong></div>
+        <div class="shop-details">${t("newSale.receipt.receiptNo")}: <strong>${receiptData.receiptNumber}</strong></div>
       </div>
       
       <div class="stub-number">
-        SOUCHE N°<strong>${receiptData.stubNumber}</strong>
+        ${t("newSale.receipt.stubNo")}<strong>${receiptData.stubNumber}</strong>
       </div>
       
       <div class="customer-info">
-        <div class="customer-field">CLIENT: <strong>${receiptData.customerName.toUpperCase()}</strong></div>
+        <div class="customer-field">${t("newSale.receipt.customer")}: <strong>${(receiptData.customerName === WALK_IN_LABEL ? t("newSale.walkInName") : receiptData.customerName).toUpperCase()}</strong></div>
         ${
           receiptData.customerPhone
-            ? `<div class="customer-field">TELEPHONE: <strong>${receiptData.customerPhone}</strong></div>`
+            ? `<div class="customer-field">${t("newSale.receipt.phone")}: <strong>${receiptData.customerPhone}</strong></div>`
             : ""
         }
       </div>
 
-      <div class="receipt-title">ARTICLES VENDUS</div>
+      <div class="receipt-title">${t("newSale.receipt.itemsSold")}</div>
       
       <div class="items-col-header">
-        <span class="col-article">Article</span>
-        <span class="col-qte">Qte</span>
+        <span class="col-article">${t("newSale.receipt.item")}</span>
+        <span class="col-qte">${t("newSale.receipt.qty")}</span>
       </div>
       
       <div class="items-section">
@@ -1401,27 +1408,27 @@ export default function NewSale() {
       
       <div class="total-section">
         <div class="total-row">
-          <div><strong>TOTAL VENTE:</strong></div>
+          <div><strong>${t("newSale.receipt.saleTotal")}:</strong></div>
           <div><strong>${compactDualSaleTotal(receiptData.total, receiptData.items, receiptData.exchangeRate)}</strong></div>
         </div>
         <div class="total-row">
-          <div><strong>PAIEMENT:</strong></div>
+          <div><strong>${t("receipt.payment")}:</strong></div>
           <div class="payment-method"><strong>${receiptData.paymentMethod.toUpperCase()}</strong></div>
         </div>
       </div>
       
       <div class="sales-person">
-        Agent: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
+        ${t("newSale.receipt.agent")}: <strong>${receiptData.salesPerson.toUpperCase()}</strong>
       </div>
 
-      ${receiptData.qrDataUrl ? `<div class="receipt-qr"><img src="${receiptData.qrDataUrl}" alt="QR de contrôle du paiement" /><div class="qr-promo"><div><strong>UN SYSTÈME POUR VOTRE BOUTIQUE OU ENTREPRISE ?</strong></div><div>Gestion, ventes, stock & bien plus</div><div><strong>WhatsApp : +243 844 311 550</strong></div></div></div>` : ""}
+      ${receiptData.qrDataUrl ? `<div class="receipt-qr"><img src="${receiptData.qrDataUrl}" alt="${t("newSale.receipt.qrAlt")}" /><div class="qr-promo"><div><strong>${t("newSale.receipt.promoTitle")}</strong></div><div>${t("newSale.receipt.promoBody")}</div><div><strong>WhatsApp : +243 844 311 550</strong></div></div></div>` : ""}
       
       <div class="stub-footer">
-        <div class="thank-you"><strong>SOUCHE DE CAISSE</strong></div>
+        <div class="thank-you"><strong>${t("newSale.receipt.cashStub")}</strong></div>
         <div class="warning"><strong>${receiptData.shopName}</strong></div>
-        <div class="warning"><strong>Conserver cette souche</strong></div>
-        <div class="warning">Recu #: <strong>${receiptData.receiptNumber}</strong></div>
-        <div class="warning">Date: <strong>${receiptData.date}</strong></div>
+        <div class="warning"><strong>${t("receipt.keepStub")}</strong></div>
+        <div class="warning">${t("newSale.receipt.receiptNo")}: <strong>${receiptData.receiptNumber}</strong></div>
+        <div class="warning">${t("receipt.date")}: <strong>${receiptData.date}</strong></div>
       </div>
 
       <!-- PAPER CUT INDICATOR -->
@@ -1459,6 +1466,9 @@ export default function NewSale() {
       printStubOnly();
     }, 2000);
   };
+  // Latest printSequentially for the effect below (its trigger list stays unchanged).
+  const printSequentiallyRef = useRef(printSequentially);
+  printSequentiallyRef.current = printSequentially;
 
   // ESC/POS printing function
   const printWithESCPOS = async (receiptData: any) => {
@@ -1480,6 +1490,9 @@ export default function NewSale() {
       return false;
     }
   };
+  // Latest printWithESCPOS for the effect below (its trigger list stays unchanged).
+  const printWithESCPOSRef = useRef(printWithESCPOS);
+  printWithESCPOSRef.current = printWithESCPOS;
 
   useEffect(() => {
     if (receiptData) {
@@ -1487,17 +1500,17 @@ export default function NewSale() {
       const timer = setTimeout(async () => {
         try {
           // Try ESC/POS printing first, fallback to sequential browser printing
-          await printWithESCPOS(receiptData);
+          await printWithESCPOSRef.current(receiptData);
         } catch (error) {
           console.error("Printing failed:", error);
           // Last resort: try sequential browser printing directly
-          printSequentially();
+          printSequentiallyRef.current();
         }
       }, 500);
 
       return () => clearTimeout(timer);
     }
-  }, [receiptData]);
+  }, [receiptData, printSequentiallyRef]);
 
   async function handleSale(e: React.FormEvent) {
     e.preventDefault();
@@ -1544,12 +1557,12 @@ export default function NewSale() {
         const msg =
           (data as any)?.error ||
           (data as any)?.text ||
-          `Sale failed (${res.status})`;
-        throw new Error(msg);
+          t("newSale.failedStatus", { status: res.status });
+        throw new Error(serverMessage(msg));
       }
 
       if (!data.receiptToken) {
-        throw new Error("Le serveur n'a pas retourné le QR sécurisé du reçu");
+        throw new Error(t("newSale.noQr"));
       }
       const qrDataUrl = await QRCode.toDataURL(data.receiptToken, {
         errorCorrectionLevel: "M",
@@ -1603,11 +1616,9 @@ export default function NewSale() {
         console.warn("Could not refresh products after sale:", reloadError);
       });
 
-      setMessage(
-        "Vente effectuée avec succès. Impression du reçu et de la souche…"
-      );
+      setMessage(t("newSale.success"));
     } catch (e: any) {
-      setError(e?.message || "La vente n'a pas pu être effectuée");
+      setError(e?.message || t("newSale.failed"));
       // A refusal for stock or availability means the list is stale.
       fetchSellableProducts().then(setProducts).catch(() => undefined);
     } finally {
@@ -1615,19 +1626,8 @@ export default function NewSale() {
     }
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
-
-  const formatFc = (amount: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount) + ' FC';
-  };
+  const formatCurrency = (amount: number) => formatUSD(amount);
+  const formatFc = (amount: number) => formatFC(amount);
 
   // Check if the product can be added to cart (comprehensive validation)
   const canAddToCart =
@@ -1641,9 +1641,9 @@ export default function NewSale() {
   const hasFcEntries = cartOriginalTotals.FC > 0;
   const visibleResults = showSearchResults ? filteredProducts : [];
   const checkoutHint = cart.length === 0
-    ? "Ajoutez au moins un article pour valider."
+    ? t("newSale.hintAddItem")
     : !isFormValid
-    ? "Nom et téléphone du client enregistré requis."
+    ? t("newSale.hintCustomer")
     : null;
 
   const priceFormat = (item: CartItem) => item.enteredCurrency === "FC"
@@ -1662,15 +1662,17 @@ export default function NewSale() {
       aria-describedby={checkoutHint ? "pos-checkout-hint" : undefined}
     >
       {submitting ? <Loader2 className="animate-spin" aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
-      {submitting ? "Enregistrement…" : "Valider la vente"}
+      {submitting ? t("common.saving") : t("newSale.submit")}
     </button>
   );
 
   return (
     <div className="page page-wide">
       <PageHeader
-        title="Nouvelle vente"
-        description="Client, articles, panier puis encaissement."
+        eyebrow={t("nav.sections.cash")}
+        icon={<ShoppingCart aria-hidden="true" />}
+        title={t("newSale.title")}
+        description={t("newSale.subtitle")}
         actions={<ExchangeRateChip loading={loadingRate} rate={exchangeRate} />}
       />
 
@@ -1690,13 +1692,13 @@ export default function NewSale() {
         {/* 1 — Customer */}
         <section className="card pos-area-customer" aria-labelledby="pos-customer-title">
           <div className="card-header">
-            <h2 id="pos-customer-title" className="section-title"><span className="pos-step" aria-hidden="true">1</span>Client</h2>
-            <div className="segmented" role="group" aria-label="Type de client">
+            <h2 id="pos-customer-title" className="section-title"><span className="pos-step" aria-hidden="true">1</span>{t("newSale.customer")}</h2>
+            <div className="segmented" role="group" aria-label={t("newSale.customerType")}>
               <button type="button" aria-pressed={form.isWalkIn} onClick={() => setCustomerType(true)}>
-                <UserRound aria-hidden="true" />De passage
+                <UserRound aria-hidden="true" />{t("newSale.walkIn")}
               </button>
               <button type="button" aria-pressed={!form.isWalkIn} onClick={() => setCustomerType(false)}>
-                <IdCard aria-hidden="true" />Enregistré
+                <IdCard aria-hidden="true" />{t("newSale.registered")}
               </button>
             </div>
           </div>
@@ -1704,7 +1706,7 @@ export default function NewSale() {
             {form.isWalkIn ? (
               <div className="field">
                 <label htmlFor="pos-walkin-name" className="field-label">
-                  Nom du client <span className="opt">(facultatif)</span>
+                  {t("newSale.customerName")} <span className="opt">{t("common.optional")}</span>
                 </label>
                 <input
                   id="pos-walkin-name"
@@ -1712,21 +1714,21 @@ export default function NewSale() {
                   name="customerName"
                   value={form.customerName}
                   onChange={handleChange}
-                  placeholder="Client de passage"
+                  placeholder={t("newSale.walkInName")}
                   autoComplete="off"
                   maxLength={80}
                   className="input"
                   aria-describedby="pos-walkin-hint"
                 />
                 <p id="pos-walkin-hint" className="field-hint">
-                  Aucun téléphone requis. Le nom figure sur le reçu ; aucune fiche client n'est créée.
+                  {t("newSale.walkInHint")}
                 </p>
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 pos-customer-fields">
                 <div className="field">
                   <label htmlFor="pos-customer-name" className="field-label">
-                    Nom du client <span className="req" aria-hidden="true">*</span>
+                    {t("newSale.customerName")} <span className="req" aria-hidden="true">*</span>
                   </label>
                   <input
                     id="pos-customer-name"
@@ -1734,7 +1736,7 @@ export default function NewSale() {
                     name="customerName"
                     value={form.customerName}
                     onChange={handleChange}
-                    placeholder="Nom complet"
+                    placeholder={t("sortie.recipientNamePlaceholder")}
                     autoComplete="off"
                     className="input"
                     required
@@ -1743,7 +1745,7 @@ export default function NewSale() {
                 </div>
                 <div className="field">
                   <label htmlFor="pos-customer-phone" className="field-label">
-                    Téléphone <span className="req" aria-hidden="true">*</span>
+                    {t("entryHistory.phone")} <span className="req" aria-hidden="true">*</span>
                   </label>
                   <input
                     id="pos-customer-phone"
@@ -1767,12 +1769,12 @@ export default function NewSale() {
         {/* 2 — Articles */}
         <section className="card pos-area-products" aria-labelledby="pos-products-title">
           <div className="card-header">
-            <h2 id="pos-products-title" className="section-title"><span className="pos-step" aria-hidden="true">2</span>Ajouter un article</h2>
-            {loadingProducts && <span className="badge"><Loader2 className="animate-spin" aria-hidden="true" />Chargement…</span>}
+            <h2 id="pos-products-title" className="section-title"><span className="pos-step" aria-hidden="true">2</span>{t("newSale.addItem")}</h2>
+            {loadingProducts && <span className="badge"><Loader2 className="animate-spin" aria-hidden="true" />{t("newSale.loading")}</span>}
           </div>
           <div className="card-body grid gap-4">
             <div className="field relative" ref={searchRef}>
-              <label htmlFor="pos-search" className="field-label">Article</label>
+              <label htmlFor="pos-search" className="field-label">{t("newSale.item")}</label>
               <div className="input-group">
                 <Search aria-hidden="true" />
                 <input
@@ -1787,7 +1789,7 @@ export default function NewSale() {
                   onChange={handleSearchChange}
                   onFocus={() => setShowSearchResults(true)}
                   onKeyDown={handleSearchKeyDown}
-                  placeholder={loadingProducts ? "Chargement des articles…" : "Nom ou référence de l'article"}
+                  placeholder={loadingProducts ? t("newSale.loadingItems") : t("newSale.searchPlaceholder")}
                   autoComplete="off"
                   className="input"
                   disabled={loadingProducts || products.length === 0}
@@ -1795,7 +1797,7 @@ export default function NewSale() {
               </div>
 
               {visibleResults.length > 0 && (
-                <div id="pos-search-results" role="listbox" aria-label="Articles trouvés" className="pos-results">
+                <div id="pos-search-results" role="listbox" aria-label={t("newSale.results")} className="pos-results">
                   {visibleResults.map((result, index) => {
                     const stock = renderStockInfo(result);
                     return (
@@ -1811,7 +1813,7 @@ export default function NewSale() {
                       >
                         <span className="min-w-0">
                           <strong className="truncate">{result.name}</strong>
-                          {result.sku && <small>Réf. {result.sku}</small>}
+                          {result.sku && <small>{t("newSale.ref", { sku: result.sku })}</small>}
                         </span>
                         <span className={`badge badge-${stock.tone} num`}>{stock.label}</span>
                       </button>
@@ -1822,13 +1824,13 @@ export default function NewSale() {
 
               {showSearchResults && searchTerm && filteredProducts.length === 0 && (
                 <div className="pos-results" role="status">
-                  <p className="px-3 py-4 text-center text-sm text-gray-500">Aucun article ne correspond à « {searchTerm} ».</p>
+                  <p className="px-3 py-4 text-center text-sm text-gray-500">{t("newSale.noMatch", { term: searchTerm })}</p>
                 </div>
               )}
             </div>
 
             {!loadingProducts && products.length === 0 && (
-              <div className="alert alert-warning"><PackageX aria-hidden="true" /><span>Aucun article disponible à la vente pour le moment.</span></div>
+              <div className="alert alert-warning"><PackageX aria-hidden="true" /><span>{t("newSale.noProducts")}</span></div>
             )}
 
             {product && (
@@ -1843,7 +1845,7 @@ export default function NewSale() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="field">
-                <label htmlFor="pos-quantity" className="field-label">Quantité</label>
+                <label htmlFor="pos-quantity" className="field-label">{t("newSale.quantity")}</label>
                 <input
                   id="pos-quantity"
                   type="number"
@@ -1860,9 +1862,9 @@ export default function NewSale() {
               <div className="field">
                 <div className="flex items-center justify-between gap-2">
                   <label htmlFor="pos-price" className="field-label">
-                    Prix unitaire <span className="sr-only">en {form.currencyMode === "usd" ? "USD" : "FC"}</span>
+                    {t("newSale.unitPrice")} <span className="sr-only">{t("newSale.inCurrency", { currency: form.currencyMode === "usd" ? "USD" : "FC" })}</span>
                   </label>
-                  <div className="segmented pos-currency" role="group" aria-label="Devise de saisie du prix">
+                  <div className="segmented pos-currency" role="group" aria-label={t("newSale.priceCurrency")}>
                     <button type="button" aria-pressed={form.currencyMode === "usd"} onClick={() => form.currencyMode !== "usd" && toggleCurrencyMode()}>USD</button>
                     <button type="button" aria-pressed={form.currencyMode === "fc"} onClick={() => form.currencyMode !== "fc" && toggleCurrencyMode()}>FC</button>
                   </div>
@@ -1877,7 +1879,7 @@ export default function NewSale() {
                     value={form.unitPrice}
                     onChange={(e) => canEditPrice && handleUsdPriceChange(e.target.value)}
                     readOnly={!canEditPrice}
-                    placeholder={product?.price ? `ex : ${product.price}` : "Prix en USD"}
+                    placeholder={product?.price ? t("newSale.example", { value: product.price }) : t("newSale.priceUsd")}
                     className="input num"
                     min={0.01}
                     aria-describedby="pos-price-hint"
@@ -1891,14 +1893,14 @@ export default function NewSale() {
                     value={form.priceInFC}
                     onChange={(e) => canEditPrice && handleFcPriceChange(e.target.value)}
                     readOnly={!canEditPrice}
-                    placeholder="Prix en FC"
+                    placeholder={t("newSale.priceFc")}
                     className="input num"
                     min={1}
                     aria-describedby="pos-price-hint"
                   />
                 )}
                 <p id="pos-price-hint" className="field-hint num flex flex-wrap gap-x-3 gap-y-1">
-                  {!canEditPrice && <span className="inline-flex items-center gap-1 text-amber-700"><Lock className="w-3 h-3" aria-hidden="true" />Prix verrouillé (permission requise)</span>}
+                  {!canEditPrice && <span className="inline-flex items-center gap-1 text-amber-700"><Lock className="w-3 h-3" aria-hidden="true" />{t("newSale.priceLocked")}</span>}
                   {form.unitPrice && form.currencyMode === "usd" && exchangeRate && (
                     <>≈ {formatFc(parseFloat(form.unitPrice) * exchangeRate.rate)}</>
                   )}
@@ -1916,7 +1918,7 @@ export default function NewSale() {
               className="btn btn-primary btn-lg w-full sm:w-auto sm:justify-self-start"
             >
               <Plus aria-hidden="true" />
-              Ajouter au panier
+              {t("newSale.addToCart")}
             </button>
           </div>
         </section>
@@ -1927,16 +1929,16 @@ export default function NewSale() {
         {/* 3 — Cart */}
         <section className="card pos-area-cart" aria-labelledby="pos-cart-title">
           <div className="card-header">
-            <h2 id="pos-cart-title" className="section-title"><span className="pos-step" aria-hidden="true">3</span>Panier</h2>
-            <span className="badge num" aria-live="polite">{cartCount} pièce{cartCount > 1 ? "s" : ""}</span>
+            <h2 id="pos-cart-title" className="section-title"><span className="pos-step" aria-hidden="true">3</span>{t("newSale.cart")}</h2>
+            <span className="badge num" aria-live="polite">{t("newSale.pieces", { count: cartCount })}</span>
           </div>
           <div className="card-body">
             {cart.length === 0 ? (
-              <EmptyState title="Le panier est vide" icon={<ShoppingCart aria-hidden="true" />}>
-                Recherchez un article, indiquez la quantité puis ajoutez-le au panier.
+              <EmptyState title={t("newSale.cartEmpty")} icon={<ShoppingCart aria-hidden="true" />}>
+                {t("newSale.cartEmptyHint")}
               </EmptyState>
             ) : (
-              <ul className="pos-cart-list" aria-label="Articles du panier">
+              <ul className="pos-cart-list" aria-label={t("newSale.cartItems")}>
                 {cart.map((item, index) => {
                   const unit = priceFormat(item);
                   const line = lineFormat(item);
@@ -1944,23 +1946,23 @@ export default function NewSale() {
                     <li key={index} className="pos-cart-item">
                       <div className="min-w-0">
                         <h3>{item.name}</h3>
-                        <div className="line-meta">{unit.main}{unit.alt && <> · {unit.alt}</>} / pièce</div>
+                        <div className="line-meta">{unit.main}{unit.alt && <> · {unit.alt}</>} {t("newSale.perPiece")}</div>
                       </div>
                       <div className="line-total">
                         {line.main}
                         {line.alt && <div className="line-meta font-normal">{line.alt}</div>}
                       </div>
-                      <div className="pos-qty" role="group" aria-label={`Quantité de ${item.name}`}>
-                        <button type="button" onClick={() => changeCartQuantity(index, -1)} disabled={item.quantity <= 1} aria-label={`Retirer une pièce de ${item.name}`}>
+                      <div className="pos-qty" role="group" aria-label={t("newSale.qtyOf", { name: item.name })}>
+                        <button type="button" onClick={() => changeCartQuantity(index, -1)} disabled={item.quantity <= 1} aria-label={t("newSale.removeOne", { name: item.name })}>
                           <Minus aria-hidden="true" />
                         </button>
                         <output aria-live="polite">{item.quantity}</output>
-                        <button type="button" onClick={() => changeCartQuantity(index, 1)} aria-label={`Ajouter une pièce de ${item.name}`}>
+                        <button type="button" onClick={() => changeCartQuantity(index, 1)} aria-label={t("newSale.addOne", { name: item.name })}>
                           <Plus aria-hidden="true" />
                         </button>
                       </div>
-                      <button type="button" onClick={() => removeFromCart(index)} className="btn btn-ghost btn-sm justify-self-end text-red-700" aria-label={`Enlever ${item.name} du panier`}>
-                        <Trash2 aria-hidden="true" />Enlever
+                      <button type="button" onClick={() => removeFromCart(index)} className="btn btn-ghost btn-sm justify-self-end text-red-700" aria-label={t("newSale.removeItem", { name: item.name })}>
+                        <Trash2 aria-hidden="true" />{t("newSale.remove")}
                       </button>
                     </li>
                   );
@@ -1973,11 +1975,11 @@ export default function NewSale() {
         {/* 4 — Payment & validation */}
         <section className="card pos-area-payment" aria-labelledby="pos-payment-title">
           <div className="card-header">
-            <h2 id="pos-payment-title" className="section-title"><span className="pos-step" aria-hidden="true">4</span>Encaissement</h2>
+            <h2 id="pos-payment-title" className="section-title"><span className="pos-step" aria-hidden="true">4</span>{t("newSale.checkout")}</h2>
           </div>
           <div className="card-body grid gap-4">
             <div className="field">
-              <label htmlFor="pos-payment-method" className="field-label">Méthode de paiement</label>
+              <label htmlFor="pos-payment-method" className="field-label">{t("sortie.paymentMethod")}</label>
               <select
                 id="pos-payment-method"
                 name="paymentMethod"
@@ -1986,24 +1988,24 @@ export default function NewSale() {
                 className="input"
                 required
               >
-                <option value="cash">Cash</option>
-                <option value="mpesa">M-Pesa ou Airtel Money (Transfert)</option>
-                <option value="bank">Transfert Bank</option>
-                <option value="card">Carte Visa</option>
-                <option value="other">Autres</option>
+                <option value="cash">{t("newSale.pay.cash")}</option>
+                <option value="mpesa">{t("newSale.pay.mpesa")}</option>
+                <option value="bank">{t("newSale.pay.bank")}</option>
+                <option value="card">{t("newSale.pay.card")}</option>
+                <option value="other">{t("newSale.pay.other")}</option>
               </select>
             </div>
 
             <div className="pos-total" aria-live="polite">
               {hasFcEntries && cartOriginalTotals.USD > 0 && (
-                <div className="pos-total-row"><span>Saisi en USD</span><span>{formatCurrency(cartOriginalTotals.USD)}</span></div>
+                <div className="pos-total-row"><span>{t("newSale.enteredUsd")}</span><span>{formatCurrency(cartOriginalTotals.USD)}</span></div>
               )}
               {hasFcEntries && (
-                <div className="pos-total-row"><span>Saisi en FC</span><span>{formatFc(cartOriginalTotals.FC)}</span></div>
+                <div className="pos-total-row"><span>{t("newSale.enteredFc")}</span><span>{formatFc(cartOriginalTotals.FC)}</span></div>
               )}
-              <div className="pos-total-row is-grand"><span>{hasFcEntries ? "Total reçu" : "Total"}</span><strong>{formatCurrency(cartTotal)}</strong></div>
+              <div className="pos-total-row is-grand"><span>{hasFcEntries ? t("newSale.totalReceived") : t("common.total")}</span><strong>{formatCurrency(cartTotal)}</strong></div>
               {saleFcTotal !== undefined && cart.length > 0 && (
-                <div className="pos-total-row"><span>Équivalent</span><span>≈ {formatFc(saleFcTotal)}</span></div>
+                <div className="pos-total-row"><span>{t("newSale.equivalent")}</span><span>≈ {formatFc(saleFcTotal)}</span></div>
               )}
             </div>
 
@@ -2019,7 +2021,7 @@ export default function NewSale() {
         {/* Phones & tablets: total and validation always within reach. */}
         <div className="pos-checkout-bar">
           <div className="summary">
-            <small className="truncate">{cartCount} pièce{cartCount > 1 ? "s" : ""} · {form.isWalkIn ? form.customerName.trim() || "Client de passage" : form.customerName.trim() || "Client enregistré"}</small>
+            <small className="truncate">{t("newSale.pieces", { count: cartCount })} · {form.isWalkIn ? form.customerName.trim() || t("newSale.walkInName") : form.customerName.trim() || t("newSale.registeredName")}</small>
             <strong>{formatCurrency(cartTotal)}</strong>
           </div>
           {submitButton("")}

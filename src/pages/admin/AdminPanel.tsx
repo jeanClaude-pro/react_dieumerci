@@ -3,10 +3,14 @@ import ResponsiveTable from "../../components/ui/ResponsiveTable";
 import { EmptyState, LoadingState } from "../../components/ui/States";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
 import { useAuth } from "../../hooks/useAuth";
 import { serverUrl } from "../../utils/constants";
+import { useTranslation } from "react-i18next";
+import { formatDate } from "../../i18n/format";
+import { roleLabel } from "../../i18n/nav";
+import { serverMessage } from "../../i18n/serverMessages";
 import {
   Users,
   UserPlus,
@@ -28,6 +32,7 @@ import {
   Save,
   Pencil,
 } from "lucide-react";
+import { tr } from "../../i18n/translate";
 
 const API_BASE = serverUrl;
 
@@ -58,17 +63,17 @@ interface ShopSettings {
 }
 
 const ALL_PAGES = [
-  { path: "/dashboard", label: "Tableau de bord" },
-  { path: "/rate", label: "Taux d'échange" },
-  { path: "/", label: "Point de Vente (POS)" },
-  { path: "/entry", label: "Entrée de caisse" },
-  { path: "/sortie", label: "Sortie de caisse" },
-  { path: "/products", label: "Articles / Stock" },
-  { path: "/sales", label: "Historique de Vente" },
-  { path: "/entryhistory", label: "Historique d'Entrée" },
-  { path: "/sortiehistory", label: "Historique de Sortie" },
-  { path: "/reports", label: "Rapports & Analytiques" },
-  { path: "/customers", label: "Clients" },
+  { path: "/dashboard", key: "dashboard", label: "Tableau de bord" },
+  { path: "/rate", key: "rate", label: "Taux d'échange" },
+  { path: "/", key: "pos", label: "Point de Vente (POS)" },
+  { path: "/entry", key: "entry", label: "Entrée de caisse" },
+  { path: "/sortie", key: "sortie", label: "Sortie de caisse" },
+  { path: "/products", key: "products", label: "Articles / Stock" },
+  { path: "/sales", key: "sales", label: "Historique de Vente" },
+  { path: "/entryhistory", key: "entryhistory", label: "Historique d'Entrée" },
+  { path: "/sortiehistory", key: "sortiehistory", label: "Historique de Sortie" },
+  { path: "/reports", key: "reports", label: "Rapports & Analytiques" },
+  { path: "/customers", key: "customers", label: "Clients" },
 ];
 
 const ALL_ACTIONS = [
@@ -134,77 +139,78 @@ const ROLE_DEFAULT_PAGES: Record<AppRole, string[]> = {
 };
 
 // Canonical description of what each role can do in the app
+// Canonical description of what each role can do in the app (translation keys: admin.cap.*)
 const ROLE_CAPABILITIES: Record<AppRole, { pages: string[]; actions: string[] }> = {
   admin: {
     pages: [
-      "Toutes les pages de l'application",
-      "Panneau d'administration",
+      "allPages",
+      "adminPanel",
     ],
     actions: [
-      "Créer, modifier, supprimer des utilisateurs",
-      "Définir les rôles et permissions",
-      "Configurer les informations du reçu",
-      "Modifier les reçus (prix, quantités)",
-      "Réimprimer les reçus",
-      "Toutes les actions ci-dessous",
+      "manageUsers",
+      "setRoles",
+      "receiptSettings",
+      "editReceipts",
+      "reprint",
+      "allActions",
     ],
   },
   manager: {
     pages: [
-      "Point de Vente (POS)",
-      "Réservation & historique",
-      "Entrée / Sortie de caisse & historique",
-      "Articles / Stock",
-      "Historique de Vente",
-      "Clients",
+      "pos",
+      "reservations",
+      "cash",
+      "stock",
+      "salesHistory",
+      "customers",
     ],
     actions: [
-      "Créer des ventes",
-      "Gérer les réservations",
-      "Enregistrer entrées / sorties de caisse",
-      "Gérer le stock (articles)",
-      "Consulter l'historique des ventes",
-      "Modifier les reçus (si permission accordée)",
+      "createSales",
+      "manageReservations",
+      "recordCash",
+      "manageStock",
+      "viewSales",
+      "editReceiptsIfAllowed",
     ],
   },
   inventory_manager: {
     pages: [
-      "Point de Vente (POS)",
-      "Réservation & historique",
-      "Entrée / Sortie de caisse & historique",
-      "Articles / Stock",
-      "Historique de Vente",
+      "pos",
+      "reservations",
+      "cash",
+      "stock",
+      "salesHistory",
     ],
     actions: [
-      "Créer des ventes",
-      "Gérer les réservations",
-      "Enregistrer entrées / sorties de caisse",
-      "Gérer le stock (articles)",
-      "Consulter l'historique des ventes",
+      "createSales",
+      "manageReservations",
+      "recordCash",
+      "manageStock",
+      "viewSales",
     ],
   },
   cashier_supervisor: {
     pages: [
-      "Point de Vente (POS)",
-      "Réservation & historique",
-      "Entrée / Sortie de caisse & historique",
-      "Historique de Vente",
-      "Clients",
+      "pos",
+      "reservations",
+      "cash",
+      "salesHistory",
+      "customers",
     ],
     actions: [
-      "Créer des ventes",
-      "Gérer les réservations",
-      "Enregistrer entrées / sorties de caisse",
-      "Consulter l'historique des ventes",
-      "Gérer les clients",
-      "Modifier les reçus (si permission accordée)",
+      "createSales",
+      "manageReservations",
+      "recordCash",
+      "viewSales",
+      "manageCustomers",
+      "editReceiptsIfAllowed",
     ],
   },
   staff: {
-    pages: ["Point de Vente (POS)"],
+    pages: ["pos"],
     actions: [
-      "Créer des ventes uniquement",
-      "Impression du reçu après vente",
+      "salesOnly",
+      "printAfterSale",
     ],
   },
 };
@@ -224,6 +230,9 @@ function avatarColor(username: string) {
 type Tab = "users" | "create" | "permissions" | "receipt" | "roles";
 
 export default function AdminPanel() {
+  const { t } = useTranslation();
+  const pageLabel = (page: { key: string; label: string }) => t(`admin.pages.${page.key}`, { defaultValue: page.label });
+  const ROLE_NAME = (role: AppRole) => roleLabel(t, role);
   const [tab, setTab] = useState<Tab>("users");
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(false);
@@ -278,7 +287,7 @@ export default function AdminPanel() {
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/users`, { headers: authHeaders() });
-      if (!res.ok) throw new Error("Impossible de charger les utilisateurs");
+      if (!res.ok) throw new Error(tr("admin.err.loadUsers", "Impossible de charger les utilisateurs"));
       const data = await res.json();
       setUsers(data);
     } catch (err: any) {
@@ -287,6 +296,9 @@ export default function AdminPanel() {
       setLoading(false);
     }
   };
+  // Latest fetchUsers for the effect below (its trigger list stays unchanged).
+  const fetchUsersRef = useRef(fetchUsers);
+  fetchUsersRef.current = fetchUsers;
 
   const fetchShopSettings = async () => {
     setLoadingSettings(true);
@@ -294,7 +306,7 @@ export default function AdminPanel() {
       const res = await fetch(`${API_BASE}/settings/receipt`, {
         headers: authHeaders(),
       });
-      if (!res.ok) throw new Error("Impossible de charger les réglages");
+      if (!res.ok) throw new Error(tr("admin.err.loadSettings", "Impossible de charger les réglages"));
       const data = await res.json();
       setShopSettings({
         shopName: data.shopName || "",
@@ -309,10 +321,13 @@ export default function AdminPanel() {
       setLoadingSettings(false);
     }
   };
+  // Latest fetchShopSettings for the effect below (its trigger list stays unchanged).
+  const fetchShopSettingsRef = useRef(fetchShopSettings);
+  fetchShopSettingsRef.current = fetchShopSettings;
 
   useEffect(() => {
-    fetchUsers();
-    fetchShopSettings();
+    fetchUsersRef.current();
+    fetchShopSettingsRef.current();
   }, []);
 
   // ─── Username editing ────────────────────────────────────────────────────────
@@ -329,7 +344,7 @@ export default function AdminPanel() {
 
   const saveUsername = async (userId: string) => {
     if (!editingUsernameValue.trim()) {
-      toast.error("Le nom d'utilisateur ne peut pas être vide");
+      toast.error(t("admin.err.usernameEmpty"));
       return;
     }
     try {
@@ -340,7 +355,7 @@ export default function AdminPanel() {
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.message || "Échec de la mise à jour");
+        throw new Error(serverMessage(d.message, t("admin.err.update")));
       }
       const updated = await res.json();
       setUsers((prev) =>
@@ -349,7 +364,7 @@ export default function AdminPanel() {
         )
       );
       cancelEditUsername();
-      toast.success("Nom d'utilisateur mis à jour");
+      toast.success(t("admin.ok.username"));
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -365,7 +380,7 @@ export default function AdminPanel() {
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.message || "Échec du changement de statut");
+        throw new Error(serverMessage(d.message, t("admin.err.status")));
       }
       const data = await res.json();
       setUsers((prev) =>
@@ -373,7 +388,7 @@ export default function AdminPanel() {
           u._id === user._id ? { ...u, isActive: data.user.isActive } : u
         )
       );
-      toast.success(data.message);
+      toast.success(serverMessage(data.message, data.user.isActive ? t("admin.ok.activated") : t("admin.ok.deactivated")));
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -388,14 +403,14 @@ export default function AdminPanel() {
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.message || "Échec de la mise à jour du rôle");
+        throw new Error(serverMessage(d.message, t("admin.err.role")));
       }
       const updated = await res.json();
       setUsers((prev) =>
         prev.map((u) => (u._id === userId ? { ...u, role: updated.role } : u))
       );
       setEditingRoleId(null);
-      toast.success("Rôle mis à jour");
+      toast.success(t("admin.ok.role"));
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -404,7 +419,7 @@ export default function AdminPanel() {
   const handleDeleteUser = async (user: AppUser) => {
     if (
       !window.confirm(
-        `Supprimer l'utilisateur "${user.username}" ? Cette action est irréversible.`
+        t("admin.confirmDelete", { name: user.username })
       )
     )
       return;
@@ -415,10 +430,10 @@ export default function AdminPanel() {
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.message || "Échec de la suppression");
+        throw new Error(serverMessage(d.message, t("admin.err.delete")));
       }
       setUsers((prev) => prev.filter((u) => u._id !== user._id));
-      toast.success("Utilisateur supprimé");
+      toast.success(t("admin.ok.deleted"));
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -429,11 +444,11 @@ export default function AdminPanel() {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (createForm.password !== createForm.confirmPassword) {
-      toast.error("Les mots de passe ne correspondent pas");
+      toast.error(t("admin.err.passwordMismatch"));
       return;
     }
     if (createForm.password.length < 10 || createForm.password.length > 128) {
-      toast.error("Le mot de passe doit comporter entre 10 et 128 caractères");
+      toast.error(t("admin.err.passwordLength"));
       return;
     }
     setCreating(true);
@@ -450,11 +465,11 @@ export default function AdminPanel() {
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.message || "Échec de la création");
+        throw new Error(serverMessage(d.message, t("admin.err.create")));
       }
       const createdUser = (await res.json()) as AppUser;
       setUsers((previousUsers) => [createdUser, ...previousUsers]);
-      toast.success(`Utilisateur "${createdUser.username}" créé avec succès`);
+      toast.success(t("admin.ok.created", { name: createdUser.username }));
       setCreateForm({ username: "", email: "", password: "", confirmPassword: "", role: "staff" });
       setTab("users");
     } catch (err: any) {
@@ -497,7 +512,7 @@ export default function AdminPanel() {
         }),
       ]);
       if (!permRes.ok || !actionRes.ok) {
-        throw new Error("Échec de la sauvegarde des permissions");
+        throw new Error(t("admin.err.permissions"));
       }
       setUsers((prev) =>
         prev.map((u) =>
@@ -506,7 +521,7 @@ export default function AdminPanel() {
             : u
         )
       );
-      toast.success("Permissions mises à jour avec succès");
+      toast.success(t("admin.ok.permissions"));
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -527,7 +542,7 @@ export default function AdminPanel() {
       );
       setUseCustomPerms(false);
       setSelectedUserPerms([...ROLE_DEFAULT_PAGES[user.role]]);
-      toast.success("Permissions réinitialisées au rôle par défaut");
+      toast.success(t("admin.ok.permissionsReset"));
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -554,9 +569,9 @@ export default function AdminPanel() {
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.message || "Échec de la sauvegarde");
+        throw new Error(serverMessage(d.message, t("admin.err.save")));
       }
-      toast.success("Réglages du reçu mis à jour avec succès");
+      toast.success(t("admin.ok.settings"));
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -575,11 +590,11 @@ export default function AdminPanel() {
   const selectedUser = users.find((u) => u._id === selectedUserId);
 
   const TABS = [
-    { key: "users" as Tab, label: "Utilisateurs", icon: Users },
-    { key: "create" as Tab, label: "Créer un compte", icon: UserPlus },
-    { key: "permissions" as Tab, label: "Permissions", icon: Lock },
-    { key: "receipt" as Tab, label: "Réglages Reçu", icon: Store },
-    { key: "roles" as Tab, label: "Rôles & Droits", icon: BookOpen },
+    { key: "users" as Tab, label: t("admin.tabs.users"), icon: Users },
+    { key: "create" as Tab, label: t("admin.tabs.create"), icon: UserPlus },
+    { key: "permissions" as Tab, label: t("admin.tabs.permissions"), icon: Lock },
+    { key: "receipt" as Tab, label: t("admin.tabs.receipt"), icon: Store },
+    { key: "roles" as Tab, label: t("admin.tabs.roles"), icon: BookOpen },
   ] as const;
 
   return (
@@ -587,29 +602,29 @@ export default function AdminPanel() {
       <div>
         <header className="page-header">
           <div>
-            <div className="eyebrow"><Shield aria-hidden="true" />Contrôle administrateur</div>
-            <h1 className="page-title">Administration</h1>
-            <p className="page-subtitle">Comptes, rôles, permissions et réglages des reçus.</p>
+            <div className="eyebrow"><Shield aria-hidden="true" />{t("approvals.eyebrow")}</div>
+            <h1 className="page-title">{t("admin.title")}</h1>
+            <p className="page-subtitle">{t("admin.subtitle")}</p>
           </div>
         </header>
 
         <div className="grid grid-cols-3 gap-3 mb-5">
           <div className="metric-card">
-            <span className="metric-label">Comptes</span>
+            <span className="metric-label">{t("admin.kpi.accounts")}</span>
             <span className="metric-value">{users.length}</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Actifs</span>
+            <span className="metric-label">{t("admin.kpi.active")}</span>
             <span className="metric-value text-green-700">{activeCount}</span>
           </div>
           <div className="metric-card">
-            <span className="metric-label">Désactivés</span>
+            <span className="metric-label">{t("admin.kpi.disabled")}</span>
             <span className="metric-value text-red-700">{users.length - activeCount}</span>
           </div>
         </div>
 
         {/* ─── Tabs ─── */}
-        <div className="segmented flex! w-full overflow-x-auto mb-5" role="tablist" aria-label="Sections de l'administration">
+        <div className="segmented flex! w-full overflow-x-auto mb-5" role="tablist" aria-label={t("admin.sections")}>
           {TABS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -627,13 +642,13 @@ export default function AdminPanel() {
 
         {/* ══════════════ USERS TAB ══════════════ */}
         {tab === "users" && (
-          <div className="card overflow-hidden" role="tabpanel" aria-label="Utilisateurs">
+          <div className="card overflow-hidden" role="tabpanel" aria-label={t("admin.tabs.users")}>
             <div className="card-header">
               <div className="input-group flex-1 min-w-0 sm:min-w-[16rem]">
                 <Search aria-hidden="true" />
-                <input aria-label="Rechercher un utilisateur"
+                <input aria-label={t("admin.searchLabel")}
                   type="search"
-                  placeholder="Nom ou e-mail…"
+                  placeholder={t("admin.searchPlaceholder")}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="input"
@@ -646,7 +661,7 @@ export default function AdminPanel() {
                 className="btn btn-secondary"
               >
                 <RefreshCw className={loading ? "animate-spin" : ""} aria-hidden="true" />
-                Actualiser
+                {t("common.refresh")}
               </button>
             </div>
 
@@ -654,25 +669,25 @@ export default function AdminPanel() {
               <ResponsiveTable className="w-full">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Utilisateur</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Rôle</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Statut</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Permissions</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Créé le</th>
-                    <th className="text-center px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("admin.col.user")}</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("admin.col.role")}</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("common.status")}</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("admin.tabs.permissions")}</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("admin.col.created")}</th>
+                    <th className="text-center px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t("common.actions")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {loading ? (
                     <tr>
                       <td colSpan={6}>
-                        <LoadingState label="Chargement des utilisateurs…" />
+                        <LoadingState label={t("admin.loadingUsers")} />
                       </td>
                     </tr>
                   ) : filteredUsers.length === 0 ? (
                     <tr>
                       <td colSpan={6}>
-                        <EmptyState title="Aucun utilisateur trouvé" icon={<Users aria-hidden="true" />} />
+                        <EmptyState title={t("admin.noUsers")} icon={<Users aria-hidden="true" />} />
                       </td>
                     </tr>
                   ) : (
@@ -702,16 +717,16 @@ export default function AdminPanel() {
                                       if (e.key === "Escape") cancelEditUsername();
                                     }}
                                     autoFocus
-                                    aria-label={`Nouveau nom d'utilisateur pour ${user.username}`}
+                                    aria-label={t("admin.newUsernameFor", { name: user.username })}
                                     className="text-sm border border-blue-300 rounded-lg px-2 py-1 focus:ring-1 focus:ring-blue-500 w-36"
                                   />
-                                  <button type="button" aria-label="Enregistrer le nom d'utilisateur" title="Enregistrer"
+                                  <button type="button" aria-label={t("admin.saveUsername")} title={t("common.save")}
                                     onClick={() => saveUsername(user._id)}
                                     className="text-emerald-600 hover:text-emerald-800"
                                   >
                                     <Check className="w-3.5 h-3.5" aria-hidden="true" />
                                   </button>
-                                  <button type="button" aria-label="Annuler la modification" title="Annuler"
+                                  <button type="button" aria-label={t("admin.cancelEdit")} title={t("common.cancel")}
                                     onClick={cancelEditUsername}
                                     className="text-gray-400 hover:text-gray-600"
                                   >
@@ -723,10 +738,10 @@ export default function AdminPanel() {
                                   <p className="font-medium text-gray-900 text-sm truncate">
                                     {user.username}
                                   </p>
-                                  <button aria-label="Modifier le nom d'utilisateur"
+                                  <button type="button" aria-label={t("admin.editUsername")}
                                     onClick={() => startEditUsername(user)}
                                     className="text-gray-400 hover:text-blue-600 transition-colors flex-shrink-0 rounded p-0.5"
-                                    title="Modifier le nom d'utilisateur"
+                                    title={t("admin.editUsername")}
                                   >
                                     <Pencil className="w-3 h-3" />
                                   </button>
@@ -748,15 +763,15 @@ export default function AdminPanel() {
                                 }
                                 className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-blue-500 bg-white"
                                 autoFocus
-                                aria-label={`Rôle de ${user.username}`}
+                                aria-label={t("admin.roleOf", { name: user.username })}
                               >
                                 {(Object.keys(ROLE_LABELS) as AppRole[]).map((r) => (
                                   <option key={r} value={r}>
-                                    {ROLE_LABELS[r]}
+                                    {ROLE_NAME(r)}
                                   </option>
                                 ))}
                               </select>
-                              <button type="button" aria-label="Annuler le changement de rôle"
+                              <button type="button" aria-label={t("admin.cancelRole")}
                                 onClick={() => setEditingRoleId(null)}
                                 className="text-gray-400 hover:text-gray-600"
                               >
@@ -764,12 +779,12 @@ export default function AdminPanel() {
                               </button>
                             </div>
                           ) : (
-                            <button type="button" aria-label={`Rôle : ${ROLE_LABELS[user.role]} — modifier`} title="Modifier le rôle"
+                            <button type="button" aria-label={t("admin.roleEditLabel", { role: ROLE_NAME(user.role) })} title={t("admin.editRole")}
                               onClick={() => setEditingRoleId(user._id)}
                               className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${ROLE_COLORS[user.role]} hover:opacity-80 transition-opacity`}
                             >
-                              {ROLE_LABELS[user.role]}
-                              <Edit3 className="w-3 h-3 opacity-60" />
+                              {ROLE_NAME(user.role)}
+                              <Edit3 className="w-3 h-3 opacity-60" aria-hidden="true" />
                             </button>
                           )}
                         </td>
@@ -779,8 +794,8 @@ export default function AdminPanel() {
                           <button
                             type="button"
                             onClick={() => handleToggleStatus(user)}
-                            aria-label={user.isActive ? `Compte actif — désactiver ${user.username}` : `Compte désactivé — activer ${user.username}`}
-                            title={user.isActive ? "Désactiver le compte" : "Activer le compte"}
+                            aria-label={user.isActive ? t("admin.deactivateLabel", { name: user.username }) : t("admin.activateLabel", { name: user.username })}
+                            title={user.isActive ? t("admin.deactivate") : t("admin.activate")}
                             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                               user.isActive
                                 ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
@@ -788,9 +803,9 @@ export default function AdminPanel() {
                             }`}
                           >
                             {user.isActive ? (
-                              <><ToggleRight className="w-3.5 h-3.5" />Actif</>
+                              <><ToggleRight className="w-3.5 h-3.5" aria-hidden="true" />{t("common.active")}</>
                             ) : (
-                              <><ToggleLeft className="w-3.5 h-3.5" />Désactivé</>
+                              <><ToggleLeft className="w-3.5 h-3.5" aria-hidden="true" />{t("admin.disabled")}</>
                             )}
                           </button>
                         </td>
@@ -806,12 +821,12 @@ export default function AdminPanel() {
                               }`}
                             >
                               {user.permissions && user.permissions.length > 0
-                                ? `${user.permissions.length} pages`
-                                : "Par rôle"}
+                                ? t("admin.pageCount", { count: user.permissions.length })
+                                : t("admin.byRole")}
                             </span>
                             {user.actionPermissions && user.actionPermissions.length > 0 && (
                               <span className="text-xs px-2.5 py-1 rounded-full border bg-amber-50 text-amber-700 border-amber-200 w-fit">
-                                {user.actionPermissions.length} action{user.actionPermissions.length > 1 ? "s" : ""}
+                                {t("admin.actionCount", { count: user.actionPermissions.length })}
                               </span>
                             )}
                           </div>
@@ -819,28 +834,28 @@ export default function AdminPanel() {
 
                         {/* Created at */}
                         <td className="px-5 py-3.5 text-xs text-gray-500">
-                          {new Date(user.createdAt).toLocaleDateString("fr-FR")}
+                          {formatDate(user.createdAt)}
                         </td>
 
                         {/* Actions */}
                         <td className="px-5 py-3.5">
                           <div className="flex items-center justify-center gap-1">
-                            <button aria-label="Gérer les permissions"
+                            <button type="button" aria-label={t("admin.managePermissions")}
                               onClick={() => {
                                 handleSelectUserForPerms(user._id);
                                 setTab("permissions");
                               }}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Gérer les permissions"
+                              title={t("admin.managePermissions")}
                             >
-                              <Shield className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Permissions</span>
+                              <Shield className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">{t("admin.tabs.permissions")}</span>
                             </button>
-                            <button aria-label="Supprimer l'utilisateur"
+                            <button type="button" aria-label={t("admin.deleteUser")}
                               onClick={() => handleDeleteUser(user)}
                               className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Supprimer l'utilisateur"
+                              title={t("admin.deleteUser")}
                             >
-                              <Trash2 className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Supprimer</span>
+                              <Trash2 className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">{t("common.delete")}</span>
                             </button>
                           </div>
                         </td>
@@ -863,8 +878,8 @@ export default function AdminPanel() {
                     <UserPlus className="w-5 h-5 text-blue-600" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Créer un utilisateur</h2>
-                    <p className="text-sm text-gray-500">Définissez le compte et attribuez un rôle</p>
+                    <h2 className="text-lg font-semibold text-gray-900">{t("admin.create.title")}</h2>
+                    <p className="text-sm text-gray-500">{t("admin.create.subtitle")}</p>
                   </div>
                 </div>
               </div>
@@ -872,13 +887,13 @@ export default function AdminPanel() {
               <form onSubmit={handleCreateUser} className="p-6 space-y-4">
                 <div>
                   <label htmlFor="adminpanel-field-33777" className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Nom d'utilisateur <span className="text-red-500">*</span>
+                    {t("admin.create.username")} <span className="text-red-500">*</span>
                   </label>
                   <input id="adminpanel-field-33777"
                     type="text"
                     value={createForm.username}
                     onChange={(e) => setCreateForm((f) => ({ ...f, username: e.target.value }))}
-                    placeholder="ex: jean_dupont"
+                    placeholder={t("admin.create.usernamePlaceholder")}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     required
                   />
@@ -886,13 +901,13 @@ export default function AdminPanel() {
 
                 <div>
                   <label htmlFor="adminpanel-field-34474" className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Adresse email <span className="text-red-500">*</span>
+                    {t("admin.create.email")} <span className="text-red-500">*</span>
                   </label>
                   <input id="adminpanel-field-34474"
                     type="email"
                     value={createForm.email}
                     onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
-                    placeholder="ex: jean@example.com"
+                    placeholder={t("admin.create.emailPlaceholder")}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     required
                   />
@@ -900,7 +915,7 @@ export default function AdminPanel() {
 
                 <div>
                   <label htmlFor="adminpanel-field-35210" className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Rôle <span className="text-red-500">*</span>
+                    {t("admin.col.role")} <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <select id="adminpanel-field-35210"
@@ -909,8 +924,8 @@ export default function AdminPanel() {
                       className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white appearance-none"
                       required
                     >
-                      {(Object.entries(ROLE_LABELS) as [AppRole, string][]).map(([r, label]) => (
-                        <option key={r} value={r}>{label}</option>
+                      {(Object.keys(ROLE_LABELS) as AppRole[]).map((r) => (
+                        <option key={r} value={r}>{ROLE_NAME(r)}</option>
                       ))}
                     </select>
                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -919,20 +934,20 @@ export default function AdminPanel() {
 
                 <div>
                   <label htmlFor="adminpanel-field-36298" className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Mot de passe <span className="text-red-500">*</span>
+                    {t("admin.create.password")} <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <input id="adminpanel-field-36298"
                       type={showPassword ? "text" : "password"}
                       value={createForm.password}
                       onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
-                      placeholder="10 à 128 caractères"
+                      placeholder={t("admin.create.passwordPlaceholder")}
                       className="w-full px-4 py-3 pr-11 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                       required
                       minLength={10}
                       maxLength={128}
                     />
-                    <button aria-label="Masquer le mot de passe" type="button" onClick={() => setShowPassword((s) => !s)}
+                    <button aria-label={showPassword ? t("admin.create.hidePassword") : t("admin.create.showPassword")} type="button" onClick={() => setShowPassword((s) => !s)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -941,13 +956,13 @@ export default function AdminPanel() {
 
                 <div>
                   <label htmlFor="adminpanel-field-37494" className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Confirmer le mot de passe <span className="text-red-500">*</span>
+                    {t("admin.create.confirm")} <span className="text-red-500">*</span>
                   </label>
                   <input id="adminpanel-field-37494"
                     type={showPassword ? "text" : "password"}
                     value={createForm.confirmPassword}
                     onChange={(e) => setCreateForm((f) => ({ ...f, confirmPassword: e.target.value }))}
-                    placeholder="Répétez le mot de passe"
+                    placeholder={t("admin.create.confirmPlaceholder")}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     required
                     minLength={10}
@@ -958,14 +973,14 @@ export default function AdminPanel() {
                 {/* Role preview */}
                 <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
                   <p className="text-sm font-medium text-blue-800 mb-2">
-                    Pages accessibles avec le rôle « {ROLE_LABELS[createForm.role]} » :
+                    {t("admin.create.rolePreview", { role: ROLE_NAME(createForm.role) })}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {ROLE_DEFAULT_PAGES[createForm.role].map((path) => {
                       const page = ALL_PAGES.find((p) => p.path === path);
                       return page ? (
                         <span key={path} className="px-2.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium border border-blue-200">
-                          {page.label}
+                          {pageLabel(page)}
                         </span>
                       ) : null;
                     })}
@@ -975,9 +990,9 @@ export default function AdminPanel() {
                 <button type="submit" disabled={creating}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2">
                   {creating ? (
-                    <><RefreshCw className="w-4 h-4 animate-spin" />Création en cours…</>
+                    <><RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />{t("admin.create.creating")}</>
                   ) : (
-                    <><UserPlus className="w-4 h-4" />Créer l'utilisateur</>
+                    <><UserPlus className="w-4 h-4" aria-hidden="true" />{t("admin.create.submit")}</>
                   )}
                 </button>
               </form>
@@ -994,8 +1009,8 @@ export default function AdminPanel() {
                   <Lock className="w-5 h-5 text-purple-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Gestion des permissions</h2>
-                  <p className="text-sm text-gray-500">Pages accessibles et actions autorisées par utilisateur</p>
+                  <h2 className="text-lg font-semibold text-gray-900">{t("admin.perm.title")}</h2>
+                  <p className="text-sm text-gray-500">{t("admin.perm.subtitle")}</p>
                 </div>
               </div>
             </div>
@@ -1004,7 +1019,7 @@ export default function AdminPanel() {
               {/* User selector */}
               <div className="mb-6">
                 <label htmlFor="adminpanel-field-40763" className="block text-sm font-medium text-gray-700 mb-2">
-                  Sélectionner un utilisateur
+                  {t("admin.perm.selectUser")}
                 </label>
                 <div className="relative max-w-sm">
                   <select id="adminpanel-field-40763"
@@ -1012,10 +1027,10 @@ export default function AdminPanel() {
                     onChange={(e) => handleSelectUserForPerms(e.target.value)}
                     className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white appearance-none"
                   >
-                    <option value="">— Choisir un utilisateur —</option>
+                    <option value="">{t("admin.perm.choose")}</option>
                     {users.map((u) => (
                       <option key={u._id} value={u._id}>
-                        {u.username} ({ROLE_LABELS[u.role]})
+                        {u.username} ({ROLE_NAME(u.role)})
                       </option>
                     ))}
                   </select>
@@ -1026,7 +1041,7 @@ export default function AdminPanel() {
               {!selectedUserId && (
                 <div className="text-center py-16 text-gray-400">
                   <Shield className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">Sélectionnez un utilisateur pour gérer ses permissions</p>
+                  <p className="text-sm">{t("admin.perm.empty")}</p>
                 </div>
               )}
 
@@ -1042,28 +1057,32 @@ export default function AdminPanel() {
                       <p className="text-xs text-gray-500">{selectedUser.email}</p>
                     </div>
                     <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${ROLE_COLORS[selectedUser.role]}`}>
-                      {ROLE_LABELS[selectedUser.role]}
+                      {ROLE_NAME(selectedUser.role)}
                     </span>
                   </div>
 
                   {/* ── Section 1: Page permissions ── */}
                   <div className="mb-6">
                     <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                      <Lock className="w-4 h-4 text-blue-500" />
-                      Accès aux pages
+                      <Lock className="w-4 h-4 text-blue-500" aria-hidden="true" />
+                      {t("admin.perm.pages")}
                     </h3>
 
                     {/* Custom perms toggle */}
                     <div className="flex items-center justify-between mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
                       <div>
-                        <p className="text-sm font-semibold text-amber-800">Permissions personnalisées</p>
+                        <p className="text-sm font-semibold text-amber-800">{t("admin.perm.custom")}</p>
                         <p className="text-xs text-amber-600 mt-0.5">
                           {useCustomPerms
-                            ? "Les pages cochées ci-dessous remplacent les droits du rôle"
-                            : "Cet utilisateur accède aux pages selon son rôle (par défaut)"}
+                            ? t("admin.perm.customOn")
+                            : t("admin.perm.customOff")}
                         </p>
                       </div>
                       <button
+                        type="button"
+                        role="switch"
+                        aria-checked={useCustomPerms}
+                        aria-label={t("admin.perm.custom")}
                         onClick={() => {
                           const next = !useCustomPerms;
                           setUseCustomPerms(next);
@@ -1109,10 +1128,10 @@ export default function AdminPanel() {
                               className="w-4 h-4 rounded text-blue-600 border-gray-300 focus:ring-blue-500 flex-shrink-0"
                             />
                             <span className={`text-sm ${isChecked ? "text-gray-800 font-medium" : "text-gray-500"}`}>
-                              {page.label}
+                              {pageLabel(page)}
                             </span>
                             {!useCustomPerms && checkedByRole && (
-                              <span className="ml-auto text-xs text-emerald-600 font-medium">Rôle</span>
+                              <span className="ml-auto text-xs text-emerald-600 font-medium">{t("admin.col.role")}</span>
                             )}
                           </label>
                         );
@@ -1123,11 +1142,11 @@ export default function AdminPanel() {
                   {/* ── Section 2: Action permissions ── */}
                   <div className="mb-6">
                     <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-purple-500" />
-                      Permissions d'actions
+                      <Shield className="w-4 h-4 text-purple-500" aria-hidden="true" />
+                      {t("admin.perm.actions")}
                     </h3>
                     <p className="text-xs text-gray-500 mb-3">
-                      Ces droits s'appliquent indépendamment du rôle et des pages.
+                      {t("admin.perm.actionsHint")}
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {ALL_ACTIONS.map((action) => {
@@ -1149,9 +1168,9 @@ export default function AdminPanel() {
                             />
                             <div>
                               <p className={`text-sm font-medium ${isGranted ? "text-purple-800" : "text-gray-700"}`}>
-                                {action.label}
+                                {t(`admin.actions.${action.key}.label`, { defaultValue: action.label })}
                               </p>
-                              <p className="text-xs text-gray-500 mt-0.5">{action.description}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">{t(`admin.actions.${action.key}.description`, { defaultValue: action.description })}</p>
                             </div>
                           </label>
                         );
@@ -1162,25 +1181,27 @@ export default function AdminPanel() {
                   {/* Action buttons */}
                   <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
                     <button
+                      type="button"
                       onClick={handleSavePermissions}
                       disabled={savingPerms}
                       className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {savingPerms ? (
-                        <><RefreshCw className="w-4 h-4 animate-spin" />Sauvegarde…</>
+                        <><RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />{t("common.saving")}</>
                       ) : (
-                        <><Check className="w-4 h-4" />Sauvegarder</>
+                        <><Check className="w-4 h-4" aria-hidden="true" />{t("common.save")}</>
                       )}
                     </button>
 
                     {useCustomPerms && (
                       <button
+                        type="button"
                         onClick={() => handleResetPermissions(selectedUser)}
                         disabled={savingPerms}
                         className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-medium transition-colors disabled:opacity-40"
                       >
-                        <X className="w-4 h-4" />
-                        Réinitialiser au rôle
+                        <X className="w-4 h-4" aria-hidden="true" />
+                        {t("admin.perm.reset")}
                       </button>
                     )}
                   </div>
@@ -1200,24 +1221,22 @@ export default function AdminPanel() {
                     <Store className="w-5 h-5 text-orange-600" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Réglages du reçu</h2>
-                    <p className="text-sm text-gray-500">
-                      Ces informations apparaissent sur tous les reçus imprimés
-                    </p>
+                    <h2 className="text-lg font-semibold text-gray-900">{t("admin.receipt.title")}</h2>
+                    <p className="text-sm text-gray-500">{t("admin.receipt.subtitle")}</p>
                   </div>
                 </div>
               </div>
 
               {loadingSettings ? (
                 <div className="flex items-center justify-center py-16 text-gray-400">
-                  <RefreshCw className="w-6 h-6 animate-spin mr-2 opacity-40" />
-                  Chargement…
+                  <RefreshCw className="w-6 h-6 animate-spin mr-2 opacity-40" aria-hidden="true" />
+                  {t("newSale.loading")}
                 </div>
               ) : (
                 <form onSubmit={handleSaveSettings} className="p-6 space-y-5">
                   <div>
                     <label htmlFor="adminpanel-field-52350" className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Nom de l'établissement
+                      {t("admin.receipt.shopName")}
                     </label>
                     <input id="adminpanel-field-52350"
                       type="text"
@@ -1233,7 +1252,7 @@ export default function AdminPanel() {
 
                   <div>
                     <label htmlFor="adminpanel-field-53080" className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Adresse
+                      {t("admin.receipt.address")}
                     </label>
                     <input id="adminpanel-field-53080"
                       type="text"
@@ -1248,7 +1267,7 @@ export default function AdminPanel() {
 
                   <div>
                     <label htmlFor="adminpanel-field-53832" className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Numéro(s) de téléphone
+                      {t("admin.receipt.phones")}
                     </label>
                     <input id="adminpanel-field-53832"
                       type="text"
@@ -1263,7 +1282,7 @@ export default function AdminPanel() {
 
                   <div>
                     <label htmlFor="adminpanel-field-54577" className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Numéro d'enregistrement (RCCM)
+                      {t("admin.receipt.registration")}
                     </label>
                     <input id="adminpanel-field-54577"
                       type="text"
@@ -1278,26 +1297,26 @@ export default function AdminPanel() {
 
                   <div>
                     <label htmlFor="adminpanel-field-55306" className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Pied de page du reçu
+                      {t("admin.receipt.footer")}
                     </label>
                     <textarea id="adminpanel-field-55306"
                       value={shopSettings.receiptFooter}
                       onChange={(e) =>
                         setShopSettings((s) => ({ ...s, receiptFooter: e.target.value }))
                       }
-                      placeholder="Merci pour votre confiance ! À bientôt."
+                      placeholder={t("receipt.defaultFooter")}
                       rows={3}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none"
                     />
                     <p className="text-xs text-gray-400 mt-1">
-                      Apparaît en bas de chaque reçu imprimé.
+                      {t("admin.receipt.footerHint")}
                     </p>
                   </div>
 
                   {/* Live preview */}
                   <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-4">
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                      Aperçu de l'en-tête du reçu
+                      {t("admin.receipt.preview")}
                     </p>
                     <div className="bg-white border border-gray-200 rounded-lg p-4 text-center font-mono text-xs leading-relaxed">
                       <p className="font-bold text-base">{shopSettings.shopName || "ETS. DIEU MERCI"}</p>
@@ -1305,14 +1324,14 @@ export default function AdminPanel() {
                         <p className="text-gray-600">{shopSettings.shopAddress}</p>
                       )}
                       {shopSettings.shopNumber && (
-                        <p className="text-gray-600">TEL: {shopSettings.shopNumber}</p>
+                        <p className="text-gray-600">{t("receipt.tel")}: {shopSettings.shopNumber}</p>
                       )}
                       {shopSettings.shopRegistration && (
                         <p className="text-gray-500 text-[10px]">{shopSettings.shopRegistration}</p>
                       )}
                       <div className="border-t border-dashed border-gray-300 my-2" />
                       <p className="text-gray-400 italic text-[10px]">
-                        {shopSettings.receiptFooter || "Pied de page du reçu"}
+                        {shopSettings.receiptFooter || t("admin.receipt.footer")}
                       </p>
                     </div>
                   </div>
@@ -1323,9 +1342,9 @@ export default function AdminPanel() {
                     className="w-full bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {savingSettings ? (
-                      <><RefreshCw className="w-4 h-4 animate-spin" />Sauvegarde…</>
+                      <><RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />{t("common.saving")}</>
                     ) : (
-                      <><Save className="w-4 h-4" />Enregistrer les réglages</>
+                      <><Save className="w-4 h-4" aria-hidden="true" />{t("admin.receipt.save")}</>
                     )}
                   </button>
                 </form>
@@ -1343,11 +1362,8 @@ export default function AdminPanel() {
                   <BookOpen className="w-5 h-5 text-indigo-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Rôles & Droits par défaut</h2>
-                  <p className="text-sm text-gray-500">
-                    Ce tableau décrit ce que chaque rôle peut faire dans l'application par défaut.
-                    Les permissions individuelles peuvent outrepasser ces valeurs.
-                  </p>
+                  <h2 className="text-lg font-semibold text-gray-900">{t("admin.roles.title")}</h2>
+                  <p className="text-sm text-gray-500">{t("admin.roles.subtitle")}</p>
                 </div>
               </div>
             </div>
@@ -1358,39 +1374,39 @@ export default function AdminPanel() {
                 <div key={role} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className={`px-5 py-3 border-b border-gray-100 flex items-center gap-3`}>
                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold border ${ROLE_COLORS[role]}`}>
-                      {ROLE_LABELS[role]}
+                      {ROLE_NAME(role)}
                     </span>
                     <span className="text-xs text-gray-400">
-                      {cap.pages.length} page{cap.pages.length > 1 ? "s" : ""} • {cap.actions.length} action{cap.actions.length > 1 ? "s" : ""}
+                      {t("admin.pageCount", { count: cap.pages.length })} • {t("admin.actionCount", { count: cap.actions.length })}
                     </span>
                   </div>
                   <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                        Pages accessibles
+                        {t("admin.roles.pages")}
                       </p>
                       <ul className="space-y-1.5">
                         {cap.pages.map((p, i) => (
                           <li key={i} className="flex items-center gap-2 text-sm text-gray-700">
                             <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0">
-                              <Check className="w-2.5 h-2.5" />
+                              <Check className="w-2.5 h-2.5" aria-hidden="true" />
                             </span>
-                            {p}
+                            {t(`admin.cap.${p}`)}
                           </li>
                         ))}
                       </ul>
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                        Actions autorisées
+                        {t("admin.roles.actions")}
                       </p>
                       <ul className="space-y-1.5">
                         {cap.actions.map((a, i) => (
                           <li key={i} className="flex items-center gap-2 text-sm text-gray-700">
                             <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0">
-                              <Check className="w-2.5 h-2.5" />
+                              <Check className="w-2.5 h-2.5" aria-hidden="true" />
                             </span>
-                            {a}
+                            {t(`admin.cap.${a}`)}
                           </li>
                         ))}
                       </ul>
@@ -1398,13 +1414,13 @@ export default function AdminPanel() {
                   </div>
                   {/* Pages grid preview */}
                   <div className="px-5 pb-4">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Routes</p>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("admin.roles.routes")}</p>
                     <div className="flex flex-wrap gap-1.5">
                       {ROLE_DEFAULT_PAGES[role].map((path) => {
                         const page = ALL_PAGES.find((p) => p.path === path);
                         return page ? (
                           <span key={path} className="px-2.5 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs border border-gray-200">
-                            {page.label}
+                            {pageLabel(page)}
                           </span>
                         ) : null;
                       })}
@@ -1416,21 +1432,22 @@ export default function AdminPanel() {
 
             {/* Security note */}
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5">
-              <p className="text-sm font-semibold text-yellow-800 mb-1">Note de sécurité</p>
+              <p className="text-sm font-semibold text-yellow-800 mb-1">{t("admin.security.title")}</p>
               <ul className="text-sm text-yellow-700 space-y-1 list-disc list-inside">
-                <li>Les mots de passe sont hachés (bcrypt) — jamais stockés en clair.</li>
-                <li>Les tokens JWT expirent et sont validés à chaque requête.</li>
-                <li>Les comptes désactivés ne peuvent pas se connecter ni accéder aux endpoints.</li>
-                <li>Un compte administrateur protégé est masqué et non modifiable par les autres admins.</li>
-                <li>L'inscription publique est désactivée — seuls les administrateurs créent des comptes.</li>
+                <li>{t("admin.security.s1")}</li>
+                <li>{t("admin.security.s2")}</li>
+                <li>{t("admin.security.s3")}</li>
+                <li>{t("admin.security.s4")}</li>
+                <li>{t("admin.security.s5")}</li>
+                <li>{t("admin.security.s6")}</li>
               </ul>
             </div>
 
             {/* Action permissions reference */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                <Shield className="w-4 h-4 text-purple-500" />
-                Permissions d'actions disponibles
+                <Shield className="w-4 h-4 text-purple-500" aria-hidden="true" />
+                {t("admin.perm.available")}
               </p>
               <div className="space-y-3">
                 {ALL_ACTIONS.map((action) => (
@@ -1439,8 +1456,8 @@ export default function AdminPanel() {
                       {action.key}
                     </span>
                     <div>
-                      <p className="text-sm font-medium text-gray-800">{action.label}</p>
-                      <p className="text-xs text-gray-500">{action.description}</p>
+                      <p className="text-sm font-medium text-gray-800">{t(`admin.actions.${action.key}.label`, { defaultValue: action.label })}</p>
+                      <p className="text-xs text-gray-500">{t(`admin.actions.${action.key}.description`, { defaultValue: action.description })}</p>
                     </div>
                   </div>
                 ))}
@@ -1452,11 +1469,11 @@ export default function AdminPanel() {
         {/* Current user info footer */}
         {currentUser && (
           <div className="mt-6 flex items-center gap-2 text-xs text-gray-400">
-            <Shield className="w-3 h-3" />
-            Connecté en tant que{" "}
+            <Shield className="w-3 h-3" aria-hidden="true" />
+            {t("admin.signedInAs")}{" "}
             <span className="font-semibold text-gray-600">{currentUser.username}</span>
             <span className={`px-2 py-0.5 rounded-full border text-xs font-medium ${ROLE_COLORS[currentUser.role as AppRole]}`}>
-              {ROLE_LABELS[currentUser.role as AppRole]}
+              {ROLE_NAME(currentUser.role as AppRole)}
             </span>
           </div>
         )}

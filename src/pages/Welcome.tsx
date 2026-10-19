@@ -2,31 +2,41 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeftRight, ArrowUpRight, CalendarDays, LogOut } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { getAccessibleSections, roleLabels, type NavigationItem } from "../config/navigation";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { getAccessibleSections, type NavigationItem } from "../config/navigation";
+import { navDescription, navLabel, roleLabel, sectionTitle } from "../i18n/nav";
+import { activeLocale } from "../i18n/translate";
+import LanguageToggle from "../components/ui/LanguageToggle";
 import { EmptyState } from "../components/ui/States";
 import { serverUrl } from "../utils/constants";
 
 // Everyday operations surface first; order only, access comes from navigation.
 const QUICK_ORDER = ["pos", "sales", "products", "payment-approval", "payment-verification", "entry", "sortie", "customers"];
 
-function greeting(date: Date) {
-  const hour = Number(new Intl.DateTimeFormat("fr-FR", { hour: "numeric", hour12: false, timeZone: "Africa/Lubumbashi" }).format(date));
-  return hour >= 18 || hour < 4 ? "Bonsoir" : "Bonjour";
+function greeting(t: TFunction, date: Date) {
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: "Africa/Lubumbashi" }).format(date));
+  if (hour >= 18 || hour < 4) return t("welcome.goodEvening");
+  // French keeps "Bonjour" all day; English distinguishes the afternoon.
+  return hour >= 12 ? t("welcome.goodAfternoon") : t("welcome.goodMorning");
 }
 
 type Tone = "blue" | "green";
 
 function Launcher({ item, primary = false, tone = "blue" }: { item: NavigationItem; primary?: boolean; tone?: Tone }) {
+  const { t } = useTranslation();
   const Icon = item.icon;
+  const description = navDescription(t, item);
   return <Link to={item.path} data-tone={tone} className={`launcher-card ${primary ? "launcher-primary" : ""}`}>
     <span className="launcher-icon"><Icon aria-hidden="true" /></span>
-    <span className="launcher-copy"><strong>{item.label}</strong>{item.description && <span>{item.description}</span>}</span>
+    <span className="launcher-copy"><strong>{navLabel(t, item)}</strong>{description && <span>{description}</span>}</span>
     <ArrowUpRight className="launcher-arrow" aria-hidden="true" />
   </Link>;
 }
 
 export default function Welcome() {
   const { user, clearAuth } = useAuth();
+  const { t } = useTranslation();
   const logout = () => { clearAuth(); window.location.href = "/login"; };
   const [rate, setRate] = useState<number | null>(null);
   const today = new Date();
@@ -61,20 +71,21 @@ export default function Welcome() {
     return () => controller.abort();
   }, [quick.length]);
 
-  const dateLabel = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "Africa/Lubumbashi" }).format(today);
+  const dateLabel = new Intl.DateTimeFormat(activeLocale(), { weekday: "long", day: "numeric", month: "long", timeZone: "Africa/Lubumbashi" }).format(today);
 
   return <div className="page welcome-page">
     {/* No sidebar on this screen: brand, account and logout live here. */}
     <div className="welcome-topbar">
       <div className="welcome-topbar-brand">
         <img src="/logo.jpeg" alt="" />
-        <span>ETS. DIEU MERCI<small>Gestion commerciale</small></span>
+        <span>ETS. DIEU MERCI<small>{t("nav.tagline")}</small></span>
       </div>
+      <LanguageToggle className="welcome-lang" />
       {user && <div className="welcome-account">
         <span className="welcome-avatar" aria-hidden="true">{user.username.slice(0, 2).toUpperCase()}</span>
-        <span className="welcome-account-text"><strong>{user.username}</strong><small>{roleLabels[user.role]}</small></span>
-        <button type="button" onClick={logout} className="btn btn-secondary btn-sm" aria-label="Se déconnecter" title="Se déconnecter">
-          <LogOut aria-hidden="true" /><span className="welcome-logout-text">Déconnexion</span>
+        <span className="welcome-account-text"><strong>{user.username}</strong><small>{roleLabel(t, user.role)}</small></span>
+        <button type="button" onClick={logout} className="btn btn-secondary btn-sm" aria-label={t("nav.logout")} title={t("nav.logout")}>
+          <LogOut aria-hidden="true" /><span className="welcome-logout-text">{t("nav.logoutShort")}</span>
         </button>
       </div>}
     </div>
@@ -82,20 +93,18 @@ export default function Welcome() {
     <header className="welcome-hero">
       <div className="min-w-0">
         <div className="eyebrow"><CalendarDays aria-hidden="true" /><span>{dateLabel}</span></div>
-        <h1>{greeting(today)}{user?.username ? `, ${user.username}` : ""}</h1>
-        <p>{quick.length
-          ? "Choisissez une opération pour commencer. Seuls les modules autorisés pour votre compte sont affichés."
-          : "Votre compte est actif. Les modules vous seront accessibles dès qu'un administrateur les aura attribués."}</p>
+        <h1>{user?.username ? t("welcome.greeting", { greeting: greeting(t, today), name: user.username }) : greeting(t, today)}</h1>
+        <p>{quick.length ? t("welcome.intro") : t("welcome.introNoModules")}</p>
         <div className="welcome-meta">
-          {user && <span className="welcome-chip">{roleLabels[user.role]}</span>}
+          {user && <span className="welcome-chip">{roleLabel(t, user.role)}</span>}
           {rate !== null && <span className="welcome-chip"><ArrowLeftRight aria-hidden="true" />
-            <span className="num">1 USD = {new Intl.NumberFormat("fr-FR").format(rate)} FC</span></span>}
+            <span className="num">{t("welcome.rate", { rate: new Intl.NumberFormat(activeLocale()).format(rate) })}</span></span>}
         </div>
       </div>
     </header>
 
     {quick.length > 0 && <section aria-labelledby="quick-title">
-      <div className="welcome-section-heading"><h2 id="quick-title">Opérations courantes</h2></div>
+      <div className="welcome-section-heading"><h2 id="quick-title">{t("welcome.quick")}</h2></div>
       <div className="launcher-grid launcher-quick">
         {quick.map((item, index) => <Launcher key={item.id} item={item} primary={item.id === "pos"} tone={index % 2 ? "green" : "blue"} />)}
       </div>
@@ -104,14 +113,14 @@ export default function Welcome() {
     {/* Sections alternate blue and green so the launcher reads in groups. */}
     {sections.map((section, index) => {
       const tone: Tone = index % 2 ? "blue" : "green";
-      return <section key={section.title} aria-labelledby={`launch-${section.title}`} data-tone={tone} className="welcome-section">
-        <div className="welcome-section-heading"><h2 id={`launch-${section.title}`}>{section.title}</h2></div>
+      return <section key={section.key} aria-labelledby={`launch-${section.key}`} data-tone={tone} className="welcome-section">
+        <div className="welcome-section-heading"><h2 id={`launch-${section.key}`}>{sectionTitle(t, section)}</h2></div>
         <div className="launcher-grid">{section.items.map(item => <Launcher key={item.id} item={item} tone={tone} />)}</div>
       </section>;
     })}
 
     {!quick.length && !sections.length && <div className="card">
-      <EmptyState title="Aucun module attribué">Contactez votre administrateur pour obtenir l'accès aux modules nécessaires à votre poste.</EmptyState>
+      <EmptyState title={t("welcome.noModulesTitle")}>{t("welcome.noModulesBody")}</EmptyState>
     </div>}
   </div>;
 }

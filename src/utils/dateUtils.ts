@@ -7,13 +7,16 @@
 // UTC+2, no DST — official business timezone for Lubumbashi.
 const GMT2_TZ = "Africa/Lubumbashi";
 
+// Display locale follows the interface language (FR default).
+import { activeLocale } from "../i18n/translate";
+
 /** Short date: "12 janv. 2025" */
 export const formatDateGMT2 = (input: string | Date | null | undefined): string => {
   if (!input) return '—';
   try {
     const date = input instanceof Date ? input : new Date(input);
     if (isNaN(date.getTime())) return '—';
-    return new Intl.DateTimeFormat('fr-FR', {
+    return new Intl.DateTimeFormat(activeLocale(), {
       timeZone: GMT2_TZ,
       year: 'numeric',
       month: 'short',
@@ -30,7 +33,7 @@ export const formatDateTimeGMT2 = (input: string | Date | null | undefined): str
   try {
     const date = input instanceof Date ? input : new Date(input);
     if (isNaN(date.getTime())) return '—';
-    return new Intl.DateTimeFormat('fr-FR', {
+    return new Intl.DateTimeFormat(activeLocale(), {
       timeZone: GMT2_TZ,
       year: 'numeric',
       month: 'short',
@@ -46,7 +49,7 @@ export const formatDateTimeGMT2 = (input: string | Date | null | undefined): str
 
 /** Time only: "14:30" */
 export const formatTimeGMT2 = (date: Date): string => {
-  return date.toLocaleTimeString('fr-FR', {
+  return date.toLocaleTimeString(activeLocale(), {
     timeZone: GMT2_TZ,
     hour: '2-digit',
     minute: '2-digit',
@@ -56,7 +59,7 @@ export const formatTimeGMT2 = (date: Date): string => {
 
 /** Full day label: "lundi 12 janvier" */
 export const formatDayGMT2 = (date: Date): string => {
-  return date.toLocaleDateString('fr-FR', {
+  return date.toLocaleDateString(activeLocale(), {
     timeZone: GMT2_TZ,
     weekday: 'long',
     day: 'numeric',
@@ -69,7 +72,7 @@ export const formatDayGMT2 = (date: Date): string => {
  * Returns: "12/01/2025 14:30"
  */
 export const formatNowGMT2 = (): string => {
-  return new Intl.DateTimeFormat('fr-FR', {
+  return new Intl.DateTimeFormat(activeLocale(), {
     timeZone: GMT2_TZ,
     day: '2-digit',
     month: '2-digit',
@@ -82,7 +85,7 @@ export const formatNowGMT2 = (): string => {
 
 /** Month name from index (0–11): "janvier" */
 export const formatMonthNameGMT2 = (monthIndex: number): string => {
-  return new Intl.DateTimeFormat('fr-FR', {
+  return new Intl.DateTimeFormat(activeLocale(), {
     timeZone: GMT2_TZ,
     month: 'long',
   }).format(new Date(2000, monthIndex, 15));

@@ -3,6 +3,7 @@
  * filters (GET /products?availability=sellable) and sale validation are
  * authoritative; these only keep every screen wording the same rule.
  */
+import { tr } from "../i18n/translate.ts";
 
 export interface StockFields {
   stock: number;
@@ -28,9 +29,9 @@ export function stockHealth(product: StockFields): StockHealth {
 
 /** Status shown on product lists: manual status first, then stock availability. */
 export function productAvailabilityLabel(product: StockFields): { label: string; tone: "success" | "warning" | "danger" | "neutral" } {
-  if (product.status !== "active") return { label: "Inactif", tone: "neutral" };
+  if (product.status !== "active") return { label: tr("availability.inactive", "Inactif"), tone: "neutral" };
   const health = stockHealth(product);
-  if (health === "out") return { label: "En rupture", tone: "danger" };
-  if (health === "low") return { label: "Stock faible", tone: "warning" };
-  return { label: "Disponible", tone: "success" };
+  if (health === "out") return { label: tr("availability.out", "En rupture"), tone: "danger" };
+  if (health === "low") return { label: tr("availability.low", "Stock faible"), tone: "warning" };
+  return { label: tr("availability.available", "Disponible"), tone: "success" };
 }

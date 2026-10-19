@@ -2,17 +2,19 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type P
 import type { StockSeriesPoint } from "../../types/inventory";
 import { formatQuantity, formatSigned } from "../../utils/inventoryFormat";
 import { niceTicks } from "../../utils/chartScale";
+import { useTranslation } from "react-i18next";
+import { activeLocale } from "../../i18n/translate";
 
 const HEIGHT = 200;
 const PAD = { top: 12, right: 16, bottom: 28, left: 52 };
 
-const dayLabel = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" });
-const monthLabel = new Intl.DateTimeFormat("fr-FR", { month: "short", year: "2-digit", timeZone: "UTC" });
-
 function keyLabel(key: string, granularity: "day" | "month"): string {
   const [year, month, day = 1] = key.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
-  return granularity === "month" ? monthLabel.format(date) : dayLabel.format(date);
+  const options: Intl.DateTimeFormatOptions = granularity === "month"
+    ? { month: "short", year: "2-digit", timeZone: "UTC" }
+    : { day: "numeric", month: "short", timeZone: "UTC" };
+  return new Intl.DateTimeFormat(activeLocale(), options).format(date);
 }
 
 /**
@@ -20,11 +22,13 @@ function keyLabel(key: string, granularity: "day" | "month"): string {
  * card title names it. Buckets before the ledger could prove the stock are
  * left out rather than drawn with invented values.
  */
-export default function StockLevelChart({ series, granularity, unit = "pièces" }: {
+export default function StockLevelChart({ series, granularity, unit: unitProp }: {
   series: StockSeriesPoint[];
   granularity: "day" | "month";
   unit?: string;
 }) {
+  const { t } = useTranslation();
+  const unit = unitProp ?? t("inventory.pieces");
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
   const [active, setActive] = useState<number | null>(null);
@@ -77,14 +81,14 @@ export default function StockLevelChart({ series, granularity, unit = "pièces" 
   return (
     <figure className="stock-chart" aria-labelledby={titleId}>
       <figcaption id={titleId} className="sr-only">
-        Niveau du stock en fin de {granularity === "month" ? "mois" : "journée"}, de {formatQuantity(points[0].level)} à {formatQuantity(points[points.length - 1].level)} {unit}.
+        {t(granularity === "month" ? "inventory.chart.captionMonth" : "inventory.chart.captionDay", { from: formatQuantity(points[0].level), to: formatQuantity(points[points.length - 1].level), unit })}
       </figcaption>
       <div
         ref={wrapRef}
         className="stock-chart-plot"
         tabIndex={0}
         role="img"
-        aria-label="Graphique du niveau de stock. Flèches gauche et droite pour parcourir les valeurs."
+        aria-label={t("inventory.chart.aria")}
         onKeyDown={onKeyDown}
         onBlur={() => setActive(null)}
       >
@@ -121,20 +125,20 @@ export default function StockLevelChart({ series, granularity, unit = "pièces" 
             style={{ left: Math.min(Math.max(x(active), 80), width - 80), top: Math.max(0, y(current.level) - 64) }}
           >
             <strong className="num">{formatQuantity(current.level)} {unit}</strong>
-            <span>{keyLabel(current.key, granularity)} · variation {formatSigned(current.net)}</span>
+            <span>{t("inventory.chart.tooltip", { when: keyLabel(current.key, granularity), net: formatSigned(current.net) })}</span>
           </div>
         )}
       </div>
       <details className="stock-chart-table">
-        <summary>Voir les valeurs</summary>
+        <summary>{t("inventory.chart.showValues")}</summary>
         <table>
-          <thead><tr><th scope="col">{granularity === "month" ? "Mois" : "Jour"}</th><th scope="col">Variation</th><th scope="col">Stock en fin</th></tr></thead>
+          <thead><tr><th scope="col">{granularity === "month" ? t("trend.bucket.month") : t("trend.bucket.day")}</th><th scope="col">{t("inventory.chart.change")}</th><th scope="col">{t("inventory.chart.endStock")}</th></tr></thead>
           <tbody>
             {series.map((point) => (
               <tr key={point.key}>
                 <td>{keyLabel(point.key, granularity)}</td>
                 <td className="num">{formatSigned(point.net)}</td>
-                <td className="num">{point.level === null ? "Non reconstructible" : formatQuantity(point.level)}</td>
+                <td className="num">{point.level === null ? t("inventory.notReconstructible") : formatQuantity(point.level)}</td>
               </tr>
             ))}
           </tbody>

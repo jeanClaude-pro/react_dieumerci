@@ -17,6 +17,9 @@ import { createBoundedQueue } from "../utils/scannerQueue";
 import { performReceiptScan, describeHttpErrorMessage } from "../utils/receiptScanClient";
 import { canUseCamera } from "../utils/cameraAccess";
 import { cameraReducer, INITIAL_CAMERA_STATE } from "../utils/cameraStateMachine";
+import { useTranslation } from "react-i18next";
+import { serverMessage } from "../i18n/serverMessages";
+import { formatDateTime, formatUSD } from "../i18n/format";
 
 type ScannerMode = "approve" | "verify";
 
@@ -41,6 +44,10 @@ const CAMERA_DECODE_LOCK_MS = 750;
 
 export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
   const { user } = useAuth();
+  const { t } = useTranslation();
+  // Latest translator for the long-lived callbacks below (their dependency lists stay unchanged).
+  const tRef = useRef(t);
+  tRef.current = t;
   const isAdmin = canUseCamera(user?.role);
 
   const [result, setResult] = useState<ScanResult | null>(null);
@@ -105,7 +112,7 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
   const processOneToken = useCallback(async (token: string, myGeneration: number) => {
     if (!isValidReceiptToken(token)) {
       devLog("qr format check failed");
-      if (generationRef.current === myGeneration) setResult({ code: "INVALID", message: "REÇU INVALIDE" });
+      if (generationRef.current === myGeneration) setResult({ code: "INVALID", message: tRef.current("scanner.invalid") });
       return;
     }
     if (deduperRef.current.shouldSkip(token)) {
@@ -121,7 +128,7 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
       deduperRef.current.release(token);
       if (generationRef.current === myGeneration) {
         setSessionExpired(true);
-        setResult({ code: "AUTH_REQUIRED", message: "SESSION EXPIRÉE" });
+        setResult({ code: "AUTH_REQUIRED", message: tRef.current("scanner.sessionExpired") });
       }
       return;
     }
@@ -147,7 +154,7 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
       case "timeout":
         devLog("request timed out");
         deduperRef.current.release(token);
-        setResult({ code: "TIMEOUT", message: "DÉLAI D'ATTENTE DÉPASSÉ — RESCANNEZ" });
+        setResult({ code: "TIMEOUT", message: tRef.current("scanner.timeout") });
         return;
       case "aborted":
         devLog("request aborted (unmount/mode change/session invalidation)");
@@ -156,7 +163,7 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
       case "network_error":
         devLog("network failure");
         deduperRef.current.release(token);
-        setResult({ code: "ERROR", message: "ERREUR DE CONNEXION" });
+        setResult({ code: "ERROR", message: tRef.current("scanner.connectionError") });
         return;
       case "unauthorized": {
         devLog("401 received — stopping scanner");
@@ -166,17 +173,17 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
         stopCameraRef.current();
         sessionInvalidRef.current = true;
         setSessionExpired(true);
-        setResult({ code: "AUTH_REQUIRED", message: "SESSION EXPIRÉE" });
+        setResult({ code: "AUTH_REQUIRED", message: tRef.current("scanner.sessionExpired") });
         return;
       }
       default: {
         const data = outcome.data as Partial<ScanResult> & { code?: string; message?: string };
         const fallbackMessage =
-          outcome.kind === "success" ? "TRAITEMENT TERMINÉ" : describeHttpErrorMessage(outcome.status);
+          outcome.kind === "success" ? tRef.current("scanner.done") : serverMessage(describeHttpErrorMessage(outcome.status));
         const scanResult: ScanResult = {
           code: data.code || (outcome.kind === "success" ? "OK" : "ERROR"),
-          message: data.message || fallbackMessage,
-          detail: data.detail,
+          message: serverMessage(data.message, fallbackMessage),
+          detail: data.detail ? serverMessage(data.detail) : undefined,
           receiptNumber: data.receiptNumber,
           amount: data.amount,
           approvedBy: data.approvedBy,
@@ -221,7 +228,7 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
     if (!accepted) {
       devLog("queue overflow — clearing backlog");
       queueRef.current.clear();
-      setResult({ code: "QUEUE_OVERFLOW", message: "FILE D'ATTENTE SATURÉE — RESCANNEZ LE REÇU" });
+      setResult({ code: "QUEUE_OVERFLOW", message: tRef.current("scanner.queueFull") });
       focusScanner();
       return;
     }
@@ -271,7 +278,7 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
     if (!isAdmin) return; // client-side mirror of the admin-only restriction; never starts for other roles even if invoked directly
     if (cameraMachine.state === "starting" || cameraMachine.state === "active") return;
     if (!navigator.mediaDevices?.getUserMedia || !videoRef.current) {
-      dispatchCamera({ type: "START_FAILED", message: "La caméra n'est pas prise en charge par ce navigateur." });
+      dispatchCamera({ type: "START_FAILED", message: tRef.current("scanner.cameraUnsupported") });
       return;
     }
 
@@ -313,8 +320,8 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
       if (cameraGenerationRef.current !== myCameraGeneration) return; // superseded — ignore
       const message =
         error instanceof Error && error.name === "NotAllowedError"
-          ? "Permission caméra refusée. Autorisez-la dans les réglages du navigateur."
-          : "Impossible de démarrer la caméra.";
+          ? tRef.current("scanner.cameraDenied")
+          : tRef.current("scanner.cameraFailed");
       dispatchCamera({ type: "START_FAILED", message });
       focusScanner();
     }
@@ -406,7 +413,7 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
       stopCameraRef.current();
       setSessionExpired(true);
       setProcessing(false);
-      setResult({ code: "AUTH_REQUIRED", message: "SESSION EXPIRÉE" });
+      setResult({ code: "AUTH_REQUIRED", message: tRef.current("scanner.sessionExpired") });
     };
     window.addEventListener(SESSION_INVALIDATED_EVENT, handleInvalidated);
     return () => window.removeEventListener(SESSION_INVALIDATED_EVENT, handleInvalidated);
@@ -465,10 +472,10 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
       : "border-red-500 bg-red-50 text-red-950";
 
   const statusLabel = sessionExpired
-    ? "SESSION EXPIRÉE"
+    ? t("scanner.sessionExpired")
     : processing
-      ? "TRAITEMENT…"
-      : "SCANNER PRÊT";
+      ? t("scanner.processing")
+      : t("scanner.ready");
   const statusColor = sessionExpired ? "text-red-700" : processing ? "text-amber-700" : "text-blue-700";
 
   return (
@@ -477,12 +484,10 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
         <header className="page-header" style={{ marginBottom: 0 }}>
           <div>
           <h1 className="page-title">
-            {mode === "approve" ? "Validation paiement" : "Contrôle paiement"}
+            {mode === "approve" ? t("scanner.approveTitle") : t("scanner.verifyTitle")}
           </h1>
           <p className="page-subtitle">
-            {mode === "approve"
-              ? "Le scan valide automatiquement le paiement."
-              : "Vérification en lecture seule — aucun paiement ne sera validé ici."}
+            {mode === "approve" ? t("scanner.approveSubtitle") : t("scanner.verifySubtitle")}
           </p>
           </div>
         </header>
@@ -493,14 +498,14 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
             <span className="text-lg font-semibold tracking-wide">{statusLabel}</span>
           </div>
           <p className="mt-2 text-sm text-slate-600">
-            Scannez avec le lecteur USB. Le code est traité automatiquement à la touche Entrée.
+            {t("scanner.usbHint")}
           </p>
           <input
             ref={inputRef}
             type="text"
             readOnly
             autoComplete="off"
-            aria-label="Entrée du lecteur QR USB"
+            aria-label={t("scanner.usbInput")}
             className="mt-4 w-full rounded-lg border border-slate-300 px-4 py-3 font-mono text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
             placeholder="EDM1:…"
             onBlur={handleInputBlur}
@@ -510,7 +515,7 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
         {isAdmin && (
           <section className="card p-5 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="section-title">Scanner avec la caméra</h2>
+              <h2 className="section-title">{t("scanner.cameraTitle")}</h2>
               <button
                 type="button"
                 onClick={(event) => {
@@ -521,7 +526,7 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
                 className={`btn ${cameraMachine.state === "active" ? "btn-secondary" : "btn-primary"}`}
               >
                 {cameraMachine.state === "active" ? <CameraOff aria-hidden="true" /> : <Camera aria-hidden="true" />}
-                {cameraMachine.state === "active" ? "Arrêter" : "Ouvrir la caméra"}
+                {cameraMachine.state === "active" ? t("scanner.stop") : t("scanner.openCamera")}
               </button>
             </div>
             <video
@@ -538,19 +543,19 @@ export default function ReceiptScannerPage({ mode }: { mode: ScannerMode }) {
           <section className={`rounded-xl border-2 p-5 sm:p-6 ${resultColor}`} aria-live="assertive">
             <h2 className="text-xl font-bold tracking-wide">{result.message}</h2>
             {mode === "verify" && result.code === "APPROVED" && (
-              <p className="mt-2 text-lg font-black">SORTIE AUTORISÉE</p>
+              <p className="mt-2 text-lg font-black">{t("scanner.exitAllowed")}</p>
             )}
             {mode === "verify" && result.code === "PENDING" && (
-              <p className="mt-2 text-lg font-black">SORTIE NON AUTORISÉE</p>
+              <p className="mt-2 text-lg font-black">{t("scanner.exitDenied")}</p>
             )}
             {result.detail && <p className="mt-2 font-medium">{result.detail}</p>}
             <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
-              {result.receiptNumber && <><dt>Reçu</dt><dd className="font-bold">{result.receiptNumber}</dd></>}
-              {typeof result.amount === "number" && <><dt>Montant</dt><dd className="font-bold">${result.amount.toFixed(2)}</dd></>}
-              {result.approvedBy && <><dt>Confirmé par</dt><dd className="font-bold">{result.approvedBy}</dd></>}
-              {result.approvedAt && <><dt>Heure</dt><dd className="font-bold">{new Date(result.approvedAt).toLocaleString("fr-FR")}</dd></>}
-              {result.verifiedBy && <><dt>Sortie contrôlée par</dt><dd className="font-bold">{result.verifiedBy}</dd></>}
-              {result.verifiedAt && <><dt>Contrôle sortie</dt><dd className="font-bold">{new Date(result.verifiedAt).toLocaleString("fr-FR")}</dd></>}
+              {result.receiptNumber && <><dt>{t("scanner.receipt")}</dt><dd className="font-bold">{result.receiptNumber}</dd></>}
+              {typeof result.amount === "number" && <><dt>{t("sortie.amount")}</dt><dd className="font-bold">{formatUSD(result.amount)}</dd></>}
+              {result.approvedBy && <><dt>{t("scanner.confirmedBy")}</dt><dd className="font-bold">{result.approvedBy}</dd></>}
+              {result.approvedAt && <><dt>{t("scanner.time")}</dt><dd className="font-bold">{formatDateTime(result.approvedAt)}</dd></>}
+              {result.verifiedBy && <><dt>{t("scanner.verifiedBy")}</dt><dd className="font-bold">{result.verifiedBy}</dd></>}
+              {result.verifiedAt && <><dt>{t("scanner.verifiedAt")}</dt><dd className="font-bold">{formatDateTime(result.verifiedAt)}</dd></>}
             </dl>
           </section>
         )}

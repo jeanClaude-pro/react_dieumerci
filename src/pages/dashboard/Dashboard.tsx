@@ -4,7 +4,6 @@ import {
   History, Info, LayoutDashboard, PackageCheck, PackageX, RefreshCw, TrendingDown, WifiOff,
 } from "lucide-react";
 import PageHeader from "../../components/ui/PageHeader";
-import ResponsiveTable from "../../components/ui/ResponsiveTable";
 import { EmptyState, ErrorState, Skeleton } from "../../components/ui/States";
 import StockBridge from "../../components/inventory/StockBridge";
 import StockLevelChart from "../../components/inventory/StockLevelChart";
@@ -15,9 +14,12 @@ import PeriodPicker from "../../components/inventory/PeriodPicker";
 import { initialPeriodSelection, usePeriodRange, type PeriodSelection } from "../../hooks/usePeriodRange";
 import { describePeriod, periodQuery } from "../../utils/dashboardPeriod";
 import { formatDateTime, formatQuantity, formatTime, requestJson } from "../../utils/inventoryFormat";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import SoldProductStory from "./SoldProductStory";
 
-function plural(count: number, word: string) {
-  return `${formatQuantity(count)} ${word}${count > 1 ? "s" : ""}`;
+function productCount(t: TFunction, count: number) {
+  return t("inventory.productCount", { count, formatted: formatQuantity(count) });
 }
 
 function KpiTile({ label, value, unit, icon, detail, tone = "neutral", unknown }: {
@@ -29,15 +31,16 @@ function KpiTile({ label, value, unit, icon, detail, tone = "neutral", unknown }
   tone?: "neutral" | "in" | "out";
   unknown?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className={`dash-kpi dash-kpi-${tone}`}>
       <div className="dash-kpi-head"><span className="dash-kpi-icon" aria-hidden="true">{icon}</span><span>{label}</span></div>
       {value === null ? (
-        <div className="dash-kpi-value is-unknown">—<span className="sr-only">{unknown || "Non disponible"}</span></div>
+        <div className="dash-kpi-value is-unknown">—<span className="sr-only">{unknown || t("common.notAvailable")}</span></div>
       ) : (
         <div className="dash-kpi-value">{formatQuantity(value)}{unit && <small>{unit}</small>}</div>
       )}
-      <div className="dash-kpi-detail">{value === null ? unknown || "Non disponible" : detail}</div>
+      <div className="dash-kpi-detail">{value === null ? unknown || t("common.notAvailable") : detail}</div>
     </div>
   );
 }
@@ -51,17 +54,18 @@ function HealthTile({ label, value, icon, detail, tone, onOpen, actionLabel }: {
   onOpen?: () => void;
   actionLabel?: string;
 }) {
+  const { t } = useTranslation();
   const content = (
     <>
       <div className="dash-kpi-head"><span className="dash-kpi-icon" aria-hidden="true">{icon}</span><span>{label}</span></div>
-      <div className="dash-kpi-value">{formatQuantity(value)}<small>article{value > 1 ? "s" : ""}</small></div>
+      <div className="dash-kpi-value">{formatQuantity(value)}<small>{t("dashboard.productsUnit", { count: value })}</small></div>
       <div className="dash-kpi-detail">{detail}</div>
       {onOpen && <span className="dash-health-action">{actionLabel}<ChevronRight aria-hidden="true" /></span>}
     </>
   );
   const className = `dash-health dash-health-${tone} ${value > 0 && tone !== "success" ? "is-alert" : ""}`;
   return onOpen ? (
-    <button type="button" className={className} onClick={onOpen} aria-label={`${label} : ${value}. ${actionLabel}`}>{content}</button>
+    <button type="button" className={className} onClick={onOpen} aria-label={t("dashboard.healthAria", { label, value, action: actionLabel })}>{content}</button>
   ) : (
     <div className={className}>{content}</div>
   );
@@ -78,6 +82,7 @@ function DashboardSkeleton() {
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const [selection, setSelection] = useState<PeriodSelection>(() => initialPeriodSelection("today"));
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +95,7 @@ export default function Dashboard() {
   // refreshKey also re-evaluates "today" when the page stays open past midnight.
   const period = usePeriodRange(selection, refreshKey);
   const periodKey = period ? periodQuery(period) : null;
-  const periodLabel = period ? describePeriod(period) : "Période invalide";
+  const periodLabel = period ? describePeriod(period) : t("period.invalidShort");
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -118,24 +123,24 @@ export default function Dashboard() {
   const flows = data?.stock.flows ?? null;
   const coverage = data?.coverage;
   const endIsNow = data?.period.endIsNow ?? true;
-  const pieceUnit = "pièces";
+  const pieceUnit = t("inventory.pieces");
   const otherUnits = data?.units.filter((row) => row.dimension !== "piece") ?? [];
   const activity = data?.activity ?? {};
   const partial = Boolean(flows && coverage && !coverage.flowsComplete);
-  const partialNote = coverage?.trackingStartedAt ? `Partiel : depuis le ${formatDateTime(coverage.trackingStartedAt)}` : "Partiel";
+  const partialNote = coverage?.trackingStartedAt ? t("dashboard.partialSince", { date: formatDateTime(coverage.trackingStartedAt) }) : t("dashboard.partial");
   const chartable = (data?.series.filter((point) => point.level !== null).length ?? 0) >= 2;
 
   return (
     <div className="page dashboard-page">
       <PageHeader
-        eyebrow="Pilotage"
+        eyebrow={t("nav.sections.steering")}
         icon={<LayoutDashboard aria-hidden="true" />}
-        title="Tableau de bord"
-        description="Contrôle opérationnel du stock : ce qui est entré, ce qui est sorti et ce qui demande votre attention."
+        title={t("dashboard.title")}
+        description={t("dashboard.subtitle")}
         actions={
           <button type="button" className="btn btn-secondary" onClick={refresh} disabled={loading || !period}>
             <RefreshCw className={loading ? "animate-spin" : ""} aria-hidden="true" />
-            {data ? `Actualisé à ${formatTime(data.generatedAt)}` : "Actualiser"}
+            {data ? t("common.updatedAt", { time: formatTime(data.generatedAt) }) : t("common.refresh")}
           </button>
         }
       />
@@ -143,13 +148,13 @@ export default function Dashboard() {
       <PeriodPicker className="card mb-4" value={selection} onChange={setSelection} range={period} />
 
       {!online && (
-        <div className="alert alert-warning mb-4" role="status"><WifiOff aria-hidden="true" /><span>Hors ligne : le tableau de bord ne s'affiche qu'avec les données du serveur. Les chiffres reviendront avec la connexion.</span></div>
+        <div className="alert alert-warning mb-4" role="status"><WifiOff aria-hidden="true" /><span>{t("dashboard.offline")}</span></div>
       )}
 
       {error && !data ? (
         <div className="card">
-          <ErrorState title="Impossible de charger le tableau de bord" action={<button type="button" className="btn btn-primary" onClick={refresh}><RefreshCw aria-hidden="true" />Réessayer</button>}>
-            {online ? error : "Vous êtes hors ligne."}
+          <ErrorState title={t("dashboard.error")} action={<button type="button" className="btn btn-primary" onClick={refresh}><RefreshCw aria-hidden="true" />{t("common.retry")}</button>}>
+            {online ? error : t("dashboard.youAreOffline")}
           </ErrorState>
         </div>
       ) : !data ? (
@@ -157,16 +162,16 @@ export default function Dashboard() {
       ) : (
         <div className={`dash-grid ${loading ? "is-refreshing" : ""}`} aria-busy={loading}>
           {error && (
-            <div className="alert alert-danger" role="alert"><AlertTriangle aria-hidden="true" /><span>Actualisation impossible ({error}). Les chiffres affichés datent de {formatTime(data.generatedAt)}.</span></div>
+            <div className="alert alert-danger" role="alert"><AlertTriangle aria-hidden="true" /><span>{t("dashboard.refreshFailed", { error, time: formatTime(data.generatedAt) })}</span></div>
           )}
           {coverage && (!coverage.openingKnown || (coverage.untrackedProducts ?? 0) > 0) && (
             <div className="alert alert-info" role="note">
               <Info aria-hidden="true" />
               <span>
                 {coverage.trackingStartedAt
-                  ? <>Le suivi détaillé du stock a commencé le <strong>{formatDateTime(coverage.trackingStartedAt)}</strong>. Les valeurs antérieures ne peuvent pas être reconstruites avec exactitude ; elles sont affichées « — » plutôt qu'estimées{coverage.flowsAvailable && !coverage.flowsComplete ? ", et les mouvements ne couvrent que la partie suivie de la période" : ""}.</>
-                  : <>Des articles ne sont pas encore couverts par le suivi du stock ; l'historique n'est pas encore exact.</>}
-                {(coverage.untrackedProducts ?? 0) > 0 && <> {plural(coverage.untrackedProducts ?? 0, "article")} en attente de suivi (enregistrement automatique au prochain démarrage du serveur ou au premier mouvement).</>}
+                  ? t(coverage.flowsAvailable && !coverage.flowsComplete ? "dashboard.trackingSincePartial" : "dashboard.trackingSince", { date: formatDateTime(coverage.trackingStartedAt) })
+                  : t("dashboard.notAllTracked")}
+                {(coverage.untrackedProducts ?? 0) > 0 && <> {t("dashboard.untracked", { products: productCount(t, coverage.untrackedProducts ?? 0) })}</>}
               </span>
             </div>
           )}
@@ -174,127 +179,83 @@ export default function Dashboard() {
             <div className="alert alert-info" role="note">
               <Info aria-hidden="true" />
               <span>
-                Les indicateurs « pièces » incluent uniquement les articles comptés à la pièce. Autres unités, présentées séparément : {otherUnits.map((row) => `${formatQuantity(row.quantity)} ${row.unit} (${plural(row.products, "article")})`).join(", ")}.
+                {t("dashboard.otherUnits", { list: otherUnits.map((row) => `${formatQuantity(row.quantity)} ${row.unit} (${productCount(t, row.products)})`).join(", ") })}
               </span>
             </div>
           )}
 
           <section aria-labelledby="dash-flows-title">
             <div className="dash-section-head">
-              <h2 id="dash-flows-title" className="section-title">Mouvements de stock</h2>
+              <h2 id="dash-flows-title" className="section-title">{t("dashboard.flowsTitle")}</h2>
               <span className="badge">{periodLabel}</span>
             </div>
             <div className="dash-kpis">
               <KpiTile
-                label="Stock au début"
+                label={t("inventory.opening")}
                 value={data.stock.opening}
                 unit={pieceUnit}
                 icon={<History />}
-                unknown="Non reconstructible (avant le début du suivi)"
-                detail="Pièces disponibles à l'ouverture de la période"
+                unknown={t("dashboard.unknownBeforeTracking")}
+                detail={t("dashboard.openingDetail")}
               />
               <KpiTile
-                label={endIsNow ? "Stock actuel" : "Stock en fin de période"}
+                label={endIsNow ? t("inventory.current") : t("inventory.closingPeriod")}
                 value={data.stock.closing}
                 unit={pieceUnit}
                 icon={<Boxes />}
-                unknown="Non reconstructible (avant le début du suivi)"
-                detail={flows && data.stock.opening !== null ? `Variation ${flows.net >= 0 ? "+" : "−"}${formatQuantity(Math.abs(flows.net))} ${pieceUnit}` : endIsNow ? "Pièces en stock maintenant" : "Pièces restantes à la clôture"}
+                unknown={t("dashboard.unknownBeforeTracking")}
+                detail={flows && data.stock.opening !== null ? t("dashboard.change", { value: `${flows.net >= 0 ? "+" : "−"}${formatQuantity(Math.abs(flows.net))}`, unit: pieceUnit }) : endIsNow ? t("dashboard.closingNowDetail") : t("dashboard.closingDetail")}
               />
               <KpiTile
-                label="Pièces sorties"
+                label={t("dashboard.piecesOut")}
                 value={flows ? flows.piecesOut : null}
                 unit={pieceUnit}
                 tone="out"
                 icon={<ArrowUpFromLine />}
-                detail={partial ? partialNote : flows && flows.returns > 0 ? `${formatQuantity(flows.returns)} retournées (annulations)` : "Ventes nettes des annulations"}
+                detail={partial ? partialNote : flows && flows.returns > 0 ? t("dashboard.returnedDetail", { qty: formatQuantity(flows.returns) }) : t("dashboard.outDetail")}
               />
               <KpiTile
-                label="Entrées en stock"
+                label={t("inventory.bridge.restock")}
                 value={flows ? flows.entries : null}
                 unit={pieceUnit}
                 tone="in"
                 icon={<ArrowDownToLine />}
-                detail={partial ? partialNote : flows && flows.newProducts > 0 ? `dont ${formatQuantity(flows.newProducts)} via nouveaux articles` : "Réapprovisionnements et nouveaux articles"}
+                detail={partial ? partialNote : flows && flows.newProducts > 0 ? t("dashboard.newProductsDetail", { qty: formatQuantity(flows.newProducts) }) : t("dashboard.inDetail")}
               />
             </div>
-            <div className="card mt-4">
-              <header className="card-header">
-                <div>
-                  <h3 className="section-title">Mouvements par article vendu</h3>
-                  <p className="text-sm text-gray-500">Une ligne agrégée par article, dans son unité propre. Les ventes annulées sur la période sont neutralisées.</p>
-                </div>
-              </header>
-              <div className="card-body">
-                {data.soldProductMovements.length > 0 ? (
-                  <ResponsiveTable stack="lg" className="dash-sold-table" aria-label="Mouvements par article vendu">
-                    <thead>
-                      <tr>
-                        <th className="is-text">Article</th>
-                        <th className="is-text">Unité</th>
-                        <th className="is-num">Vendu</th>
-                        <th className="is-num">Retours</th>
-                        <th className="is-num">Entrées</th>
-                        <th className="is-num">Corrections</th>
-                        <th className="is-num">Stock actuel</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.soldProductMovements.map((row) => {
-                        const corrections = row.flows.adjustmentsIn - row.flows.adjustmentsOut;
-                        return (
-                          <tr key={row.productId}>
-                            <td className="is-text"><strong>{row.name}</strong>{row.category && <small className="block text-gray-500">{row.category}</small>}</td>
-                            <td className="is-text whitespace-nowrap">{row.unit}</td>
-                            <td className="num is-num">{formatQuantity(row.flows.piecesOut)}</td>
-                            <td className="num is-num">{formatQuantity(row.flows.returns)}</td>
-                            <td className="num is-num">{formatQuantity(row.flows.entries)}</td>
-                            <td className="num is-num">{corrections > 0 ? "+" : corrections < 0 ? "−" : ""}{formatQuantity(Math.abs(corrections))}</td>
-                            <td className="num is-num"><strong>{formatQuantity(row.currentStock)}</strong></td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </ResponsiveTable>
-                ) : (
-                  <EmptyState title="Aucun article vendu" icon={<Boxes aria-hidden="true" />}>
-                    Aucun mouvement de vente net n'a été enregistré sur cette période.
-                  </EmptyState>
-                )}
-              </div>
-            </div>
+            <SoldProductStory rows={data.soldProductMovements} endIsNow={endIsNow} />
           </section>
 
           <section aria-labelledby="dash-health-title">
             <div className="dash-section-head">
-              <h2 id="dash-health-title" className="section-title">Santé de l'inventaire</h2>
-              <span className="badge badge-info">État actuel · {formatTime(data.generatedAt)}</span>
+              <h2 id="dash-health-title" className="section-title">{t("dashboard.healthTitle")}</h2>
+              <span className="badge badge-info">{t("dashboard.currentState", { time: formatTime(data.generatedAt) })}</span>
             </div>
             <div className="dash-health-row">
               <HealthTile
-                label="Articles vendables"
+                label={t("dashboard.sellable")}
                 value={data.health.sellable}
                 tone="success"
                 icon={<PackageCheck />}
-                detail={`${plural(data.health.active, "article")} actif${data.health.active > 1 ? "s" : ""} · ${formatQuantity(data.health.inactive)} désactivé${data.health.inactive > 1 ? "s" : ""}`}
+                detail={t("dashboard.sellableDetail", { active: formatQuantity(data.health.active), inactive: formatQuantity(data.health.inactive) })}
               />
               <HealthTile
-                label="Stock faible"
+                label={t("availability.low")}
                 value={data.health.lowStock}
                 tone="warning"
                 icon={<TrendingDown />}
-                detail="Au minimum ou en dessous, hors ruptures"
+                detail={t("dashboard.lowDetail")}
                 onOpen={() => setAlertKind("low")}
-                actionLabel="Voir les articles"
+                actionLabel={t("dashboard.seeProducts")}
               />
               <HealthTile
-                label="En rupture"
+                label={t("availability.out")}
                 value={data.health.outOfStock}
                 tone="danger"
                 icon={<PackageX />}
-                detail={data.health.becameOutOfStock > 0 ? `${plural(data.health.becameOutOfStock, "article")} tombé${data.health.becameOutOfStock > 1 ? "s" : ""} en rupture sur la période` : "0 pièce : retirés de la vente"}
+                detail={data.health.becameOutOfStock > 0 ? t("dashboard.becameOut", { count: data.health.becameOutOfStock }) : t("dashboard.outHealthDetail")}
                 onOpen={() => setAlertKind(data.health.outOfStock === 0 && data.health.becameOutOfStock > 0 ? "became_out" : "out")}
-                actionLabel="Voir les articles"
+                actionLabel={t("dashboard.seeProducts")}
               />
             </div>
           </section>
@@ -303,25 +264,25 @@ export default function Dashboard() {
             <section className="card dash-panel" aria-labelledby="dash-bridge-title">
               <header className="card-header">
                 <div>
-                  <h2 id="dash-bridge-title" className="section-title">Bilan du stock</h2>
-                  <p className="text-sm text-gray-500">Début + entrées + retours − sorties ± corrections = fin</p>
+                  <h2 id="dash-bridge-title" className="section-title">{t("dashboard.bridgeTitle")}</h2>
+                  <p className="text-sm text-gray-500">{t("dashboard.bridgeFormula")}</p>
                 </div>
               </header>
               <div className="card-body">
                 {flows ? (
                   <>
-                    <StockBridge opening={data.stock.opening} closing={data.stock.closing} flows={flows} unit={pieceUnit} closingLabel={endIsNow ? "Stock actuel" : "Stock en fin de période"} />
+                    <StockBridge opening={data.stock.opening} closing={data.stock.closing} flows={flows} unit={pieceUnit} closingLabel={endIsNow ? t("inventory.current") : t("inventory.closingPeriod")} />
                     <dl className="dash-activity">
-                      <div><dt>Ventes</dt><dd className="num">{formatQuantity(data.transactions.sales)}</dd></div>
-                      <div><dt>Annulations</dt><dd className="num">{formatQuantity((activity.sale_void ?? 0) + (activity.sale_delete ?? 0))}</dd></div>
-                      <div><dt>Réappro.</dt><dd className="num">{formatQuantity(activity.restock ?? 0)}</dd></div>
-                      <div><dt>Corrections</dt><dd className="num">{formatQuantity((activity.adjustment ?? 0) + (activity.product_delete ?? 0))}</dd></div>
+                      <div><dt>{t("dashboard.activity.sales")}</dt><dd className="num">{formatQuantity(data.transactions.sales)}</dd></div>
+                      <div><dt>{t("dashboard.activity.voids")}</dt><dd className="num">{formatQuantity((activity.sale_void ?? 0) + (activity.sale_delete ?? 0))}</dd></div>
+                      <div><dt>{t("dashboard.activity.restocks")}</dt><dd className="num">{formatQuantity(activity.restock ?? 0)}</dd></div>
+                      <div><dt>{t("dashboard.activity.corrections")}</dt><dd className="num">{formatQuantity((activity.adjustment ?? 0) + (activity.product_delete ?? 0))}</dd></div>
                     </dl>
-                    <p className="dash-footnote">Nombre d'opérations de stock sur la période. Les montants restent dans Rapports & analytique.</p>
+                    <p className="dash-footnote">{t("dashboard.activity.footnote")}</p>
                   </>
                 ) : (
-                  <EmptyState title="Période antérieure au suivi du stock" icon={<History aria-hidden="true" />}>
-                    Aucun mouvement fiable n'est disponible pour cette période.
+                  <EmptyState title={t("dashboard.beforeTrackingTitle")} icon={<History aria-hidden="true" />}>
+                    {t("dashboard.beforeTrackingBody")}
                   </EmptyState>
                 )}
               </div>
@@ -330,16 +291,16 @@ export default function Dashboard() {
             <section className="card dash-panel" aria-labelledby="dash-level-title">
               <header className="card-header">
                 <div>
-                  <h2 id="dash-level-title" className="section-title">Évolution du stock</h2>
-                  <p className="text-sm text-gray-500">Pièces en stock en fin de {data.period.granularity === "month" ? "mois" : "journée"}</p>
+                  <h2 id="dash-level-title" className="section-title">{t("dashboard.levelTitle")}</h2>
+                  <p className="text-sm text-gray-500">{t(data.period.granularity === "month" ? "dashboard.levelSubtitleMonth" : "dashboard.levelSubtitleDay")}</p>
                 </div>
               </header>
               <div className="card-body">
                 {chartable ? (
                   <StockLevelChart series={data.series} granularity={data.period.granularity} unit={pieceUnit} />
                 ) : (
-                  <EmptyState title={data.series.length <= 1 ? "Une seule journée sélectionnée" : "Historique insuffisant"} icon={<CalendarRange aria-hidden="true" />}>
-                    {data.series.length <= 1 ? "Choisissez « Cette semaine » ou « Ce mois » pour voir l'évolution jour par jour." : "Le niveau de stock n'est connu qu'à partir du début du suivi."}
+                  <EmptyState title={data.series.length <= 1 ? t("dashboard.singleDay") : t("dashboard.notEnoughHistory")} icon={<CalendarRange aria-hidden="true" />}>
+                    {data.series.length <= 1 ? t("dashboard.singleDayHint") : t("dashboard.notEnoughHistoryHint")}
                   </EmptyState>
                 )}
               </div>
@@ -348,16 +309,16 @@ export default function Dashboard() {
             <section className="card dash-panel" aria-labelledby="dash-attention-title">
               <header className="card-header">
                 <div>
-                  <h2 id="dash-attention-title" className="section-title">À traiter en priorité</h2>
-                  <p className="text-sm text-gray-500">Ruptures puis stocks les plus bas par rapport au minimum</p>
+                  <h2 id="dash-attention-title" className="section-title">{t("dashboard.attentionTitle")}</h2>
+                  <p className="text-sm text-gray-500">{t("dashboard.attentionSubtitle")}</p>
                 </div>
                 {(data.health.lowStock + data.health.outOfStock) > 0 && (
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAlertKind(data.health.outOfStock > 0 ? "out" : "low")}>Tout voir<ChevronRight aria-hidden="true" /></button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAlertKind(data.health.outOfStock > 0 ? "out" : "low")}>{t("dashboard.seeAll")}<ChevronRight aria-hidden="true" /></button>
                 )}
               </header>
               {data.attention.length === 0 ? (
                 <div className="card-body">
-                  <EmptyState title="Aucun produit sous le stock minimum." icon={<PackageCheck aria-hidden="true" />}>Tous les articles actifs sont au-dessus de leur minimum.</EmptyState>
+                  <EmptyState title={t("inventory.alerts.empty.low")} icon={<PackageCheck aria-hidden="true" />}>{t("dashboard.allAboveMin")}</EmptyState>
                 </div>
               ) : (
                 <ul className="dash-attention">
@@ -368,11 +329,11 @@ export default function Dashboard() {
                         <span className={`dash-attention-mark ${out ? "is-out" : "is-low"}`} aria-hidden="true">{out ? <PackageX /> : <TrendingDown />}</span>
                         <span className="min-w-0 flex-1">
                           <strong className="block truncate">{row.name}</strong>
-                          <small className="text-gray-500">{row.category || "Sans catégorie"}</small>
+                          <small className="text-gray-500">{row.category || t("dashboard.noCategory")}</small>
                         </span>
                         <span className="dash-attention-figures num">
                           <strong>{formatQuantity(row.stock)} / {formatQuantity(row.minStock)}</strong>
-                          <small>{out ? "En rupture" : `Manque ${formatQuantity(row.gap)}`}</small>
+                          <small>{out ? t("availability.out") : t("dashboard.missing", { qty: formatQuantity(row.gap) })}</small>
                         </span>
                       </li>
                     );
@@ -384,13 +345,13 @@ export default function Dashboard() {
             <section className="card dash-panel" aria-labelledby="dash-category-title">
               <header className="card-header">
                 <div>
-                  <h2 id="dash-category-title" className="section-title">Stock par catégorie</h2>
-                  <p className="text-sm text-gray-500">Pièces en stock maintenant · {plural(data.health.pieceProducts, "article")} compté{data.health.pieceProducts > 1 ? "s" : ""} à la pièce</p>
+                  <h2 id="dash-category-title" className="section-title">{t("dashboard.categoryTitle")}</h2>
+                  <p className="text-sm text-gray-500">{t("dashboard.categorySubtitle", { count: data.health.pieceProducts })}</p>
                 </div>
               </header>
               <div className="card-body">
                 {data.categories.length ? <CategoryBars rows={data.categories} unit={pieceUnit} /> : (
-                  <EmptyState title="Aucun article" icon={<Boxes aria-hidden="true" />}>Ajoutez des articles pour suivre le stock.</EmptyState>
+                  <EmptyState title={t("dashboard.noProduct")} icon={<Boxes aria-hidden="true" />}>{t("dashboard.noProductHint")}</EmptyState>
                 )}
               </div>
             </section>

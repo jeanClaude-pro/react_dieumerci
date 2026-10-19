@@ -1,5 +1,3 @@
-"use client";
-
 import { lazy, Suspense, useEffect, useRef } from "react";
 
 import {
@@ -20,6 +18,7 @@ import { AuthProvider } from "./context/AuthProvider";
 import { RequireRole } from "./components/RequireRole";
 import { useAuth } from "./hooks/useAuth";
 import { LoadingState } from "./components/ui/States";
+import { useTranslation } from "react-i18next";
 
 const Products = lazy(() => import("./pages/products/products"));
 const SalesHistory = lazy(() => import("./pages/history/SalesHistory"));
@@ -37,6 +36,7 @@ const ReceiptScannerPage = lazy(() => import("./components/ReceiptScannerPage"))
 const Remboursements = lazy(() => import("./pages/Remboursements"));
 const Welcome = lazy(() => import("./pages/Welcome"));
 const Dashboard = lazy(() => import("./pages/dashboard/Dashboard"));
+const AuditLog = lazy(() => import("./pages/audit/AuditLog"));
 
 function RouteLoading() {
   return <LoadingState page />;
@@ -44,6 +44,7 @@ function RouteLoading() {
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const { t } = useTranslation();
   const isLogin = location.pathname === "/login";
   // The welcome launcher is itself the navigation: full width, no sidebar.
   const isWelcome = location.pathname === "/";
@@ -54,7 +55,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell">
-      <a href="#main-content" className="skip-link">Aller au contenu</a>
+      <a href="#main-content" className="skip-link">{t("nav.skipToContent")}</a>
       {!isLogin && !isWelcome && <Sidebar />}
       <main ref={mainRef} id="main-content" tabIndex={-1} className={`app-main ${isLogin ? "app-login" : ""}`}>
         <div className="app-content">{children}</div>
@@ -114,7 +115,9 @@ export default function App() {
                   path="/rate"
                   element={
                     <RequireAuth>
-                      <Rate />
+                      <RequireRole roles={["admin", "manager"]}>
+                        <Rate />
+                      </RequireRole>
                     </RequireAuth>
                   }
                 />
@@ -155,7 +158,9 @@ export default function App() {
                   path="/reports"
                   element={
                     <RequireAuth>
-                      <Analytics />
+                      <RequireRole roles={["admin"]}>
+                        <Analytics />
+                      </RequireRole>
                     </RequireAuth>
                   }
                 />
@@ -163,7 +168,9 @@ export default function App() {
                   path="/customers"
                   element={
                     <RequireAuth>
-                      <Customers />
+                      <RequireRole roles={["admin"]}>
+                        <Customers />
+                      </RequireRole>
                     </RequireAuth>
                   }
                 />
@@ -203,9 +210,15 @@ export default function App() {
                   path="/admin"
                   element={
                     <RequireAuth>
-                      <AdminPanel />
+                      <RequireRole roles={["admin"]}>
+                        <AdminPanel />
+                      </RequireRole>
                     </RequireAuth>
                   }
+                />
+                <Route
+                  path="/audit"
+                  element={<RequireAuth><RequireRole roles={["admin"]}><AuditLog /></RequireRole></RequireAuth>}
                 />
                 <Route path="/login" element={<LoginRoute />} />
               </Routes></Suspense>

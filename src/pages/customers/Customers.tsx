@@ -5,10 +5,15 @@ import { EmptyState, LoadingState, PermissionDenied } from "../../components/ui/
 
 import type React from "react";
 import { formatDateGMT2, formatDateTimeGMT2 } from "../../utils/dateUtils";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { serverUrl } from "../../utils/constants";
 import { apiRequest } from "../../lib/api";
+import { useTranslation } from "react-i18next";
+import PageHeader from "../../components/ui/PageHeader";
+import { formatNumber, formatUSD } from "../../i18n/format";
+import { serverMessage } from "../../i18n/serverMessages";
 import {
+  CheckCircle,
   Users,
   Search,
   Eye,
@@ -36,6 +41,8 @@ interface Customer {
 }
 
 export default function Customers() {
+  const { t } = useTranslation();
+  const [notice, setNotice] = useState<{ kind: "success" | "danger" | "info"; text: string } | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -50,8 +57,10 @@ export default function Customers() {
   const [refreshing, setRefreshing] = useState(false);
   const [recalculating, setRecalculating] = useState<string | null>(null);
 
+  // Latest fetchCustomers for the effect below (its trigger list stays unchanged).
+  const fetchCustomersRef = useRef<typeof fetchCustomers>(undefined as unknown as typeof fetchCustomers);
   useEffect(() => {
-    fetchCustomers();
+    fetchCustomersRef.current();
   }, []);
 
   const fetchCustomers = async () => {
@@ -92,6 +101,7 @@ export default function Customers() {
       setRefreshing(false);
     }
   };
+  fetchCustomersRef.current = fetchCustomers;
 
   // Alternative fetch method if the main one fails
   const tryAlternativeFetch = async () => {
@@ -151,21 +161,16 @@ export default function Customers() {
   };
 
   const formatDate = (dateString: string) => {
-    if (!dateString || dateString === "null" || dateString === "undefined") return "N/A";
-    return formatDateGMT2(dateString) || "N/A";
+    if (!dateString || dateString === "null" || dateString === "undefined") return t("common.notAvailable");
+    return formatDateGMT2(dateString) || t("common.notAvailable");
   };
 
   const formatDateTime = (dateString: string) => {
-    if (!dateString || dateString === "null" || dateString === "undefined") return "N/A";
-    return formatDateTimeGMT2(dateString) || "N/A";
+    if (!dateString || dateString === "null" || dateString === "undefined") return t("common.notAvailable");
+    return formatDateTimeGMT2(dateString) || t("common.notAvailable");
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => formatUSD(amount);
 
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,17 +187,21 @@ export default function Customers() {
       if (response.ok) {
         setShowAddModal(false);
         setFormData({ name: "", phone: "", email: "" });
+        setNotice({ kind: "success", text: t("customers.added") });
         await fetchCustomers();
       } else {
         console.error("Failed to add customer:", response.status);
+        const data = await response.json().catch(() => ({}));
+        setNotice({ kind: "danger", text: serverMessage(data.error || data.message, t("customers.addFailed")) });
       }
     } catch (error) {
       console.error("Error adding customer:", error);
+      setNotice({ kind: "danger", text: t("customers.addFailed") });
     }
   };
 
   const handleDeleteCustomer = async (customerId: string) => {
-    if (confirm("Êtes-vous sûr de vouloir supprimer ce client?")) {
+    if (confirm(t("customers.confirmDelete"))) {
       try {
         const response = await fetch(`${serverUrl}/customers/${customerId}`, {
           method: "DELETE",
@@ -203,12 +212,16 @@ export default function Customers() {
         });
 
         if (response.ok) {
+          setNotice({ kind: "success", text: t("customers.deleted") });
           await fetchCustomers();
         } else {
           console.error("Failed to delete customer:", response.status);
+          const data = await response.json().catch(() => ({}));
+          setNotice({ kind: "danger", text: serverMessage(data.error || data.message, t("customers.deleteFailed")) });
         }
       } catch (error) {
         console.error("Error deleting customer:", error);
+        setNotice({ kind: "danger", text: t("customers.deleteFailed") });
       }
     }
   };
@@ -230,18 +243,15 @@ export default function Customers() {
 
       if (response.ok) {
         await fetchCustomers();
-        alert("Statistiques recalculées avec succès!");
+        setNotice({ kind: "success", text: t("customers.recalculated") });
       } else if (response.status === 404) {
-        alert(
-          "Fonction de recalcul non disponible. Pour corriger les statistiques:\n\n" +
-            "1. Allez dans l'historique des ventes\n" +
-            "2. Modifiez puis sauvegardez une vente de ce client\n" +
-            "3. Les statistiques seront automatiquement recalculées"
-        );
+        setNotice({ kind: "info", text: t("customers.recalcUnavailable") });
+      } else {
+        setNotice({ kind: "danger", text: t("customers.recalcFailed") });
       }
     } catch (error) {
       console.error("Error recalculating customer stats:", error);
-      alert("Erreur lors du recalcul. Vérifiez la console pour plus de détails.");
+      setNotice({ kind: "danger", text: t("customers.recalcFailed") });
     } finally {
       setRecalculating(null);
     }
@@ -263,79 +273,73 @@ export default function Customers() {
   if (!isAdmin) {
     return (
       <div className="page">
-        <PermissionDenied>Cette section est réservée aux administrateurs.</PermissionDenied>
+        <PermissionDenied>{t("customers.adminOnly")}</PermissionDenied>
       </div>
     );
   }
 
+  const activeCount = customers.filter((c) => c.totalSpent > 0).length;
+  const totalPurchases = customers.reduce((sum, customer) => sum + (customer.totalPurchases || 0), 0);
+  const revenue = calculateTotalRevenue();
+
   return (
-    <div className="page space-y-5">
-      <header className="page-header">
-        <div>
-          <h1 className="page-title">Clients</h1>
-          <p className="page-subtitle">Coordonnées et historique d'achat des clients enregistrés.</p>
-        </div>
-        <div className="page-actions">
-          <button type="button" aria-label="Actualiser la liste des clients"
-            onClick={refreshCustomers}
-            disabled={refreshing}
-            className="btn btn-secondary"
-          >
+    <div className="page space-y-4">
+      <PageHeader
+        eyebrow={t("nav.sections.stock")}
+        icon={<Users aria-hidden="true" />}
+        title={t("customers.title")}
+        description={t("customers.subtitle")}
+        actions={<>
+          <button type="button" aria-label={t("customers.refreshLabel")} onClick={refreshCustomers} disabled={refreshing} className="btn btn-secondary">
             <RefreshCw className={refreshing ? "animate-spin" : ""} aria-hidden="true" />
-            {refreshing ? "Actualisation…" : "Actualiser"}
+            {refreshing ? t("customers.refreshing") : t("common.refresh")}
           </button>
-          <button type="button"
-            onClick={() => setShowAddModal(true)}
-            className="btn btn-primary"
-          >
+          <button type="button" onClick={() => setShowAddModal(true)} className="btn btn-primary">
             <Plus aria-hidden="true" />
-            Nouveau client
+            {t("customers.new")}
           </button>
-        </div>
-      </header>
+        </>}
+      />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="metric-card">
-          <span className="metric-label flex items-center gap-1.5"><Users className="w-4 h-4 text-blue-600" aria-hidden="true" />Clients</span>
-          <span className="metric-value">{customers.length}</span>
+          <span className="metric-label flex items-center gap-1.5"><Users className="w-4 h-4 text-blue-600" aria-hidden="true" />{t("customers.kpi.customers")}</span>
+          <span className="metric-value num">{formatNumber(customers.length, 0)}</span>
+          <span className="text-xs text-gray-500">{t("customers.kpi.active", { count: activeCount })}</span>
         </div>
         <div className="metric-card">
-          <span className="metric-label flex items-center gap-1.5"><DollarSign className="w-4 h-4 text-green-600" aria-hidden="true" />Chiffre d'affaires clients</span>
-          <span className="metric-value">{formatCurrency(calculateTotalRevenue())}</span>
-          <span className="text-xs text-gray-500">{customers.filter((c) => c.totalSpent > 0).length} clients actifs</span>
+          <span className="metric-label flex items-center gap-1.5"><DollarSign className="w-4 h-4 text-green-600" aria-hidden="true" />{t("customers.kpi.revenue")}</span>
+          <span className="metric-value num">{formatCurrency(revenue)}</span>
+          <span className="text-xs text-gray-500">{t("customers.kpi.revenueHint")}</span>
         </div>
-        <div className="col-span-2 flex items-end">
+        <div className="metric-card">
+          <span className="metric-label flex items-center gap-1.5"><ShoppingBag className="w-4 h-4 text-gray-500" aria-hidden="true" />{t("customers.kpi.purchases")}</span>
+          <span className="metric-value num">{formatNumber(totalPurchases, 0)}</span>
+          <span className="text-xs text-gray-500">{t("customers.kpi.average", { value: formatCurrency(totalPurchases > 0 ? revenue / totalPurchases : 0) })}</span>
+        </div>
+        <div className="flex items-end">
           <div className="input-group w-full">
             <Search aria-hidden="true" />
-            <input aria-label="Rechercher un client"
-              type="search"
-              placeholder="Nom, téléphone ou e-mail…"
-              className="input"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <input aria-label={t("customers.searchLabel")} type="search" placeholder={t("customers.searchPlaceholder")}
+              className="input" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
         </div>
       </div>
 
-      {customers.some(
-        (customer) =>
-          customer.totalPurchases > 0 &&
-          (customer.totalSpent === 0 || customer.totalSpent > 100000)
-      ) && (
+      {notice && (
+        <div className={`alert alert-${notice.kind}`} role={notice.kind === "danger" ? "alert" : "status"}>
+          {notice.kind === "danger" ? <AlertCircle aria-hidden="true" /> : <CheckCircle aria-hidden="true" />}
+          <span className="flex-1 whitespace-pre-line">{notice.text}</span>
+          <button type="button" aria-label={t("common.closeMessage")} onClick={() => setNotice(null)} className="btn btn-ghost btn-icon btn-sm -my-1 -mr-1"><X aria-hidden="true" /></button>
+        </div>
+      )}
+
+      {customers.some((customer) => customer.totalPurchases > 0 && (customer.totalSpent === 0 || customer.totalSpent > 100000)) && (
         <div className="alert alert-warning" role="status">
           <AlertCircle aria-hidden="true" />
           <div>
-            <div>
-              <p className="text-sm font-semibold">
-                Statistiques potentiellement inexactes
-              </p>
-              <p className="text-sm">
-                Certaines statistiques clients peuvent être incorrectes suite à
-                des modifications de ventes. Utilisez "Recalculer les
-                statistiques" pour corriger.
-              </p>
-            </div>
+            <p className="text-sm font-semibold">{t("customers.statsWarnTitle")}</p>
+            <p className="text-sm">{t("customers.statsWarnBody")}</p>
           </div>
         </div>
       )}
@@ -344,304 +348,131 @@ export default function Customers() {
         <div className="card-header">
           <h2 id="customers-list-title" className="section-title flex items-center gap-2">
             <Users className="w-4 h-4 text-gray-500" aria-hidden="true" />
-            Répertoire clients
+            {t("customers.directory")}
             <span className="badge num">{filteredCustomers.length}</span>
           </h2>
         </div>
-
-        <div>
-          {loading ? (
-            <LoadingState label="Chargement des clients…" />
-          ) : filteredCustomers.length === 0 ? (
-            <EmptyState title="Aucun client trouvé" icon={<Users aria-hidden="true" />}>
-              Modifiez la recherche ou ajoutez un nouveau client.
-            </EmptyState>
-          ) : (
-            <ResponsiveTable className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Client
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Contact
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nombre d'achats
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Montant total dépensé
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Dernier achat
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
+        {loading ? (
+          <LoadingState label={t("customers.loading")} />
+        ) : filteredCustomers.length === 0 ? (
+          <EmptyState title={t("customers.emptyTitle")} icon={<Users aria-hidden="true" />}>
+            {t("customers.emptyBody")}
+          </EmptyState>
+        ) : (
+          <ResponsiveTable className="report-table" aria-label={t("customers.directory")}>
+            <thead>
+              <tr>
+                <th className="is-text">{t("customers.col.customer")}</th>
+                <th className="is-text">{t("customers.col.contact")}</th>
+                <th className="is-num">{t("customers.col.purchases")}</th>
+                <th className="is-num">{t("customers.col.spent")}</th>
+                <th className="is-text">{t("customers.col.last")}</th>
+                <th className="is-text is-actions">{t("common.actions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCustomers.map((customer) => (
+                <tr key={customer._id}>
+                  <td className="is-text">
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 shrink-0 rounded-full bg-blue-50 flex items-center justify-center" aria-hidden="true">
+                        <span className="text-sm font-medium text-blue-600">{customer.name.charAt(0).toUpperCase()}</span>
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900">{customer.name}</div>
+                        <div className="text-xs text-gray-500">{t("customers.since", { date: formatDate(customer.createdAt) })}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="is-text">
+                    <div className="text-gray-900 flex items-center gap-1"><Phone className="w-3 h-3" aria-hidden="true" />{customer.phone}</div>
+                    {customer.email && <div className="text-xs text-gray-500 flex items-center gap-1"><Mail className="w-3 h-3" aria-hidden="true" />{customer.email}</div>}
+                  </td>
+                  <td className="num is-num">{formatNumber(customer.totalPurchases, 0)}</td>
+                  <td className="num is-num"><strong>{formatCurrency(customer.totalSpent)}</strong></td>
+                  <td className="is-text whitespace-nowrap text-gray-500">{formatDate(customer.lastPurchaseDate)}</td>
+                  <td className="is-text is-actions">
+                    <div className="flex gap-1 whitespace-nowrap">
+                      <button type="button" aria-label={t("customers.viewDetails")} title={t("customers.viewDetails")} onClick={() => viewCustomerDetails(customer)} className="btn btn-ghost btn-sm">
+                        <Eye aria-hidden="true" /><span className="ui-action-label">{t("common.details")}</span>
+                      </button>
+                      <button type="button" aria-label={t("customers.recalculate")} title={t("customers.recalculate")} onClick={() => recalculateCustomerStats(customer._id)} disabled={recalculating === customer._id} className="btn btn-ghost btn-sm">
+                        <RefreshCw className={recalculating === customer._id ? "animate-spin" : ""} aria-hidden="true" /><span className="ui-action-label">{t("customers.recalculateShort")}</span>
+                      </button>
+                      <button type="button" aria-label={t("customers.delete")} title={t("customers.delete")} onClick={() => handleDeleteCustomer(customer._id)} className="btn btn-ghost btn-sm text-red-600">
+                        <Trash2 aria-hidden="true" /><span className="ui-action-label">{t("common.delete")}</span>
+                      </button>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredCustomers.map((customer) => (
-                  <tr key={customer._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
-                          <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center" aria-hidden="true">
-                            <span className="text-sm font-medium text-blue-600">
-                              {customer.name.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {customer.name}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            Client depuis {formatDate(customer.createdAt)}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 flex items-center gap-1">
-                        <Phone className="w-3 h-3" aria-hidden="true" />
-                        {customer.phone}
-                      </div>
-                      {customer.email && (
-                        <div className="text-sm text-gray-500 flex items-center gap-1">
-                          <Mail className="w-3 h-3" aria-hidden="true" />
-                          {customer.email}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1">
-                        <ShoppingBag className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm text-gray-900">
-                          {customer.totalPurchases}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {formatCurrency(customer.totalSpent)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(customer.lastPurchaseDate)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex gap-2">
-                        <button aria-label="Voir les détails du client"
-                          onClick={() => viewCustomerDetails(customer)}
-                          className="text-blue-600 hover:text-blue-900 p-1 rounded"
-                          title="Voir les détails du client"
-                        >
-                          <Eye className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Détails</span>
-                        </button>
-                        <button aria-label="Recalculer les statistiques"
-                          onClick={() => recalculateCustomerStats(customer._id)}
-                          disabled={recalculating === customer._id}
-                          className="text-green-600 hover:text-green-900 p-1 rounded disabled:opacity-50"
-                          title="Recalculer les statistiques"
-                        >
-                          <RefreshCw
-                            className={`w-4 h-4 ${
-                              recalculating === customer._id ? "animate-spin" : ""
-                            }`}
-                            aria-hidden="true"
-                          /><span className="ui-action-label">Recalculer</span>
-                        </button>
-                        <button aria-label="Supprimer le client"
-                          onClick={() => handleDeleteCustomer(customer._id)}
-                          className="text-red-600 hover:text-red-900 p-1 rounded"
-                          title="Supprimer le client"
-                        >
-                          <Trash2 className="w-4 h-4" aria-hidden="true" /><span className="ui-action-label">Supprimer</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </ResponsiveTable>
-          )}
-        </div>
-
+              ))}
+            </tbody>
+          </ResponsiveTable>
+        )}
       </section>
 
       {showAddModal && (
-        <Dialog label="Ajouter un Nouveau Client" onClose={() => setShowAddModal(false)}>
-          <div className="bg-white rounded-lg max-w-md w-full mx-4">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Ajouter un Nouveau Client</h3>
-              <button type="button" aria-label="Fermer"
-                onClick={() => setShowAddModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" aria-hidden="true" />
-              </button>
+        <Dialog label={t("customers.addTitle")} onClose={() => setShowAddModal(false)}>
+          <form onSubmit={handleAddCustomer} className="dialog-panel max-w-md">
+            <header className="dialog-head">
+              <h3 className="dialog-title">{t("customers.addTitle")}</h3>
+              <button type="button" aria-label={t("common.close")} onClick={() => setShowAddModal(false)} className="btn btn-ghost btn-icon btn-sm"><X aria-hidden="true" /></button>
+            </header>
+            <div className="dialog-body space-y-3">
+              <label className="field">
+                <span className="field-label">{t("entryHistory.name")} *</span>
+                <input className="input" type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+              </label>
+              <label className="field">
+                <span className="field-label">{t("entryHistory.phone")} *</span>
+                <input className="input" type="tel" required value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+              </label>
+              <label className="field">
+                <span className="field-label">{t("entryHistory.email")} {t("common.optional")}</span>
+                <input className="input" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+              </label>
             </div>
-
-            <form onSubmit={handleAddCustomer} className="p-6 space-y-4">
-              <div>
-                <label htmlFor="customers-field-20210" className="block text-sm font-medium text-gray-700 mb-1">Nom *</label>
-                <input id="customers-field-20210"
-                  type="text"
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="customers-field-20728" className="block text-sm font-medium text-gray-700 mb-1">Téléphone *</label>
-                <input id="customers-field-20728"
-                  type="tel"
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="customers-field-21241" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input id="customers-field-21241"
-                  type="email"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Ajouter le Client
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Annuler
-                </button>
-              </div>
-            </form>
-          </div>
+            <footer className="dialog-foot">
+              <button type="button" onClick={() => setShowAddModal(false)} className="btn btn-secondary">{t("common.cancel")}</button>
+              <button type="submit" className="btn btn-primary"><Plus aria-hidden="true" />{t("customers.addSubmit")}</button>
+            </footer>
+          </form>
         </Dialog>
       )}
 
       {showModal && selectedCustomer && (
-        <Dialog label="Détails du client" onClose={() => setShowModal(false)}>
-          <div className="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Détails du client</h3>
-              <button type="button" aria-label="Fermer"
-                onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" aria-hidden="true" />
+        <Dialog label={t("customers.detailsTitle")} onClose={() => setShowModal(false)}>
+          <div className="dialog-panel max-w-2xl">
+            <header className="dialog-head">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-full bg-blue-100 flex items-center justify-center" aria-hidden="true">
+                  <span className="text-lg font-medium text-blue-600">{selectedCustomer.name.charAt(0).toUpperCase()}</span>
+                </div>
+                <div>
+                  <h3 className="dialog-title">{selectedCustomer.name}</h3>
+                  <p className="dialog-subtitle">{t("customers.since", { date: formatDate(selectedCustomer.createdAt) })}</p>
+                </div>
+              </div>
+              <button type="button" aria-label={t("common.close")} onClick={() => setShowModal(false)} className="btn btn-ghost btn-icon btn-sm"><X aria-hidden="true" /></button>
+            </header>
+            <div className="dialog-body space-y-4">
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div><dt className="text-gray-500">{t("customers.phoneNumber")}</dt><dd className="font-medium flex items-center gap-2"><Phone className="w-4 h-4 text-gray-400" aria-hidden="true" />{selectedCustomer.phone}</dd></div>
+                {selectedCustomer.email && <div><dt className="text-gray-500">{t("entryHistory.email")}</dt><dd className="font-medium flex items-center gap-2"><Mail className="w-4 h-4 text-gray-400" aria-hidden="true" />{selectedCustomer.email}</dd></div>}
+              </dl>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="metric-card"><span className="metric-label flex items-center gap-1.5"><ShoppingBag className="w-4 h-4" aria-hidden="true" />{t("customers.totalPurchases")}</span><span className="metric-value num">{formatNumber(selectedCustomer.totalPurchases, 0)}</span></div>
+                <div className="metric-card"><span className="metric-label flex items-center gap-1.5"><DollarSign className="w-4 h-4" aria-hidden="true" />{t("customers.totalSpent")}</span><span className="metric-value num">{formatCurrency(selectedCustomer.totalSpent)}</span></div>
+                <div className="metric-card"><span className="metric-label flex items-center gap-1.5"><Calendar className="w-4 h-4" aria-hidden="true" />{t("customers.firstPurchase")}</span><span className="text-sm font-semibold">{formatDateTime(selectedCustomer.firstPurchaseDate)}</span></div>
+                <div className="metric-card"><span className="metric-label flex items-center gap-1.5"><Calendar className="w-4 h-4" aria-hidden="true" />{t("customers.lastPurchase")}</span><span className="text-sm font-semibold">{formatDateTime(selectedCustomer.lastPurchaseDate)}</span></div>
+              </div>
+            </div>
+            <footer className="dialog-foot">
+              <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary">{t("common.close")}</button>
+              <button type="button" onClick={() => recalculateCustomerStats(selectedCustomer._id)} disabled={recalculating === selectedCustomer._id} className="btn btn-primary">
+                <RefreshCw className={recalculating === selectedCustomer._id ? "animate-spin" : ""} aria-hidden="true" />{t("customers.recalculate")}
               </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center">
-                  <span className="text-xl font-medium text-blue-600">
-                    {selectedCustomer.name.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <div>
-                  <h4 className="text-xl font-semibold text-gray-900">{selectedCustomer.name}</h4>
-                  <p className="text-gray-600">
-                    Client depuis {formatDate(selectedCustomer.createdAt)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Numéro de téléphone</label>
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm text-gray-900">{selectedCustomer.phone}</span>
-                  </div>
-                </div>
-                {selectedCustomer.email && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm text-gray-900">{selectedCustomer.email}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <div className="flex items-center gap-2">
-                    <ShoppingBag className="w-5 h-5 text-blue-600" />
-                    <div>
-                      <p className="text-sm text-blue-600">Nombre total d'achats</p>
-                      <p className="text-xl font-semibold text-blue-900">{selectedCustomer.totalPurchases}</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-green-50 rounded-lg p-4">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-5 h-5 text-green-600" />
-                    <div>
-                      <p className="text-sm text-green-600">Somme dépensée</p>
-                      <p className="text-xl font-semibold text-green-900">
-                        {formatCurrency(selectedCustomer.totalSpent)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-purple-50 rounded-lg p-4">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-purple-600" />
-                    <div>
-                      <p className="text-sm text-purple-600">Premier Achat</p>
-                      <p className="text-sm font-semibold text-purple-900">
-                        {formatDateTime(selectedCustomer.firstPurchaseDate)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-orange-50 rounded-lg p-4">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-orange-600" />
-                    <div>
-                      <p className="text-sm text-orange-600">Dernier Achat</p>
-                      <p className="text-sm font-semibold text-orange-900">
-                        {formatDateTime(selectedCustomer.lastPurchaseDate)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => recalculateCustomerStats(selectedCustomer._id)}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Recalculer les Statistiques
-                </button>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Fermer
-                </button>
-              </div>
-            </div>
+            </footer>
           </div>
         </Dialog>
       )}

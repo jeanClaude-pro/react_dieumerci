@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 import type { Category } from "../types";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   selectedCategory: string;
@@ -11,6 +12,7 @@ const CategoriesDropdown = ({
   selectedCategory,
   setSelectedCategory,
 }: Props) => {
+  const { t } = useTranslation();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -36,13 +38,13 @@ const CategoriesDropdown = ({
   // Same size while loading, so the filter bar does not shift.
   return (
     <select
-      aria-label="Filtrer par catégorie"
+      aria-label={t("categories.filterLabel")}
       value={selectedCategory}
       onChange={handleChange}
       disabled={loading}
       className="input"
     >
-      <option value="">{loading ? "Chargement des catégories…" : "Toutes les catégories"}</option>
+      <option value="">{loading ? t("categories.loading") : t("categories.all")}</option>
       {categories.map((category) => (
         <option key={category._id} value={category.name}>
           {category.name}

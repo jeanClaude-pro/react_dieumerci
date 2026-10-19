@@ -1,467 +1,220 @@
-import React, { useState, useEffect } from 'react';
-import { LoadingState } from "../components/ui/States";
+import React, { useEffect, useRef, useState } from "react";
+import { AlertCircle, ArrowLeftRight, Calendar, CheckCircle, History, Info, RefreshCw, Save, TriangleAlert, User, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import PageHeader from "../components/ui/PageHeader";
+import { EmptyState, LoadingState } from "../components/ui/States";
 import { formatDateTimeGMT2 } from "../utils/dateUtils";
 import { serverUrl } from "../utils/constants";
-import { 
-  DollarSign, 
-  RefreshCw, 
-  History, 
-  Save, 
-  Edit, 
-  TrendingUp,
-  Calendar,
-  User,
-  CheckCircle,
-  AlertCircle,
-  X,
-} from 'lucide-react';
+import { formatNumber } from "../i18n/format";
+import { serverMessage } from "../i18n/serverMessages";
 
-interface TauxChange {
-  _id: string;
+interface ExchangeRate {
+  _id?: string;
   rate: number;
   effectiveFrom: string;
-  createdBy: {
-    _id: string;
-    username: string;
-    email: string;
-  };
-  isActive: boolean;
+  createdBy?: { username?: string; email?: string };
+  isActive?: boolean;
   notes?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
 }
 
-interface HistoriqueTaux {
-  _id: string;
-  rate: number;
-  effectiveFrom: string;
-  createdBy: {
-    username: string;
-    email: string;
-  };
-  isActive: boolean;
-  notes?: string;
-  createdAt: string;
-}
+const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem("token") || ""}` });
 
-const API_BASE = serverUrl;
-
-export default function TauxChange() {
-  const [tauxActuel, setTauxActuel] = useState<TauxChange | null>(null);
-  const [historiqueTaux, setHistoriqueTaux] = useState<HistoriqueTaux[]>([]);
+export default function Rate() {
+  const { t } = useTranslation();
+  const [current, setCurrent] = useState<ExchangeRate | null>(null);
+  const [history, setHistory] = useState<ExchangeRate[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({ rate: "", effectiveFrom: "", notes: "" });
 
-  // État du formulaire
-  const [form, setForm] = useState({
-    rate: '',
-    effectiveFrom: '',
-    notes: ''
-  });
-
-  // Charger le taux actuel et l'historique
-  const chargerTaux = async () => {
+  const loadRates = async () => {
     try {
       setLoading(true);
       setError(null);
-
-      // Charger le taux actuel
-      const reponseActuel = await fetch(`${API_BASE}/exchange-rates/current`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-      });
-
-      if (reponseActuel.ok) {
-        const donneesActuel = await reponseActuel.json();
-        console.log('Données taux actuel:', donneesActuel); // Debug log
-        
-        // Handle different response structures
-        if (donneesActuel.rate) {
-          // If the response has a rate object (from POST response)
-          setTauxActuel(donneesActuel.rate);
-        } else if (donneesActuel._id) {
-          // If the response is the rate object itself
-          setTauxActuel(donneesActuel);
-        } else {
-          setTauxActuel(null);
-        }
+      const currentResponse = await fetch(`${serverUrl}/exchange-rates/current`, { headers: authHeaders() });
+      if (currentResponse.ok) {
+        const data = await currentResponse.json();
+        setCurrent(typeof data?.rate === "number" ? data : data?.rate && typeof data.rate === "object" ? data.rate : null);
       } else {
-        console.warn('Aucun taux actuel trouvé ou erreur de chargement');
-        setTauxActuel(null);
+        setCurrent(null);
       }
-
-      // Charger l'historique des taux
-      const reponseHistorique = await fetch(`${API_BASE}/exchange-rates/history?limit=20`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-      });
-
-      if (reponseHistorique.ok) {
-        const donneesHistorique = await reponseHistorique.json();
-        console.log('Données historique:', donneesHistorique); // Debug log
-        setHistoriqueTaux(donneesHistorique.history || donneesHistorique || []);
-      } else if (reponseHistorique.status === 403) {
-        setError('Vous n\'avez pas la permission de voir l\'historique des taux');
+      const historyResponse = await fetch(`${serverUrl}/exchange-rates/history?limit=20`, { headers: authHeaders() });
+      if (historyResponse.ok) {
+        const data = await historyResponse.json();
+        setHistory(data.history || data || []);
+      } else if (historyResponse.status === 403) {
+        setError(t("rate.noHistoryPermission"));
       } else {
-        setHistoriqueTaux([]);
+        setHistory([]);
       }
-
-    } catch (error) {
-      console.error('Erreur lors du chargement des taux:', error);
-      setError('Échec du chargement des taux de change');
-      setTauxActuel(null);
-      setHistoriqueTaux([]);
+    } catch (reason) {
+      console.error("Exchange rate load failed:", reason);
+      setError(t("rate.loadError"));
+      setCurrent(null);
+      setHistory([]);
     } finally {
       setLoading(false);
     }
   };
+  // Latest loadRates for the mount effect below.
+  const loadRatesRef = useRef(loadRates);
+  loadRatesRef.current = loadRates;
+  useEffect(() => { loadRatesRef.current(); }, []);
 
-  useEffect(() => {
-    chargerTaux();
-  }, []);
+  const newRate = Number.parseFloat(form.rate);
+  const jump = current?.rate && Number.isFinite(newRate) && newRate > 0 ? ((newRate - current.rate) / current.rate) * 100 : null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!form.rate || parseFloat(form.rate) <= 0) {
-      setError('Veuillez entrer un taux de change valide');
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!form.rate || !(newRate > 0)) {
+      setError(t("rate.invalid"));
       return;
     }
-
     try {
       setSubmitting(true);
       setError(null);
       setMessage(null);
-
-      const response = await fetch(`${API_BASE}/exchange-rates`, {
+      const response = await fetch(`${serverUrl}/exchange-rates`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
-        body: JSON.stringify({
-          rate: parseFloat(form.rate),
-          effectiveFrom: form.effectiveFrom || new Date().toISOString(),
-          notes: form.notes
-        }),
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ rate: newRate, effectiveFrom: form.effectiveFrom || new Date().toISOString(), notes: form.notes }),
       });
-
-      const data = await response.json();
-      console.log('Réponse mise à jour:', data); // Debug log
-
+      const data = await response.json().catch(() => ({}));
       if (response.ok) {
-        setMessage('Taux de change mis à jour avec succès !');
-        setForm({ rate: '', effectiveFrom: '', notes: '' });
-        await chargerTaux(); // Actualiser les données
+        setMessage(t("rate.updated"));
+        setForm({ rate: "", effectiveFrom: "", notes: "" });
+        await loadRates();
       } else {
-        setError(data.error || `Échec de la mise à jour: ${response.status}`);
+        setError(serverMessage(data.error || data.message, t("rate.updateFailed", { status: response.status })));
       }
-    } catch (error: any) {
-      console.error('Erreur lors de la mise à jour du taux:', error);
-      setError(error?.message || 'Échec de la mise à jour du taux de change');
+    } catch (reason) {
+      console.error("Exchange rate update failed:", reason);
+      setError(t("rate.updateError"));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const formaterDate = (dateString: string) => {
-    const result = formatDateTimeGMT2(dateString);
-    return result === '—' ? 'Date invalide' : result;
-  };
-
-  const formaterMontant = (montant: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(montant);
-  };
+  const date = (value?: string) => (value ? formatDateTimeGMT2(value) : "—");
+  const amount = (value: number, digits = 2) => formatNumber(value, digits);
 
   if (loading) {
-    return (
-      <div className="page">
-        <LoadingState page label="Chargement des taux de change…" />
-      </div>
-    );
+    return <div className="page"><LoadingState page label={t("rate.loading")} /></div>;
   }
 
   return (
-    <div className="page">
-      <div>
-        <header className="page-header">
-          <div>
-            <h1 className="page-title">Taux d'échange</h1>
-            <p className="page-subtitle">Taux USD / FC utilisé par les ventes, entrées et sorties.</p>
-          </div>
-          <div className="page-actions">
-            <button
-              type="button"
-              onClick={chargerTaux}
-              className="btn btn-secondary"
-            >
-              <RefreshCw aria-hidden="true" />
-              Actualiser
-            </button>
-          </div>
-        </header>
+    <div className="page rate-page">
+      <PageHeader
+        eyebrow={t("nav.sections.cash")}
+        icon={<ArrowLeftRight aria-hidden="true" />}
+        title={t("rate.title")}
+        description={t("rate.subtitle")}
+        actions={<button type="button" onClick={loadRates} className="btn btn-secondary"><RefreshCw aria-hidden="true" />{t("common.refresh")}</button>}
+      />
 
-        {/* Messages */}
-        {message && (
-          <div className="alert alert-success mb-4" role="status">
-            <CheckCircle aria-hidden="true" />
-            <p className="flex-1">{message}</p>
-            <button type="button" aria-label="Fermer le message"
-              onClick={() => setMessage(null)}
-              className="btn btn-ghost btn-icon btn-sm -my-1 -mr-1"
-            >
-              <X aria-hidden="true" />
-            </button>
-          </div>
-        )}
+      {message && (
+        <div className="alert alert-success" role="status">
+          <CheckCircle aria-hidden="true" /><p className="flex-1">{message}</p>
+          <button type="button" aria-label={t("common.closeMessage")} onClick={() => setMessage(null)} className="btn btn-ghost btn-icon btn-sm"><X aria-hidden="true" /></button>
+        </div>
+      )}
+      {error && (
+        <div className="alert alert-danger" role="alert">
+          <AlertCircle aria-hidden="true" /><p className="flex-1">{error}</p>
+          <button type="button" aria-label={t("common.closeMessage")} onClick={() => setError(null)} className="btn btn-ghost btn-icon btn-sm"><X aria-hidden="true" /></button>
+        </div>
+      )}
 
-        {error && (
-          <div className="alert alert-danger mb-4" role="alert">
-            <AlertCircle aria-hidden="true" />
-            <p className="flex-1">{error}</p>
-            <button type="button" aria-label="Fermer le message"
-              onClick={() => setError(null)}
-              className="btn btn-ghost btn-icon btn-sm -my-1 -mr-1"
-            >
-              <X aria-hidden="true" />
-            </button>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* Colonne de gauche - Taux actuel et formulaire */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Carte du taux actuel */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-blue-600" />
-                  Taux de Change Actuel
-                </h2>
-                {tauxActuel?.isActive && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                    Actif
-                  </span>
-                )}
+      <div className="rate-grid">
+        <section className="card rate-current" aria-labelledby="rate-current-title">
+          <header className="card-header">
+            <h2 id="rate-current-title" className="section-title">{t("rate.current")}</h2>
+            {current && <span className="badge badge-success"><CheckCircle aria-hidden="true" />{t("common.active")}</span>}
+          </header>
+          {current ? (
+            <div className="card-body rate-current-body">
+              <div className="rate-figure">
+                <small>{t("rate.usdToFc")}</small>
+                <strong>1 USD = {amount(current.rate)} FC</strong>
               </div>
-
-              {tauxActuel ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <p className="text-sm text-blue-600 font-medium">Taux FC → USD</p>
-                      <p className="text-2xl font-bold text-blue-800">
-                        1 USD = {formaterMontant(tauxActuel.rate)} FC
-                      </p>
-                    </div>
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <p className="text-sm text-green-600 font-medium">Taux USD → FC</p>
-                      <p className="text-2xl font-bold text-green-800">
-                        1 FC = {formaterMontant(1 / tauxActuel.rate)} USD
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-gray-400" />
-                      <span>Effectif depuis: {formaterDate(tauxActuel.effectiveFrom)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <User className="w-4 h-4 text-gray-400" />
-                      <span>Défini par: {tauxActuel.createdBy?.username || 'Inconnu'}</span>
-                    </div>
-                  </div>
-
-                  {tauxActuel.notes && (
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <p className="text-sm font-medium text-gray-700 mb-1">Notes:</p>
-                      <p className="text-sm text-gray-600">{tauxActuel.notes}</p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <DollarSign className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>Aucun taux de change actif</p>
-                  <p className="text-sm">Veuillez définir un taux de change</p>
-                </div>
-              )}
-            </div>
-
-            {/* Formulaire de mise à jour */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Edit className="w-5 h-5 text-orange-600" />
-                Mettre à Jour le Taux de Change
-              </h2>
-
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="rate-field-11555" className="block text-sm font-medium text-gray-700 mb-2">
-                      Nouveau Taux (1 USD = X FC) *
-                    </label>
-                    <input id="rate-field-11555"
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={form.rate}
-                      onChange={(e) => setForm({ ...form, rate: e.target.value })}
-                      placeholder="Ex: 2500 pour 1 USD = 2500 FC"
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Entrez combien de Francs Congolais valent 1 USD
-                    </p>
-                  </div>
-
-                  <div>
-                    <label htmlFor="rate-field-12441" className="block text-sm font-medium text-gray-700 mb-2">
-                      Date d'Effet
-                    </label>
-                    <input id="rate-field-12441"
-                      type="datetime-local"
-                      value={form.effectiveFrom}
-                      onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Laisser vide pour utiliser la date actuelle
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="rate-field-13200" className="block text-sm font-medium text-gray-700 mb-2">
-                    Notes (Optionnel)
-                  </label>
-                  <textarea id="rate-field-13200"
-                    value={form.notes}
-                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                    placeholder="Raison du changement, source du taux, etc."
-                    rows={3}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={submitting || !form.rate}
-                  className={`w-full md:w-auto px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
-                    submitting || !form.rate
-                      ? 'bg-gray-400 cursor-not-allowed text-white'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
-                  } transition-colors`}
-                >
-                  {submitting ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      Mise à jour...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      Mettre à Jour le Taux
-                    </>
-                  )}
-                </button>
-              </form>
-            </div>
-          </div>
-
-          {/* Colonne de droite - Historique */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                <History className="w-5 h-5 text-purple-600" />
-                Historique des Taux
-              </h2>
-              <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full">
-                {historiqueTaux.length} entrées
-              </span>
-            </div>
-
-            {historiqueTaux.length > 0 ? (
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {historiqueTaux.map((taux) => (
-                  <div
-                    key={taux._id}
-                    className={`p-3 rounded-lg border ${
-                      taux.isActive
-                        ? 'bg-green-50 border-green-200'
-                        : 'bg-gray-50 border-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-900">
-                          1 USD = {formaterMontant(taux.rate)} FC
-                        </span>
-                        {taux.isActive && (
-                          <CheckCircle className="w-3 h-3 text-green-600" />
-                        )}
-                      </div>
-                      <span className="text-xs text-gray-500">
-                        {formaterDate(taux.effectiveFrom)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-gray-600">
-                      <span>Par: {taux.createdBy?.username || 'Inconnu'}</span>
-                      <span>{formaterDate(taux.createdAt)}</span>
-                    </div>
-                    {taux.notes && (
-                      <p className="text-xs text-gray-500 mt-1 truncate">
-                        {taux.notes}
-                      </p>
-                    )}
-                  </div>
-                ))}
+              <div className="rate-figure is-secondary">
+                <small>{t("rate.fcToUsd")}</small>
+                <strong>1 000 FC = {amount(1000 / current.rate, 4)} USD</strong>
               </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <History className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Aucun historique disponible</p>
-                <p className="text-sm">Les changements de taux apparaîtront ici</p>
-              </div>
+              <dl className="rate-meta">
+                <div><dt><Calendar aria-hidden="true" />{t("rate.effectiveSince")}</dt><dd>{date(current.effectiveFrom)}</dd></div>
+                {current.createdBy?.username && <div><dt><User aria-hidden="true" />{t("rate.setBy")}</dt><dd>{current.createdBy.username}</dd></div>}
+                {current.notes && <div className="is-wide"><dt>{t("rate.notes")}</dt><dd>{current.notes}</dd></div>}
+              </dl>
+            </div>
+          ) : (
+            <div className="card-body"><EmptyState title={t("rate.noneTitle")} icon={<ArrowLeftRight aria-hidden="true" />}>{t("rate.noneBody")}</EmptyState></div>
+          )}
+        </section>
+
+        <section className="card rate-form" aria-labelledby="rate-form-title">
+          <header className="card-header"><h2 id="rate-form-title" className="section-title">{t("rate.updateTitle")}</h2></header>
+          <form onSubmit={handleSubmit} className="card-body rate-form-body">
+            <label className="field">
+              <span className="field-label">{t("rate.newRate")} *</span>
+              <input className="input num" type="number" step="0.01" min="0.01" required value={form.rate}
+                onChange={(event) => setForm({ ...form, rate: event.target.value })} placeholder={t("rate.newRatePlaceholder")} />
+              <span className="field-hint">{t("rate.newRateHint")}</span>
+            </label>
+            {jump !== null && Math.abs(jump) >= 10 && (
+              <div className="alert alert-warning" role="note"><TriangleAlert aria-hidden="true" /><span>{t("rate.jumpWarning", { value: formatNumber(Math.abs(jump), 1) })}</span></div>
             )}
-          </div>
-        </div>
+            <label className="field">
+              <span className="field-label">{t("rate.effectiveDate")}</span>
+              <input className="input" type="datetime-local" value={form.effectiveFrom} onChange={(event) => setForm({ ...form, effectiveFrom: event.target.value })} />
+              <span className="field-hint">{t("rate.effectiveDateHint")}</span>
+            </label>
+            <label className="field">
+              <span className="field-label">{t("rate.notes")} {t("common.optional")}</span>
+              <textarea className="input" rows={2} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder={t("rate.notesPlaceholder")} />
+            </label>
+            <button type="submit" disabled={submitting || !form.rate} className="btn btn-primary">
+              {submitting ? <RefreshCw className="animate-spin" aria-hidden="true" /> : <Save aria-hidden="true" />}
+              {submitting ? t("rate.updating") : t("rate.submit")}
+            </button>
+          </form>
+        </section>
 
-        {/* Section d'information */}
-        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-blue-900 mb-3">
-            Comment utiliser les taux de change
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-800">
-            <div>
-              <p className="font-medium mb-2">Pour les ventes en FC:</p>
-              <ul className="space-y-1 list-disc list-inside">
-                <li>Les prix saisis en FC seront convertis en USD</li>
-                <li>Le système utilise toujours le taux actif</li>
-                <li>Bien faire attention avant de definir un nouveau taux</li>
-              </ul>
-            </div>
-            <div>
-              <p className="font-medium mb-2">Bonnes pratiques:</p>
-              <ul className="space-y-1 list-disc list-inside">
-                <li>Mettez à jour le taux régulièrement</li>
-                <li>Notez la source du taux (banque, marché, etc.)</li>
-                <li>Un seul taux peut être actif à la fois</li>
-              </ul>
-            </div>
-          </div>
-        </div>
+        <section className="card rate-history" aria-labelledby="rate-history-title">
+          <header className="card-header">
+            <h2 id="rate-history-title" className="section-title"><History aria-hidden="true" className="inline-icon" />{t("rate.history")}</h2>
+            <span className="badge">{t("rate.historyCount", { count: history.length })}</span>
+          </header>
+          {history.length ? (
+            <ul className="rate-history-list">
+              {history.map((entry) => (
+                <li key={entry._id} className={entry.isActive ? "is-active" : ""}>
+                  <div><strong className="num">1 USD = {amount(entry.rate)} FC</strong>{entry.isActive && <span className="badge badge-success">{t("common.active")}</span>}</div>
+                  <small>{date(entry.effectiveFrom)} · {entry.createdBy?.username || t("common.unknown")}</small>
+                  {entry.notes && <small className="rate-history-note">{entry.notes}</small>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="card-body"><EmptyState title={t("rate.noHistoryTitle")} icon={<History aria-hidden="true" />}>{t("rate.noHistoryBody")}</EmptyState></div>
+          )}
+        </section>
       </div>
+
+      <aside className="card rate-help">
+        <div className="card-body">
+          <h3 className="section-title"><Info aria-hidden="true" className="inline-icon" />{t("rate.helpTitle")}</h3>
+          <ul>
+            <li>{t("rate.help1")}</li>
+            <li>{t("rate.help2")}</li>
+            <li>{t("rate.help3")}</li>
+            <li>{t("rate.help4")}</li>
+          </ul>
+        </div>
+      </aside>
     </div>
   );
 }

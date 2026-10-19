@@ -61,7 +61,7 @@ test("a pending save cannot be submitted twice and a failed save retains input",
   fireEvent.submit(form);
   expect(fetchMock).toHaveBeenCalledTimes(2);
   await act(async () => resolveSave(Response.json({ message: "Authentication required" }, { status: 401 })));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Authentication required");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Connexion requise");
   expect(screen.queryByRole("link", { name: /historique/ })).not.toBeInTheDocument();
   expect(form.querySelector('[name="amount"]')).toHaveValue(25);
 });
@@ -77,6 +77,6 @@ test("Analytics displays the entry amount and count from the aggregation respons
   render(<Analytics />);
   fireEvent.change(screen.getByLabelText("Mot de passe administrateur"), { target: { value: "test" } });
   fireEvent.click(screen.getByRole("button", { name: "Accéder aux rapports" }));
-  const count = await screen.findByText("2 entrée(s) enregistrée(s)");
-  expect(count.parentElement).toHaveTextContent("$125.50");
+  const count = await screen.findByText("2 entrées enregistrées");
+  expect(count.closest("article")).toHaveTextContent("$125.50");
 });

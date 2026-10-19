@@ -8,20 +8,11 @@ import type { Pagination, StockAlertRow } from "../../types/inventory";
 import { formatDateTime, formatQuantity, requestJson } from "../../utils/inventoryFormat";
 import { productAvailabilityLabel } from "../../utils/productAvailability";
 import { periodQuery, type PeriodRange } from "../../utils/dashboardPeriod";
+import { useTranslation } from "react-i18next";
 
 export type AlertKind = "low" | "out" | "became_out";
 
-const TABS: { id: AlertKind; label: string }[] = [
-  { id: "low", label: "Stock faible" },
-  { id: "out", label: "En rupture" },
-  { id: "became_out", label: "Tombés en rupture" },
-];
-
-const EMPTY_MESSAGES: Record<AlertKind, string> = {
-  low: "Aucun produit sous le stock minimum.",
-  out: "Aucun produit actif en rupture de stock.",
-  became_out: "Aucun produit n'est tombé en rupture pendant cette période.",
-};
+const TABS: AlertKind[] = ["low", "out", "became_out"];
 
 const PAGE_SIZE = 20;
 
@@ -31,6 +22,7 @@ export default function StockAlertsDialog({ initialKind, period, periodLabel, on
   periodLabel: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [kind, setKind] = useState<AlertKind>(initialKind);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -64,60 +56,60 @@ export default function StockAlertsDialog({ initialKind, period, periodLabel, on
   const selectKind = (next: AlertKind) => { setKind(next); setPage(1); setRows(null); };
 
   return (
-    <Dialog label="Articles à surveiller" onClose={onClose}>
+    <Dialog label={t("inventory.alerts.title")} onClose={onClose}>
       <section className="max-w-4xl alerts-dialog">
         <header className="alerts-dialog-header">
           <div className="min-w-0">
-            <h2 className="section-title">Articles à surveiller</h2>
+            <h2 className="section-title">{t("inventory.alerts.title")}</h2>
             <p className="text-sm text-gray-500">
-              {kind === "became_out" ? `Période : ${periodLabel}` : "État actuel du stock (articles actifs uniquement)"}
+              {kind === "became_out" ? t("inventory.alerts.period", { period: periodLabel }) : t("inventory.alerts.current")}
             </p>
           </div>
-          <button type="button" className="btn btn-ghost btn-icon" aria-label="Fermer" onClick={onClose}><X aria-hidden="true" /></button>
+          <button type="button" className="btn btn-ghost btn-icon" aria-label={t("common.close")} onClick={onClose}><X aria-hidden="true" /></button>
         </header>
 
         <div className="alerts-dialog-body">
           <div className="alerts-dialog-tools">
-            <div className="segmented" role="tablist" aria-label="Type d'alerte">
+            <div className="segmented" role="tablist" aria-label={t("inventory.alerts.typeLabel")}>
               {TABS.map((tab) => (
-                <button key={tab.id} type="button" role="tab" aria-selected={kind === tab.id} onClick={() => selectKind(tab.id)}>
-                  {tab.label}
+                <button key={tab} type="button" role="tab" aria-selected={kind === tab} onClick={() => selectKind(tab)}>
+                  {t(`inventory.alerts.tabs.${tab}`)}
                 </button>
               ))}
             </div>
             <div className="input-group alerts-dialog-search">
               <Search aria-hidden="true" />
-              <input className="input" type="search" aria-label="Rechercher un article" placeholder="Rechercher un article…" value={search} onChange={(event) => setSearch(event.target.value)} />
+              <input className="input" type="search" aria-label={t("products.searchLabel")} placeholder={t("inventory.alerts.searchPlaceholder")} value={search} onChange={(event) => setSearch(event.target.value)} />
             </div>
           </div>
 
           {error ? (
-            <ErrorState title="Impossible de charger la liste" action={<button type="button" className="btn btn-secondary" onClick={() => setAttempt((value) => value + 1)}>Réessayer</button>}>{error}</ErrorState>
+            <ErrorState title={t("inventory.alerts.error")} action={<button type="button" className="btn btn-secondary" onClick={() => setAttempt((value) => value + 1)}>{t("common.retry")}</button>}>{error}</ErrorState>
           ) : rows === null ? (
-            <LoadingState label="Chargement des articles…" />
+            <LoadingState label={t("products.loading")} />
           ) : rows.length === 0 ? (
-            <EmptyState title={query ? "Aucun résultat" : EMPTY_MESSAGES[kind]} icon={<PackageCheck aria-hidden="true" />}>
-              {query ? `Aucun article ne correspond à « ${query} ».` : undefined}
+            <EmptyState title={query ? t("common.noResult") : t(`inventory.alerts.empty.${kind}`)} icon={<PackageCheck aria-hidden="true" />}>
+              {query ? t("inventory.alerts.noMatch", { query }) : undefined}
             </EmptyState>
           ) : (
             <div className={loading ? "is-refreshing" : ""} aria-busy={loading}>
-              {pagination && <p className="alerts-dialog-count num">{pagination.totalRecords} article{pagination.totalRecords > 1 ? "s" : ""}</p>}
+              {pagination && <p className="alerts-dialog-count num">{t("inventory.productCount", { count: pagination.totalRecords })}</p>}
               <ResponsiveTable>
                 <thead>
                   <tr>
-                    <th>Article</th>
-                    <th>Catégorie</th>
-                    {kind === "became_out" && <th>En rupture le</th>}
-                    <th>Stock actuel</th>
-                    {kind !== "became_out" && <th>Minimum</th>}
-                    {kind !== "became_out" && <th>À commander</th>}
-                    <th>Statut</th>
+                    <th>{t("products.col.product")}</th>
+                    <th>{t("products.col.category")}</th>
+                    {kind === "became_out" && <th>{t("inventory.alerts.outSince")}</th>}
+                    <th>{t("inventory.current")}</th>
+                    {kind !== "became_out" && <th>{t("inventory.alerts.minimum")}</th>}
+                    {kind !== "became_out" && <th>{t("inventory.alerts.toOrder")}</th>}
+                    <th>{t("common.status")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => {
                     const status = row.deleted
-                      ? { label: "Supprimé", tone: "neutral" as const }
+                      ? { label: t("inventory.alerts.deleted"), tone: "neutral" as const }
                       : productAvailabilityLabel({ stock: row.stock ?? 0, minStock: row.minStock, status: row.status });
                     return (
                       <tr key={row._id}>

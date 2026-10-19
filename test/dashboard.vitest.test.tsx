@@ -27,8 +27,8 @@ function summary(overrides: Partial<DashboardSummary> = {}): DashboardSummary {
     health: { products: 6, pieceProducts: 6, active: 4, inactive: 2, sellable: 3, outOfStock: 1, lowStock: 2, becameOutOfStock: 1 },
     activity: { sale: 3, restock: 1, sale_void: 1, adjustment: 1 },
     soldProductMovements: [
-      { productId: "P1", name: "Sac noir", category: "Sacs", unit: "pcs", unitKey: "piece", currentStock: 0, flows: { ...flows, entries: 0, piecesOut: 5, adjustmentsOut: 0, net: -5 } },
-      { productId: "PACK", name: "Carton", category: "Emballages", unit: "packs", unitKey: "packs", currentStock: 101, flows: { ...flows, entries: 0, piecesOut: 4, adjustmentsOut: 0, net: -4 } },
+      { productId: "P1", name: "Sac noir", category: "Sacs", unit: "pcs", unitKey: "piece", currentStock: 0, minStock: 5, openingStock: 5, closingStock: 0, flows: { ...flows, entries: 0, piecesOut: 5, adjustmentsOut: 0, net: -5 } },
+      { productId: "PACK", name: "Carton", category: "Emballages", unit: "packs", unitKey: "packs", currentStock: 101, minStock: 5, openingStock: 105, closingStock: 101, flows: { ...flows, entries: 0, piecesOut: 4, adjustmentsOut: 0, net: -4 } },
     ],
     transactions: { sales: 2 },
     series: [{ key: "2026-09-29", net: 2, level: 10468 }],
@@ -85,6 +85,9 @@ test("mixed inventory units are never added to the pieces KPIs", async () => {
   expect(screen.getByText(/50 kg/)).toBeInTheDocument();
   expect(screen.getByText(/20 lbs/)).toBeInTheDocument();
   expect(screen.queryByText(/10 538/)).toBeNull();
+  // The story view is the default; the same figures are available as a table.
+  expect(screen.getAllByText(/Au début de la période, vous aviez 105 packs/).length).toBe(1);
+  fireEvent.click(screen.getByRole("radio", { name: /Tableau/ }));
   const productMovements = screen.getByRole("table", { name: "Mouvements par article vendu" });
   expect(within(productMovements).getByText("Sac noir")).toBeInTheDocument();
   expect(within(productMovements).getByText("Carton")).toBeInTheDocument();

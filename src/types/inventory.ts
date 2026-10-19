@@ -84,6 +84,12 @@ export interface DashboardSummary {
     unit: string;
     unitKey: string;
     currentStock: number | null;
+    /** Current minimum stock of the product (null when unknown). */
+    minStock?: number | null;
+    /** Stock of this product at the start of the period (null: before tracking). */
+    openingStock?: number | null;
+    /** Stock of this product at the end of the period. */
+    closingStock?: number | null;
     flows: StockFlows;
   }[];
   transactions: { sales: number };

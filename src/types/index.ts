@@ -2,7 +2,9 @@ export interface Product {
   _id: string;
   name: string;
   description: string;
+  /** Prix de vente (USD). */
   price: number;
+  /** Prix d'achat (USD). Only sent to the roles of the Articles page. */
   category: string;
   brand: string;
   stock: number;
@@ -20,4 +22,4 @@ export interface Category {
   _id: string;
   name: string;
   description: string;
-}
+}

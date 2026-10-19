@@ -1,10 +1,14 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState, useRef } from "react";
 import PageHeader from "../components/ui/PageHeader";
 import ExchangeRateChip from "../components/ui/ExchangeRateChip";
 import { formatNowGMT2 } from "../utils/dateUtils";
 import { useAuth } from "../hooks/useAuth";
-import { AlertTriangle, CheckCircle2, DollarSign, RefreshCw, FileText, User, Calculator } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleArrowDown, DollarSign, RefreshCw, FileText, User, Calculator } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { formatFC, formatUSD } from "../i18n/format";
+import { activeLocale } from "../i18n/translate";
+import { serverMessage } from "../i18n/serverMessages";
+import { entryCategoryLabel, entrySourceLabel, uiPaymentLabel } from "../utils/entryLabels";
 import { serverUrl } from "../utils/constants";
 import { createAmountSnapshot } from "../utils/salePricing";
 import { apiRequest } from "../lib/api";
@@ -28,6 +32,27 @@ interface Entry {
   };
   createdAt: string;
   status: string;
+}
+
+interface EntryReceiptData {
+  shopName: string;
+  shopAddress: string;
+  shopNumber: string;
+  shopRegistration: string;
+  date: string;
+  amount: number;
+  enteredAmount: number;
+  enteredCurrency: "USD" | "FC";
+  amountUSD: number;
+  source: string;
+  category: string;
+  paymentMethod: string;
+  description: string;
+  receivedFrom: { name: string; phone: string; email: string };
+  agent: string;
+  receiptNumber: string;
+  stubNumber: string;
+  exchangeRate?: number;
 }
 
 interface ExchangeRate {
@@ -67,8 +92,9 @@ async function readJsonSafe(res: Response) {
 }
 
 export default function Entry() {
+  const { t } = useTranslation();
   const [submitting, setSubmitting] = useState(false);
-  const [receiptData, setReceiptData] = useState<any>(null);
+  const [receiptData, setReceiptData] = useState<EntryReceiptData | null>(null);
   const [exchangeRate, setExchangeRate] = useState<ExchangeRate | null>(null);
   const [loadingRate, setLoadingRate] = useState(true);
   const receiptRef = useRef<HTMLDivElement>(null);
@@ -191,21 +217,13 @@ export default function Entry() {
     }));
   };
 
-  // Format function for FC display
-  const formatFc = (amount: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount) + ' FC';
-  };
-
-  // Format function for USD display
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
+  const formatFc = (amount: number) => formatFC(amount);
+  const formatCurrency = (amount: number) => formatUSD(amount);
+  // Printed labels (receipt and stub follow the interface language).
+  const L = (key: string) => escapeHtml(t(`receipt.${key}`));
+  const enteredAmountText = (data: EntryReceiptData) => data.enteredCurrency === "FC"
+    ? `${data.enteredAmount.toLocaleString(activeLocale())} FC`
+    : `$${data.enteredAmount.toFixed(2)}`;
 
   // Print function for entry receipt only
   const printReceiptOnly = () => {
@@ -214,7 +232,7 @@ export default function Entry() {
       printWindow.document.write(`
 <html>
   <head>
-    <title>Reçu d'Entrée d'Argent</title>
+    <title>${L("entryReceiptTitle")}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
       * {
@@ -447,63 +465,63 @@ export default function Entry() {
       <div class="header">
         <div class="shop-name"><strong>${escapeHtml(receiptData.shopName)}</strong></div>
         <div class="shop-details"><strong>${escapeHtml(receiptData.shopAddress)}</strong></div>
-        <div class="shop-details">TEL: <strong>${escapeHtml(receiptData.shopNumber)}</strong></div>
+        <div class="shop-details">${L("tel")}: <strong>${escapeHtml(receiptData.shopNumber)}</strong></div>
         <div class="shop-details"><strong>${escapeHtml(receiptData.shopRegistration)}</strong></div>
       </div>
       
       <div class="section-divider"></div>
       
       <div class="receipt-info">
-        <div class="shop-details">DATE: <strong>${escapeHtml(receiptData.date)}</strong></div>
-        <div class="shop-details">REÇU #: <strong>${escapeHtml(receiptData.receiptNumber)}</strong></div>
+        <div class="shop-details">${L("date")}: <strong>${escapeHtml(receiptData.date)}</strong></div>
+        <div class="shop-details">${L("receiptNo")}: <strong>${escapeHtml(receiptData.receiptNumber)}</strong></div>
       </div>
       
       <div class="entry-badge">
-        <strong>💰 ENTRÉE D'ARGENT CONFIRMÉE 💰</strong>
+        <strong>💰 ${L("entryConfirmed")} 💰</strong>
       </div>
       
       <div class="sender-info">
-        <div class="sender-field">REÇU DE: <strong>${escapeHtml(receiptData.receivedFrom.name.toUpperCase())}</strong></div>
-        <div class="sender-field">TÉLÉPHONE: <strong>${escapeHtml(receiptData.receivedFrom.phone)}</strong></div>
+        <div class="sender-field">${L("receivedFrom")}: <strong>${escapeHtml(receiptData.receivedFrom.name.toUpperCase())}</strong></div>
+        <div class="sender-field">${L("phone")}: <strong>${escapeHtml(receiptData.receivedFrom.phone)}</strong></div>
         ${
           receiptData.receivedFrom.email
-            ? `<div class="sender-field">EMAIL: <strong>${escapeHtml(receiptData.receivedFrom.email)}</strong></div>`
+            ? `<div class="sender-field">${L("email")}: <strong>${escapeHtml(receiptData.receivedFrom.email)}</strong></div>`
             : ""
         }
       </div>
       
       ${receiptData.description ? `
         <div class="description">
-          <strong>DESCRIPTION:</strong> <strong>${escapeHtml(receiptData.description)}</strong>
+          <strong>${L("description")}:</strong> <strong>${escapeHtml(receiptData.description)}</strong>
         </div>
       ` : ''}
       
-      <div class="receipt-title">DÉTAILS DE L'ENTRÉE</div>
+      <div class="receipt-title">${L("entryDetails")}</div>
       
       <div class="details-section">
         <div class="detail-row">
-          <div class="detail-label"><strong>SOURCE:</strong></div>
-          <div class="detail-value"><strong>${escapeHtml(receiptData.source)}</strong></div>
+          <div class="detail-label"><strong>${L("source")}:</strong></div>
+          <div class="detail-value"><strong>${escapeHtml(entrySourceLabel(t, receiptData.source))}</strong></div>
         </div>
         <div class="detail-row">
-          <div class="detail-label"><strong>CATÉGORIE:</strong></div>
-          <div class="detail-value"><strong>${escapeHtml(receiptData.category)}</strong></div>
+          <div class="detail-label"><strong>${L("category")}:</strong></div>
+          <div class="detail-value"><strong>${escapeHtml(entryCategoryLabel(t, receiptData.category))}</strong></div>
         </div>
         <div class="detail-row">
-          <div class="detail-label"><strong>MÉTHODE PAIEMENT:</strong></div>
-          <div class="detail-value"><strong>${escapeHtml(receiptData.paymentMethod.toUpperCase())}</strong></div>
+          <div class="detail-label"><strong>${L("paymentMethod")}:</strong></div>
+          <div class="detail-value"><strong>${escapeHtml(uiPaymentLabel(t, receiptData.paymentMethod).toUpperCase())}</strong></div>
         </div>
       </div>
       
       <div class="amount-section">
         <div class="amount-row">
-          <div><strong>MONTANT REÇU:</strong></div>
-          <div><strong>${receiptData.enteredCurrency === "FC" ? `${receiptData.enteredAmount.toLocaleString("fr-FR")} FC` : `$${receiptData.enteredAmount.toFixed(2)}`}</strong></div>
+          <div><strong>${L("amountReceived")}:</strong></div>
+          <div><strong>${enteredAmountText(receiptData)}</strong></div>
         </div>
         ${
           receiptData.enteredCurrency === "FC"
             ? `<div class="amount-row">
-                 <div><strong>ÉQUIVALENT USD:</strong></div>
+                 <div><strong>${L("usdEquivalent")}:</strong></div>
                  <div><strong>$${receiptData.amountUSD.toFixed(2)}</strong></div>
                </div>`
             : ''
@@ -511,14 +529,14 @@ export default function Entry() {
       </div>
       
       <div class="agent-info">
-        Enregistré par: <strong>${escapeHtml(receiptData.agent.toUpperCase())}</strong>
+        ${L("recordedBy")}: <strong>${escapeHtml(receiptData.agent.toUpperCase())}</strong>
       </div>
       
       <div class="footer">
-        <div class="thank-you"><strong>ENTRÉE ENREGISTRÉE AVEC SUCCÈS !</strong></div>
-        <div class="warning"><strong>Conserver ce reçu comme preuve</strong></div>
-        <div class="warning"><strong>Merci pour votre confiance</strong></div>
-        <div class="thank-you"><strong>À BIENTÔT !</strong></div>
+        <div class="thank-you"><strong>${L("entrySaved")}</strong></div>
+        <div class="warning"><strong>${L("keepAsProof")}</strong></div>
+        <div class="warning"><strong>${L("thanksTrust")}</strong></div>
+        <div class="thank-you"><strong>${L("seeYou")}</strong></div>
       </div>
 
       <!-- PAPER CUT INDICATOR -->
@@ -552,7 +570,7 @@ export default function Entry() {
       printWindow.document.write(`
 <html>
   <head>
-    <title>Souche Entrée d'Argent</title>
+    <title>${L("entryStubTitle")}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
       * {
@@ -785,67 +803,67 @@ export default function Entry() {
       <div class="header">
         <div class="shop-name"><strong>${escapeHtml(receiptData.shopName)}</strong></div>
         <div class="shop-details"><strong>${escapeHtml(receiptData.shopAddress)}</strong></div>
-        <div class="shop-details">TEL: <strong>${escapeHtml(receiptData.shopNumber)}</strong></div>
+        <div class="shop-details">${L("tel")}: <strong>${escapeHtml(receiptData.shopNumber)}</strong></div>
       </div>
       
       <div class="section-divider"></div>
       
       <div class="receipt-info">
-        <div class="shop-details">DATE: <strong>${escapeHtml(receiptData.date)}</strong></div>
-        <div class="shop-details">REÇU #: <strong>${escapeHtml(receiptData.receiptNumber)}</strong></div>
+        <div class="shop-details">${L("date")}: <strong>${escapeHtml(receiptData.date)}</strong></div>
+        <div class="shop-details">${L("receiptNo")}: <strong>${escapeHtml(receiptData.receiptNumber)}</strong></div>
       </div>
       
       <div class="stub-number">
-        <strong>SOUCHE ENTRÉE N°${escapeHtml(receiptData.stubNumber)}</strong>
+        <strong>${L("entryStubNo")}${escapeHtml(receiptData.stubNumber)}</strong>
       </div>
       
       <div class="sender-info">
-        <div class="sender-field">REÇU DE: <strong>${escapeHtml(receiptData.receivedFrom.name.toUpperCase())}</strong></div>
-        <div class="sender-field">TÉLÉPHONE: <strong>${escapeHtml(receiptData.receivedFrom.phone)}</strong></div>
+        <div class="sender-field">${L("receivedFrom")}: <strong>${escapeHtml(receiptData.receivedFrom.name.toUpperCase())}</strong></div>
+        <div class="sender-field">${L("phone")}: <strong>${escapeHtml(receiptData.receivedFrom.phone)}</strong></div>
       </div>
       
       ${receiptData.description ? `
         <div class="description">
-          <strong>DESCRIPTION:</strong> <strong>${escapeHtml(receiptData.description)}</strong>
+          <strong>${L("description")}:</strong> <strong>${escapeHtml(receiptData.description)}</strong>
         </div>
       ` : ''}
       
-      <div class="receipt-title">DÉTAILS ENTRÉE</div>
+      <div class="receipt-title">${L("entryDetails")}</div>
       
       <div class="details-section">
         <div class="detail-row">
-          <div class="detail-label"><strong>SOURCE:</strong></div>
-          <div class="detail-value"><strong>${escapeHtml(receiptData.source)}</strong></div>
+          <div class="detail-label"><strong>${L("source")}:</strong></div>
+          <div class="detail-value"><strong>${escapeHtml(entrySourceLabel(t, receiptData.source))}</strong></div>
         </div>
         <div class="detail-row">
-          <div class="detail-label"><strong>CATÉGORIE:</strong></div>
-          <div class="detail-value"><strong>${escapeHtml(receiptData.category)}</strong></div>
+          <div class="detail-label"><strong>${L("category")}:</strong></div>
+          <div class="detail-value"><strong>${escapeHtml(entryCategoryLabel(t, receiptData.category))}</strong></div>
         </div>
         <div class="detail-row">
-          <div class="detail-label"><strong>MÉTHODE PAIEMENT:</strong></div>
-          <div class="detail-value"><strong>${escapeHtml(receiptData.paymentMethod.toUpperCase())}</strong></div>
+          <div class="detail-label"><strong>${L("paymentMethod")}:</strong></div>
+          <div class="detail-value"><strong>${escapeHtml(uiPaymentLabel(t, receiptData.paymentMethod).toUpperCase())}</strong></div>
         </div>
       </div>
       
       <div class="amount-section">
         <div class="amount-row">
-          <div><strong>MONTANT REÇU:</strong></div>
-          <div><strong>${receiptData.enteredCurrency === "FC" ? `${receiptData.enteredAmount.toLocaleString("fr-FR")} FC` : `$${receiptData.enteredAmount.toFixed(2)}`}</strong></div>
+          <div><strong>${L("amountReceived")}:</strong></div>
+          <div><strong>${enteredAmountText(receiptData)}</strong></div>
         </div>
       </div>
       
       <div class="agent-info">
-        Enregistré par: <strong>${escapeHtml(receiptData.agent.toUpperCase())}</strong>
+        ${L("recordedBy")}: <strong>${escapeHtml(receiptData.agent.toUpperCase())}</strong>
       </div>
       
       <div class="stub-footer">
-        <div class="thank-you"><strong>SOUCHE ENTRÉE D'ARGENT</strong></div>
+        <div class="thank-you"><strong>${L("entryStub")}</strong></div>
         <div class="warning"><strong>${escapeHtml(receiptData.shopName)}</strong></div>
-        <div class="warning"><strong>Conserver cette souche</strong></div>
-        <div class="warning">Reçu #: <strong>${escapeHtml(receiptData.receiptNumber)}</strong></div>
-        <div class="warning">Date: <strong>${escapeHtml(receiptData.date)}</strong></div>
-        <div class="warning">Source: <strong>${escapeHtml(receiptData.source)}</strong></div>
-        <div class="warning">Montant: <strong>${receiptData.enteredCurrency === "FC" ? `${receiptData.enteredAmount.toLocaleString("fr-FR")} FC` : `$${receiptData.enteredAmount.toFixed(2)}`}</strong></div>
+        <div class="warning"><strong>${L("keepStub")}</strong></div>
+        <div class="warning">${L("receiptNo")}: <strong>${escapeHtml(receiptData.receiptNumber)}</strong></div>
+        <div class="warning">${L("date")}: <strong>${escapeHtml(receiptData.date)}</strong></div>
+        <div class="warning">${L("source")}: <strong>${escapeHtml(entrySourceLabel(t, receiptData.source))}</strong></div>
+        <div class="warning">${L("amount")}: <strong>${enteredAmountText(receiptData)}</strong></div>
       </div>
       
       <!-- PAPER CUT INDICATOR -->
@@ -882,12 +900,15 @@ export default function Entry() {
       printStubOnly();
     }, 2000);
   };
+  // Latest printSequentially for the effect below (its trigger list stays unchanged).
+  const printSequentiallyRef = useRef(printSequentially);
+  printSequentiallyRef.current = printSequentially;
 
   useEffect(() => {
     if (receiptData) {
       // Small delay to ensure the receipt data is set
       const timer = setTimeout(() => {
-        printSequentially();
+        printSequentiallyRef.current();
       }, 500);
 
       return () => clearTimeout(timer);
@@ -935,8 +956,7 @@ export default function Entry() {
       const data = await readJsonSafe(res);
       
       if (!res.ok) {
-        const msg = data?.error || data?.message || data?.text || `Échec de l'enregistrement (${res.status})`;
-        throw new Error(msg);
+        throw new Error(serverMessage(data?.error || data?.message || data?.text, t("entry.failedStatus", { status: res.status })));
       }
 
       // Get the entry ID from the API response
@@ -982,12 +1002,10 @@ export default function Entry() {
         currencyMode: "usd"
       });
 
-      setMessage(
-        `Entrée ${entryId} enregistrée avec succès. Impression du reçu et de la souche…`
-      );
-    } catch (e: any) {
+      setMessage(t("entry.success", { id: entryId }));
+    } catch (e) {
       console.error("Error creating entry:", e);
-      setError(e?.message || "L'entrée d'argent n'a pas pu être enregistrée");
+      setError(e instanceof Error && e.message ? e.message : t("entry.failed"));
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -995,256 +1013,107 @@ export default function Entry() {
   }
 
   return (
-    <div className="page page-narrow">
-      <div>
-        <PageHeader
-          title="Entrée de caisse"
-          description="Enregistrer une entrée d'argent, son expéditeur et son mode de paiement."
-          actions={<ExchangeRateChip loading={loadingRate} rate={exchangeRate} />}
-        />
+    <div className="page page-narrow cash-form-page">
+      <PageHeader
+        eyebrow={t("nav.sections.cash")}
+        icon={<CircleArrowDown aria-hidden="true" />}
+        title={t("entry.title")}
+        description={t("entry.subtitle")}
+        actions={<ExchangeRateChip loading={loadingRate} rate={exchangeRate} />}
+      />
 
-        {message && (
-          <div className="alert alert-success mb-4" role="status">
-            <CheckCircle2 aria-hidden="true" /><span>{message} <a href="/entryhistory" className="underline">Voir l'historique des entrées</a></span>
-            {receiptData && (
-              // Auto-print runs outside a click, so the browser may block the popups; these reprint on demand.
-              <span className="flex gap-2 ml-auto">
-                <button type="button" onClick={printReceiptOnly} className="underline">Réimprimer le reçu</button>
-                <button type="button" onClick={printStubOnly} className="underline">Réimprimer la souche</button>
-              </span>
-            )}
-          </div>
-        )}
-        {error && (
-          <div className="alert alert-danger mb-4" role="alert"><AlertTriangle aria-hidden="true" /><span>{error}</span></div>
-        )}
+      {message && (
+        <div className="alert alert-success" role="status">
+          <CheckCircle2 aria-hidden="true" /><span>{message} <a href="/entryhistory" className="underline">{t("entry.seeHistory")}</a></span>
+          {receiptData && (
+            // Auto-print runs outside a click, so the browser may block the popups; these reprint on demand.
+            <span className="flex gap-2 ml-auto">
+              <button type="button" onClick={printReceiptOnly} className="underline">{t("entry.reprintReceipt")}</button>
+              <button type="button" onClick={printStubOnly} className="underline">{t("entry.reprintStub")}</button>
+            </span>
+          )}
+        </div>
+      )}
+      {error && <div className="alert alert-danger" role="alert"><AlertTriangle aria-hidden="true" /><span>{error}</span></div>}
 
-        <form onSubmit={handleEntry} className="space-y-6">
-          {/* Amount and Basic Info */}
-          <div className="bg-white shadow-lg rounded-xl p-6 border border-gray-200">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900 flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-green-600" />
-              Informations de l'Entrée
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block font-medium text-gray-700">
-                    Montant *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={toggleCurrencyMode}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                  >
-                    <Calculator className="w-3 h-3" />
-                    {form.currencyMode === 'usd' ? 'USD → FC' : 'FC → USD'}
+      <form onSubmit={handleEntry} className="card cash-form">
+        <div className="card-body cash-form-body">
+          <fieldset className="form-section">
+            <legend><DollarSign aria-hidden="true" className="inline-icon" />{t("entry.sectionMoney")}</legend>
+            <div className="form-row">
+              <div className="field">
+                <div className="field-label-row">
+                  <span className="field-label">{t("sortie.amount")} ({form.currencyMode === "usd" ? "USD" : "FC"}) *</span>
+                  <button type="button" onClick={toggleCurrencyMode} className="btn btn-ghost btn-sm">
+                    <Calculator aria-hidden="true" />{form.currencyMode === "usd" ? "USD → FC" : "FC → USD"}
                   </button>
                 </div>
-                
-                {form.currencyMode === 'usd' ? (
-                  <input aria-label="Montant *"
-                    type="number"
-                    step="0.01"
-                    name="amount"
-                    value={form.amount}
-                    onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                    placeholder="Entrer le montant en USD"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    min="0.01"
-                    required
-                  />
+                {form.currencyMode === "usd" ? (
+                  <input aria-label={`${t("sortie.amount")} *`} className="input num" type="number" step="0.01" name="amount" value={form.amount}
+                    onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder={t("entry.amountUsdPlaceholder")} min="0.01" required />
                 ) : (
-                  <input aria-label="Montant *"
-                    type="number"
-                    name="amountInFC"
-                    value={form.amountInFC}
-                    onChange={(e) => setForm({ ...form, amountInFC: e.target.value })}
-                    placeholder="Entrer le montant en FC"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    min="1"
-                    required
-                  />
+                  <input aria-label={`${t("sortie.amount")} *`} className="input num" type="number" name="amountInFC" value={form.amountInFC}
+                    onChange={(e) => setForm({ ...form, amountInFC: e.target.value })} placeholder={t("entry.amountFcPlaceholder")} min="1" required />
                 )}
-                
-                {/* Conversion Display */}
-                {form.amount && form.currencyMode === 'usd' && exchangeRate && (
-                  <p className="text-xs text-green-600 mt-1">
-                    ≈ {formatFc(parseFloat(form.amount) * exchangeRate.rate)}
-                  </p>
-                )}
-                {form.amountInFC && form.currencyMode === 'fc' && exchangeRate && (
-                  <p className="text-xs text-green-600 mt-1">
-                    ≈ {formatCurrency(parseFloat(form.amountInFC) / exchangeRate.rate)}
-                  </p>
-                )}
+                {form.amount && form.currencyMode === "usd" && exchangeRate && <span className="field-hint num">≈ {formatFc(parseFloat(form.amount) * exchangeRate.rate)}</span>}
+                {form.amountInFC && form.currencyMode === "fc" && exchangeRate && <span className="field-hint num">≈ {formatCurrency(parseFloat(form.amountInFC) / exchangeRate.rate)}</span>}
               </div>
-
-              <div>
-                <label htmlFor="entry-field-34674" className="block mb-2 font-medium text-gray-700">
-                  Source *
-                </label>
-                <select id="entry-field-34674"
-                  name="source"
-                  value={form.source}
-                  onChange={handleChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                >
-                  <option value="">Sélectionner la source</option>
-                  {sources.map((source) => (
-                    <option key={source} value={source}>
-                      {source}
-                    </option>
-                  ))}
+              <label className="field">
+                <span className="field-label">{t("sortie.paymentMethod")} *</span>
+                <select className="input" name="paymentMethod" value={form.paymentMethod} onChange={handleChange} required>
+                  {(["cash", "mpesa", "bank", "card", "other"] as const).map((value) => <option key={value} value={value}>{uiPaymentLabel(t, value)}</option>)}
                 </select>
-              </div>
-
-              <div>
-                <label htmlFor="entry-field-35456" className="block mb-2 font-medium text-gray-700">
-                  Catégorie *
-                </label>
-                <select id="entry-field-35456"
-                  name="category"
-                  value={form.category}
-                  onChange={handleChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                >
-                  <option value="">Sélectionner la catégorie</option>
-                  {categories.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="entry-field-36266" className="block mb-2 font-medium text-gray-700">
-                  Méthode de Paiement *
-                </label>
-                <select id="entry-field-36266"
-                  name="paymentMethod"
-                  value={form.paymentMethod}
-                  onChange={handleChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                >
-                  <option value="cash">Espèces</option>
-                  <option value="mpesa">M-Pesa ou Airtel Money (Transfert)</option>
-                  <option value="bank">Transfert Bancaire</option>
-                  <option value="card">Carte Visa</option>
-                  <option value="other">Autre</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <label htmlFor="entry-field-37169" className="block mb-2 font-medium text-gray-700">
-                Description (Optionnel)
               </label>
-              <textarea id="entry-field-37169"
-                name="description"
-                value={form.description}
-                onChange={handleChange}
-                placeholder="Description de l'entrée d'argent..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                rows={3}
-              />
+              <label className="field">
+                <span className="field-label">{t("entry.source")} *</span>
+                <select className="input" name="source" value={form.source} onChange={handleChange} required>
+                  <option value="">{t("entry.selectSource")}</option>
+                  {sources.map((source) => <option key={source} value={source}>{entrySourceLabel(t, source)}</option>)}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field-label">{t("entry.category")} *</span>
+                <select className="input" name="category" value={form.category} onChange={handleChange} required>
+                  <option value="">{t("entry.selectCategory")}</option>
+                  {categories.map((category) => <option key={category} value={category}>{entryCategoryLabel(t, category)}</option>)}
+                </select>
+              </label>
             </div>
-          </div>
+            <label className="field">
+              <span className="field-label">{t("entry.description")} {t("common.optional")}</span>
+              <textarea className="input" name="description" value={form.description} onChange={handleChange} placeholder={t("entry.descriptionPlaceholder")} rows={2} />
+            </label>
+          </fieldset>
 
-          {/* Received From Information */}
-          <div className="bg-white shadow-lg rounded-xl p-6 border border-gray-200">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900 flex items-center gap-2">
-              <User className="w-5 h-5 text-blue-600" />
-              Informations de l'Expéditeur
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="entry-field-38178" className="block mb-2 font-medium text-gray-700">
-                  Nom de l'Expéditeur *
-                </label>
-                <input id="entry-field-38178"
-                  type="text"
-                  name="receivedFromName"
-                  value={form.receivedFromName}
-                  onChange={handleChange}
-                  placeholder="Entrer le nom de la personne"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="entry-field-38804" className="block mb-2 font-medium text-gray-700">
-                  Téléphone de l'Expéditeur *
-                </label>
-                <input id="entry-field-38804"
-                  type="tel"
-                  name="receivedFromPhone"
-                  value={form.receivedFromPhone}
-                  onChange={handleChange}
-                  placeholder="Entrer le numéro de téléphone"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label htmlFor="entry-field-39464" className="block mb-2 font-medium text-gray-700">
-                  Email de l'Expéditeur (Optionnel)
-                </label>
-                <input id="entry-field-39464"
-                  type="email"
-                  name="receivedFromEmail"
-                  value={form.receivedFromEmail}
-                  onChange={handleChange}
-                  placeholder="Entrer l'email de l'expéditeur"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+          <fieldset className="form-section">
+            <legend><User aria-hidden="true" className="inline-icon" />{t("entry.sectionSender")}</legend>
+            <div className="form-row">
+              <label className="field">
+                <span className="field-label">{t("entry.senderName")} *</span>
+                <input className="input" type="text" name="receivedFromName" value={form.receivedFromName} onChange={handleChange} placeholder={t("entry.senderNamePlaceholder")} required />
+              </label>
+              <label className="field">
+                <span className="field-label">{t("entry.senderPhone")} *</span>
+                <input className="input" type="tel" name="receivedFromPhone" value={form.receivedFromPhone} onChange={handleChange} placeholder={t("entry.senderPhonePlaceholder")} required />
+              </label>
             </div>
-          </div>
+            <label className="field">
+              <span className="field-label">{t("entry.senderEmail")} {t("common.optional")}</span>
+              <input className="input" type="email" name="receivedFromEmail" value={form.receivedFromEmail} onChange={handleChange} placeholder={t("entry.senderEmailPlaceholder")} />
+            </label>
+          </fieldset>
+          {!isFormValid && <p className="field-hint">{t("entry.requiredHint")}</p>}
+        </div>
+        <footer className="dialog-foot">
+          <button type="submit" disabled={!isFormValid || submitting} className="btn btn-primary btn-lg">
+            {submitting ? <RefreshCw className="animate-spin" aria-hidden="true" /> : <FileText aria-hidden="true" />}
+            {submitting ? t("common.saving") : t("entry.submit")}
+          </button>
+        </footer>
+      </form>
 
-          {/* Submit Button */}
-          <div className="bg-white shadow-lg rounded-xl p-6 border border-gray-200">
-            <button
-              type="submit"
-              disabled={!isFormValid || submitting}
-              className={`w-full px-8 py-4 rounded-lg font-medium text-lg flex items-center justify-center gap-2 ${
-                isFormValid && !submitting
-                  ? "bg-green-600 hover:bg-green-700 text-white shadow-sm"
-                  : "bg-gray-400 cursor-not-allowed text-white"
-              } transition-colors`}
-            >
-              {submitting ? (
-                <span className="flex items-center gap-2">
-                  <RefreshCw className="w-5 h-5 animate-spin" />
-                  Enregistrement en cours...
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  <FileText className="w-5 h-5" />
-                  Enregistrer l'Entrée d'Argent
-                </span>
-              )}
-            </button>
-
-            {!isFormValid && (
-              <p className="text-sm text-orange-600 mt-2 text-center">
-                * Veuillez remplir tous les champs obligatoires (Montant, Source, Catégorie, Nom et Téléphone)
-              </p>
-            )}
-          </div>
-        </form>
-
-        {/* Hidden receipt container */}
-        <div ref={receiptRef} style={{ display: "none" }} />
-      </div>
+      {/* Hidden receipt container */}
+      <div ref={receiptRef} style={{ display: "none" }} />
     </div>
   );
 }

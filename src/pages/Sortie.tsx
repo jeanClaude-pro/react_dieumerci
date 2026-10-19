@@ -1,9 +1,11 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from "react";
 import PageHeader from "../components/ui/PageHeader";
 import ExchangeRateChip from "../components/ui/ExchangeRateChip";
 import { useAuth } from "../hooks/useAuth";
-import { AlertTriangle, Calculator, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, Calculator, CheckCircle2, CircleArrowUp } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { formatFC, formatNumber, formatUSD } from "../i18n/format";
+import { serverMessage } from "../i18n/serverMessages";
 import { serverUrl } from "../utils/constants";
 import { createAmountSnapshot } from "../utils/salePricing";
 
@@ -36,6 +38,7 @@ async function readJsonSafe(res: Response) {
 }
 
 export default function Sortie() {
+  const { t } = useTranslation();
   const [creditors, setCreditors] = useState<Array<{_id:string; name:string; type:string; phone?:string}>>([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -140,19 +143,8 @@ export default function Sortie() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
-
-  const formatFc = (amount: number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount) + ' FC';
-  };
+  const formatCurrency = (amount: number) => formatUSD(amount);
+  const formatFc = (amount: number) => formatFC(amount);
 
   async function handleSortie(e: React.FormEvent) {
     e.preventDefault();
@@ -191,13 +183,9 @@ export default function Sortie() {
         body: JSON.stringify(body),
       });
 
-      const data = await readJsonSafe(res);
+      const data = (await readJsonSafe(res)) as { error?: string; text?: string };
       if (!res.ok) {
-        const msg =
-          (data as any)?.error ||
-          (data as any)?.text ||
-          `Expense recording failed: ${res.status}`;
-        throw new Error(msg);
+        throw new Error(serverMessage(data?.error || data?.text, t("sortie.failedStatus", { status: res.status })));
       }
 
       // Reset form on success
@@ -214,263 +202,129 @@ export default function Sortie() {
         currencyMode: "usd",
       });
 
-      setMessage("Dépense enregistrée avec succès.");
-    } catch (e: any) {
-      setError(e?.message || "La dépense n'a pas pu être enregistrée");
+      setMessage(t("sortie.success"));
+    } catch (e: unknown) {
+      setError(e instanceof Error && e.message ? e.message : t("sortie.failed"));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="page page-narrow">
-      <div>
-        <PageHeader
-          title="Sortie de caisse"
-          description="Enregistrer une dépense ou un remboursement, en USD ou en FC."
-          actions={<ExchangeRateChip loading={loadingRate} rate={exchangeRate} />}
-        />
+    <div className="page page-narrow cash-form-page">
+      <PageHeader
+        eyebrow={t("nav.sections.cash")}
+        icon={<CircleArrowUp aria-hidden="true" />}
+        title={t("sortie.title")}
+        description={t("sortie.subtitle")}
+        actions={<ExchangeRateChip loading={loadingRate} rate={exchangeRate} />}
+      />
 
-        {message && (
-          <div className="alert alert-success mb-4" role="status">
-            <CheckCircle2 aria-hidden="true" /><span>{message}</span>
+      {message && <div className="alert alert-success" role="status"><CheckCircle2 aria-hidden="true" /><span>{message}</span></div>}
+      {error && <div className="alert alert-danger" role="alert"><AlertTriangle aria-hidden="true" /><span>{error}</span></div>}
+
+      <form onSubmit={handleSortie} className="card cash-form">
+        <header className="card-header">
+          <div>
+            <h2 className="section-title">{t("sortie.formTitle")}</h2>
+            <p className="section-help">{t("sortie.formHelp")}</p>
           </div>
-        )}
-        {error && (
-          <div className="alert alert-danger mb-4" role="alert"><AlertTriangle aria-hidden="true" /><span>{error}</span></div>
-        )}
-
-        <div className="bg-white shadow-lg rounded-xl border border-gray-200 overflow-hidden">
-          <div className="card-header">
-            <div>
-              <h2 className="section-title">Enregistrement de la dépense</h2>
-              <p className="text-sm text-gray-500 mt-0.5">Chaque sortie est enregistrée pour le suivi et la validation.</p>
-            </div>
-          </div>
-
-          <form onSubmit={handleSortie} className="p-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><label htmlFor="sortie-field-9697" className="block mb-2 font-medium text-gray-700">Type de sortie *</label><select id="sortie-field-9697" value={form.expenseType} onChange={(e) => setForm({...form, expenseType: e.target.value as "normal" | "repayment", creditorId: ""})} className="w-full p-3 border rounded-lg"><option value="normal">Dépense normale</option><option value="repayment">Remboursement de dette</option></select></div>
-              {form.expenseType === "repayment" && <div><label htmlFor="sortie-field-10137" className="block mb-2 font-medium text-gray-700">Créancier actif *</label><select id="sortie-field-10137" required value={form.creditorId} onChange={(e) => { const c=creditors.find(x=>x._id===e.target.value); setForm({...form, creditorId:e.target.value, reason:c?`Remboursement dette — ${c.name}`:form.reason, recipientName:c?.name||form.recipientName, recipientPhone:c?.phone||form.recipientPhone}); }} className="w-full p-3 border rounded-lg"><option value="">Sélectionner...</option>{creditors.map(c=><option key={c._id} value={c._id}>{c.name} ({c.type})</option>)}</select><p className="text-xs text-gray-500 mt-1">Le solde de dette reste confidentiel et sera vérifié par le serveur.</p></div>}
-            </div>
-            {/* Reason for Expense */}
-            <div>
-              <label htmlFor="sortie-field-10968" className="block mb-2 font-medium text-gray-700">
-                Raison de la dépense *
+        </header>
+        <div className="card-body cash-form-body">
+          <fieldset className="form-section">
+            <legend>{t("sortie.sectionWhat")}</legend>
+            <div className="form-row">
+              <label className="field">
+                <span className="field-label">{t("sortie.type")} *</span>
+                <select className="input" value={form.expenseType} onChange={(e) => setForm({ ...form, expenseType: e.target.value as "normal" | "repayment", creditorId: "" })}>
+                  <option value="normal">{t("sortie.types.normal")}</option>
+                  <option value="repayment">{t("sortie.types.repayment")}</option>
+                </select>
               </label>
-              <input id="sortie-field-10968"
-                type="text"
-                name="reason"
-                value={form.reason}
-                onChange={handleChange}
-                placeholder="Ex: Achat fournitures bureau, Transport, etc."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                required
-              />
-            </div>
-
-            {/* Recipient Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="sortie-field-11694" className="block mb-2 font-medium text-gray-700">
-                  Nom du bénéficiaire *
+              {form.expenseType === "repayment" && (
+                <label className="field">
+                  <span className="field-label">{t("sortie.creditor")} *</span>
+                  <select className="input" required value={form.creditorId} onChange={(e) => {
+                    const c = creditors.find((x) => x._id === e.target.value);
+                    setForm({ ...form, creditorId: e.target.value, reason: c ? t("sortie.repaymentReason", { name: c.name }) : form.reason, recipientName: c?.name || form.recipientName, recipientPhone: c?.phone || form.recipientPhone });
+                  }}>
+                    <option value="">{t("sortie.select")}</option>
+                    {creditors.map((c) => <option key={c._id} value={c._id}>{c.name} ({t(`debts.types.${c.type}`, { defaultValue: c.type })})</option>)}
+                  </select>
+                  <span className="field-hint">{t("sortie.creditorHint")}</span>
                 </label>
-                <input id="sortie-field-11694"
-                  type="text"
-                  name="recipientName"
-                  value={form.recipientName}
-                  onChange={handleChange}
-                  placeholder="Nom complet"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="sortie-field-12312" className="block mb-2 font-medium text-gray-700">
-                  Téléphone du bénéficiaire *
-                </label>
-                <input id="sortie-field-12312"
-                  type="tel"
-                  name="recipientPhone"
-                  value={form.recipientPhone}
-                  onChange={handleChange}
-                  placeholder="Numéro de téléphone"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  required
-                />
-              </div>
+              )}
             </div>
+            <label className="field">
+              <span className="field-label">{t("sortie.reason")} *</span>
+              <input className="input" type="text" name="reason" value={form.reason} onChange={handleChange} placeholder={t("sortie.reasonPlaceholder")} required />
+            </label>
+          </fieldset>
 
-            {/* Amount and Payment Method */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block font-medium text-gray-700">
-                    Montant *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={toggleCurrencyMode}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                  >
-                    <Calculator className="w-3 h-3" />
-                    {form.currencyMode === 'usd' ? 'USD → FC' : 'FC → USD'}
+          <fieldset className="form-section">
+            <legend>{t("sortie.sectionWho")}</legend>
+            <div className="form-row">
+              <label className="field">
+                <span className="field-label">{t("sortie.recipientName")} *</span>
+                <input className="input" type="text" name="recipientName" value={form.recipientName} onChange={handleChange} placeholder={t("sortie.recipientNamePlaceholder")} required />
+              </label>
+              <label className="field">
+                <span className="field-label">{t("sortie.recipientPhone")}{form.expenseType === "repayment" ? "" : " *"}</span>
+                <input className="input" type="tel" name="recipientPhone" value={form.recipientPhone} onChange={handleChange} placeholder={t("sortie.recipientPhonePlaceholder")} required={form.expenseType !== "repayment"} />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset className="form-section">
+            <legend>{t("sortie.sectionAmount")}</legend>
+            <div className="form-row">
+              <div className="field">
+                <div className="field-label-row">
+                  <span className="field-label">{t("sortie.amount")} ({form.currencyMode === "usd" ? "USD" : "FC"}) *</span>
+                  <button type="button" onClick={toggleCurrencyMode} className="btn btn-ghost btn-sm">
+                    <Calculator aria-hidden="true" />{form.currencyMode === "usd" ? "USD → FC" : "FC → USD"}
                   </button>
                 </div>
-                
-                {form.currencyMode === 'usd' ? (
-                  <input aria-label="Montant *"
-                    type="number"
-                    step="0.01"
-                    name="amount"
-                    value={form.amount}
-                    onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                    placeholder="0.00"
-                    min="0.01"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    required
-                  />
+                {form.currencyMode === "usd" ? (
+                  <input aria-label={`${t("sortie.amount")} *`} className="input num" type="number" step="0.01" name="amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0.00" min="0.01" required />
                 ) : (
-                  <input aria-label="Montant *"
-                    type="number"
-                    name="amountInFC"
-                    value={form.amountInFC}
-                    onChange={(e) => setForm({ ...form, amountInFC: e.target.value })}
-                    placeholder="0"
-                    min="1"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    required
-                  />
+                  <input aria-label={`${t("sortie.amount")} *`} className="input num" type="number" name="amountInFC" value={form.amountInFC} onChange={(e) => setForm({ ...form, amountInFC: e.target.value })} placeholder="0" min="1" required />
                 )}
-                
-                {/* Conversion Display */}
-                {form.amount && form.currencyMode === 'usd' && exchangeRate && (
-                  <p className="text-xs text-green-600 mt-1">
-                    ≈ {formatFc(parseFloat(form.amount) * exchangeRate.rate)}
-                  </p>
-                )}
-                {form.amountInFC && form.currencyMode === 'fc' && exchangeRate && (
-                  <p className="text-xs text-green-600 mt-1">
-                    ≈ {formatCurrency(parseFloat(form.amountInFC) / exchangeRate.rate)}
-                  </p>
-                )}
+                {form.amount && form.currencyMode === "usd" && exchangeRate && <span className="field-hint num">≈ {formatFc(parseFloat(form.amount) * exchangeRate.rate)}</span>}
+                {form.amountInFC && form.currencyMode === "fc" && exchangeRate && <span className="field-hint num">≈ {formatCurrency(parseFloat(form.amountInFC) / exchangeRate.rate)}</span>}
               </div>
-
-              <div>
-                <label htmlFor="sortie-field-15524" className="block mb-2 font-medium text-gray-700">
-                  Méthode de paiement *
-                </label>
-                <select id="sortie-field-15524"
-                  name="paymentMethod"
-                  value={form.paymentMethod}
-                  onChange={handleChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  required
-                >
-                  <option value="cash">Cash</option>
-                  <option value="mpesa">M-Pesa ou Airtel Money</option>
-                  <option value="bank">Transfert Bancaire</option>
-                  <option value="card">Carte</option>
-                  <option value="other">Autre</option>
+              <label className="field">
+                <span className="field-label">{t("sortie.paymentMethod")} *</span>
+                <select className="input" name="paymentMethod" value={form.paymentMethod} onChange={handleChange} required>
+                  <option value="cash">{t("payment.cash")}</option>
+                  <option value="mpesa">{t("sortie.methods.mpesa")}</option>
+                  <option value="bank">{t("sortie.methods.bank")}</option>
+                  <option value="card">{t("payment.card")}</option>
+                  <option value="other">{t("payment.other")}</option>
                 </select>
-              </div>
+              </label>
             </div>
-
-            {/* Amount Summary */}
             {form.amount && exchangeRate && (
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div className="text-center">
-                    <div className="font-semibold text-gray-700">Montant en USD</div>
-                    <div className="text-lg font-bold text-green-600">
-                      {formatCurrency(parseFloat(form.amount))}
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-semibold text-gray-700">Équivalent en FC</div>
-                    <div className="text-lg font-bold text-blue-600">
-                      {formatFc(parseFloat(form.amount) * exchangeRate.rate)}
-                    </div>
-                  </div>
-                </div>
+              <div className="amount-summary">
+                <div><small>{t("sortie.amountUsd")}</small><strong>{formatCurrency(parseFloat(form.amount))}</strong></div>
+                <div><small>{t("sortie.amountFc")}</small><strong>{formatFc(parseFloat(form.amount) * exchangeRate.rate)}</strong></div>
               </div>
             )}
+            <label className="field">
+              <span className="field-label">{t("sortie.notes")} {t("common.optional")}</span>
+              <textarea className="input" name="notes" value={form.notes} onChange={handleChange} placeholder={t("sortie.notesPlaceholder")} rows={2} />
+            </label>
+          </fieldset>
 
-            {/* Additional Notes */}
-            <div>
-              <label htmlFor="sortie-field-17432" className="block mb-2 font-medium text-gray-700">
-                Notes supplémentaires (optionnel)
-              </label>
-              <textarea id="sortie-field-17432"
-                name="notes"
-                value={form.notes}
-                onChange={handleChange}
-                placeholder="Détails supplémentaires sur cette dépense..."
-                rows={3}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
-              />
-            </div>
-
-            {/* Recorded By */}
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <label className="block mb-1 text-sm font-medium text-gray-600">
-                Enregistré par
-              </label>
-              <p className="text-gray-900 font-medium">
-                {currentUser?.username || "Utilisateur"}
-              </p>
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={!isFormValid || submitting}
-              className={`w-full py-3 px-4 rounded-lg text-white font-semibold transition-all ${
-                isFormValid && !submitting
-                  ? "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                  : "bg-gray-400 cursor-not-allowed"
-              }`}
-            >
-              {submitting ? (
-                <div className="flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                  Enregistrement...
-                </div>
-              ) : (
-                "Enregistrer la dépense"
-              )}
-            </button>
-          </form>
-
-          {/* Info Box */}
-          <div className="bg-blue-50 border-t border-blue-200 p-4">
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-blue-800">
-                  Information importante
-                </h3>
-                <div className="mt-1 text-sm text-blue-700">
-                  <p>
-                    Cette dépense sera enregistrée comme une sortie de caisse et ne sera pas comptabilisée dans les ventes.
-                    Le reçu pourra être imprimé ultérieurement depuis l'historique des sorties.
-                  </p>
-                  {exchangeRate && (
-                    <p className="mt-2 font-medium">
-                      Taux utilisé : 1 USD = {new Intl.NumberFormat('fr-FR').format(exchangeRate.rate)} FC
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+          <div className="readonly-field"><span>{t("sortie.recordedBy")}</span><strong>{currentUser?.username || t("sortie.user")}</strong></div>
+          <p className="field-hint">{t("sortie.info")}{exchangeRate ? ` ${t("sortie.rateUsed", { rate: formatNumber(exchangeRate.rate, 2) })}` : ""}</p>
         </div>
-      </div>
+        <footer className="dialog-foot">
+          <button type="submit" disabled={!isFormValid || submitting} className="btn btn-primary btn-lg">
+            {submitting ? t("common.saving") : t("sortie.submit")}
+          </button>
+        </footer>
+      </form>
     </div>
   );
 }

@@ -96,7 +96,7 @@ test("Products loads categories in add/edit dialogs and preserves product writes
   fireEvent.click(await screen.findByRole("button", { name: "Nouvel article" }));
   const addDialog = screen.getByRole("dialog");
   await within(addDialog).findByRole("option", { name: "Food" });
-  fireEvent.change(within(addDialog).getByLabelText(/Nom de l'Article/), { target: { value: "Rice" } });
+  fireEvent.change(within(addDialog).getByLabelText(/Nom de l'article/i), { target: { value: "Rice" } });
   fireEvent.change(within(addDialog).getByRole("combobox", { name: /Filtrer/ }), { target: { value: "Food" } });
   fireEvent.submit(addDialog.querySelector("form")!);
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -104,7 +104,7 @@ test("Products loads categories in add/edit dialogs and preserves product writes
   const editDialog = screen.getByRole("dialog");
   await within(editDialog).findByRole("option", { name: "Food" });
   expect(within(editDialog).getByRole("combobox", { name: /Filtrer/ })).toHaveValue("Food");
-  fireEvent.change(within(editDialog).getByLabelText(/Nom de l'Article/), { target: { value: "Brown rice" } });
+  fireEvent.change(within(editDialog).getByLabelText(/Nom de l'article/i), { target: { value: "Brown rice" } });
   fireEvent.submit(editDialog.querySelector("form")!);
   await screen.findByRole("button", { name: "Modifier Brown rice" });
   const writes = nativeFetch.mock.calls.filter(([, init]) => ["POST", "PUT"].includes(init?.method));

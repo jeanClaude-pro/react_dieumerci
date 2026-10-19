@@ -1,3 +1,4 @@
+import { tr } from "../i18n/translate.ts";
 export type SaleCurrency = "USD" | "FC";
 
 export interface PriceSnapshot {
@@ -34,12 +35,12 @@ export function createPriceSnapshot(
   exchangeRate?: number
 ): PriceSnapshot {
   if (!Number.isFinite(enteredPrice) || enteredPrice <= 0) {
-    throw new Error("The entered price must be greater than zero");
+    throw new Error(tr("pricing.amountPositive", "Le montant saisi doit être supérieur à zéro"));
   }
 
   if (enteredCurrency === "FC") {
     if (!exchangeRate || !Number.isFinite(exchangeRate) || exchangeRate <= 0) {
-      throw new Error("A valid exchange rate is required for an FC price");
+      throw new Error(tr("pricing.rateRequired", "Un taux de change valide est requis pour un montant en FC"));
     }
 
     return {

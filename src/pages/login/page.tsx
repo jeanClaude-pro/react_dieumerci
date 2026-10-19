@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-"use client";
-
 import React from "react";
 import { toast } from "react-toastify";
 import { Eye, EyeOff, Loader2, LockKeyhole } from "lucide-react";
@@ -8,10 +5,14 @@ import { Eye, EyeOff, Loader2, LockKeyhole } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { login as loginApi } from "../../services/authService";
+import { useTranslation } from "react-i18next";
+import LanguageToggle from "../../components/ui/LanguageToggle";
+import { serverMessage } from "../../i18n/serverMessages";
 
 const SESSION_EXPIRED_TOAST_ID = "session-expired";
 
 const LoginPage = () => {
+  const { t } = useTranslation();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [showPassword, setShowPassword] = React.useState(false);
@@ -25,7 +26,7 @@ const LoginPage = () => {
 
   React.useEffect(() => {
     if (searchParams.get("reason") === "session-expired") {
-      toast.error("Votre session a expiré. Veuillez vous reconnecter.", {
+      toast.error(t("login.sessionExpired"), {
         toastId: SESSION_EXPIRED_TOAST_ID,
       });
     }
@@ -55,10 +56,10 @@ const LoginPage = () => {
     try {
       const { user, token } = await loginApi({ email, password });
       setAuth({ token, user });
-      toast.success("Connexion réussie !");
+      toast.success(t("login.success"));
       navigate(getReturnTo(), { replace: true });
-    } catch (err: any) {
-      const msg = err?.message || "Email ou mot de passe incorrect";
+    } catch (err: unknown) {
+      const msg = serverMessage(err instanceof Error ? err.message : "", t("login.invalid"));
       setError(msg);
       toast.error(msg);
     } finally {
@@ -74,36 +75,37 @@ const LoginPage = () => {
         </div>
         <div>
           <p className="login-brand-name">ETS. DIEU MERCI</p>
-          <p className="login-brand-tagline">Gestion commerciale · ventes, caisse, stock et contrôle des reçus.</p>
+          <p className="login-brand-tagline">{t("login.tagline")}</p>
         </div>
         <p className="login-brand-foot">Dan Collection · Lubumbashi</p>
       </aside>
 
       <div className="login-main">
+        <LanguageToggle className="login-lang" />
         <div className="login-card">
           <div className="login-mobile-brand">
             <img src="/logo.jpeg" alt="" />
-            <span>ETS. DIEU MERCI<small>Gestion commerciale</small></span>
+            <span>ETS. DIEU MERCI<small>{t("nav.tagline")}</small></span>
           </div>
 
           <div className="mb-6">
-            <div className="eyebrow mb-2"><LockKeyhole aria-hidden="true" />Accès sécurisé</div>
-            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Connexion</h1>
+            <div className="eyebrow mb-2"><LockKeyhole aria-hidden="true" />{t("login.secure")}</div>
+            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">{t("login.title")}</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Entrez vos identifiants pour accéder à votre espace.
+              {t("login.subtitle")}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="grid gap-4" noValidate={false}>
             <div className="field">
               <label htmlFor="email" className="field-label">
-                Adresse e-mail
+                {t("login.email")}
               </label>
               <input
                 id="email"
                 type="email"
                 inputMode="email"
-                placeholder="utilisateur@exemple.com"
+                placeholder={t("login.emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input"
@@ -116,13 +118,13 @@ const LoginPage = () => {
 
             <div className="field">
               <label htmlFor="password" className="field-label">
-                Mot de passe
+                {t("login.password")}
               </label>
               <div className="relative">
                 <input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Votre mot de passe"
+                  placeholder={t("reports.gate.placeholder")}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="input pr-12"
@@ -133,7 +135,7 @@ const LoginPage = () => {
                 />
                 <button
                   type="button"
-                  aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                  aria-label={showPassword ? t("login.hidePassword") : t("login.showPassword")}
                   aria-pressed={showPassword}
                   onClick={() => setShowPassword((s) => !s)}
                   className="absolute right-1 top-1/2 -translate-y-1/2 btn btn-ghost btn-icon text-gray-500"
@@ -157,10 +159,10 @@ const LoginPage = () => {
               {loading ? (
                 <>
                   <Loader2 className="animate-spin" aria-hidden="true" />
-                  Connexion en cours…
+                  {t("login.signingIn")}
                 </>
               ) : (
-                "Se connecter"
+                t("login.submit")
               )}
             </button>
           </form>

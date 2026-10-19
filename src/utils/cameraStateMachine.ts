@@ -1,3 +1,4 @@
+import { tr } from "../i18n/translate.ts";
 // Pure camera lifecycle reducer: idle -> starting -> active -> stopping -> idle,
 // with an error state reachable from starting/active. Framework-free so it is
 // unit-testable without a browser/DOM (see scannerInput.ts for the same
@@ -53,7 +54,7 @@ export function cameraReducer(current: CameraMachineState, event: CameraEvent): 
       // The underlying MediaStreamTrack died on its own (device unplugged,
       // permission revoked mid-stream, OS reclaimed the camera, etc).
       if (current.state !== "active") return current;
-      return { state: "error", error: "La caméra a été interrompue." };
+      return { state: "error", error: tr("scanner.cameraInterrupted", "La caméra a été interrompue.") };
 
     case "RESET":
       return INITIAL_CAMERA_STATE;

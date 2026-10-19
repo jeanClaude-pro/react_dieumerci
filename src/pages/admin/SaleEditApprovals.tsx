@@ -3,6 +3,9 @@ import { Check, Clock3, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useAuth } from "../../hooks/useAuth";
 import { serverUrl } from "../../utils/constants";
+import { useTranslation } from "react-i18next";
+import { formatDateTime, formatUSD } from "../../i18n/format";
+import { serverMessage } from "../../i18n/serverMessages";
 
 type Item = { productId: string; name: string; quantity: number; price: number; total: number };
 type Snapshot = {
@@ -23,10 +26,8 @@ type Approval = {
 };
 type QueueSale = { _id: string; saleId: string; saleNumber?: string; saleEditApproval: Approval };
 
-const money = (value: number) => `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(value || 0)} $`;
-const dateTime = (value: string) => new Intl.DateTimeFormat("fr-FR", {
-  dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Lubumbashi",
-}).format(new Date(value));
+const money = (value: number) => formatUSD(value || 0);
+const dateTime = (value: string) => formatDateTime(value);
 
 function ValueRow({ label, before, after }: { label: string; before: React.ReactNode; after: React.ReactNode }) {
   const changed = JSON.stringify(before) !== JSON.stringify(after);
@@ -36,6 +37,8 @@ function ValueRow({ label, before, after }: { label: string; before: React.React
 }
 
 export default function SaleEditApprovals() {
+  const { t } = useTranslation();
+  const payment = (value?: string) => (value ? t(`payment.${value}`, { defaultValue: value }) : "");
   const { token } = useAuth();
   const [queue, setQueue] = useState<QueueSale[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,14 +52,14 @@ export default function SaleEditApprovals() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || "Chargement impossible");
+      if (!response.ok) throw new Error(serverMessage(body.error, t("approvals.loadFailed")));
       setQueue(body.data || []);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Chargement impossible");
+      toast.error(error instanceof Error ? error.message : t("approvals.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -69,12 +72,12 @@ export default function SaleEditApprovals() {
         body: JSON.stringify({ decision, note: notes[sale._id] || "" }),
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || "Décision impossible");
-      toast.success(body.message);
+      if (!response.ok) throw new Error(serverMessage(body.error, t("approvals.decisionFailed")));
+      toast.success(serverMessage(body.message, decision === "approved" ? t("approvals.approved") : t("approvals.rejected")));
       setQueue((current) => current.filter((entry) => entry._id !== sale._id));
       window.dispatchEvent(new Event("salesUpdated"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Décision impossible");
+      toast.error(error instanceof Error ? error.message : t("approvals.decisionFailed"));
     } finally {
       setBusyId(null);
     }
@@ -82,31 +85,31 @@ export default function SaleEditApprovals() {
 
   return <div className="approval-page">
     <header className="approval-page-header">
-      <div><span className="approval-eyebrow"><ShieldCheck /> Contrôle administrateur</span><h1>Approbation des modifications</h1><p>Comparez les valeurs originales et proposées avant d'autoriser toute modification opérationnelle.</p></div>
-      <button className="approval-refresh" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} /> Actualiser</button>
+      <div><span className="approval-eyebrow"><ShieldCheck aria-hidden="true" /> {t("approvals.eyebrow")}</span><h1>{t("approvals.title")}</h1><p>{t("approvals.subtitle")}</p></div>
+      <button type="button" className="approval-refresh" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? "animate-spin" : ""} aria-hidden="true" /> {t("common.refresh")}</button>
     </header>
 
-    {loading ? <div className="approval-empty"><RefreshCw className="animate-spin" /><strong>Chargement des demandes…</strong></div>
-      : queue.length === 0 ? <div className="approval-empty"><ShieldCheck /><strong>Aucune modification en attente</strong><span>Les nouvelles demandes des managers apparaîtront ici.</span></div>
+    {loading ? <div className="approval-empty"><RefreshCw className="animate-spin" aria-hidden="true" /><strong>{t("approvals.loading")}</strong></div>
+      : queue.length === 0 ? <div className="approval-empty"><ShieldCheck aria-hidden="true" /><strong>{t("approvals.emptyTitle")}</strong><span>{t("approvals.emptyBody")}</span></div>
       : <div className="approval-list">{queue.map((sale) => {
         const request = sale.saleEditApproval;
         return <article className="approval-card" key={sale._id}>
-          <div className="approval-card-header"><div><span className="approval-pending"><Clock3 /> En attente d'approbation</span><h2>Modification de la vente #{sale.saleNumber || sale.saleId}</h2><p>Demandée par <strong>{request.requestedByName}</strong> · {dateTime(request.requestedAt)}</p></div></div>
-          <div className="approval-reason"><strong>Motif du manager</strong><p>{request.reason}</p></div>
-          <div className="approval-compare-head"><span>Donnée</span><strong>Avant</strong><strong>Après</strong></div>
-          <ValueRow label="Client" before={request.original.customer?.name} after={request.proposed.customer?.name} />
-          <ValueRow label="Téléphone" before={request.original.customer?.phone} after={request.proposed.customer?.phone} />
-          <ValueRow label="Paiement" before={request.original.paymentMethod} after={request.proposed.paymentMethod} />
-          <ValueRow label="Total" before={money(request.original.total)} after={money(request.proposed.total)} />
+          <div className="approval-card-header"><div><span className="approval-pending"><Clock3 aria-hidden="true" /> {t("approvals.pending")}</span><h2>{t("approvals.saleEdit", { id: sale.saleNumber || sale.saleId })}</h2><p>{t("approvals.requestedBy")} <strong>{request.requestedByName}</strong> · {dateTime(request.requestedAt)}</p></div></div>
+          <div className="approval-reason"><strong>{t("approvals.reason")}</strong><p>{request.reason}</p></div>
+          <div className="approval-compare-head"><span>{t("approvals.field")}</span><strong>{t("entryHistory.before")}</strong><strong>{t("entryHistory.after")}</strong></div>
+          <ValueRow label={t("customers.col.customer")} before={request.original.customer?.name} after={request.proposed.customer?.name} />
+          <ValueRow label={t("entryHistory.phone")} before={request.original.customer?.phone} after={request.proposed.customer?.phone} />
+          <ValueRow label={t("entryHistory.col.payment")} before={payment(request.original.paymentMethod)} after={payment(request.proposed.paymentMethod)} />
+          <ValueRow label={t("common.total")} before={money(request.original.total)} after={money(request.proposed.total)} />
           <div className="approval-items">
-            <h3>Articles proposés</h3>
+            <h3>{t("approvals.proposedItems")}</h3>
             {request.proposed.items.map((item, index) => {
               const before = request.original.items.find((old) => String(old.productId) === String(item.productId));
               return <div className="approval-item" key={`${item.productId}-${index}`}><span>{item.name}</span><span className={before?.quantity !== item.quantity ? "changed" : ""}>{before?.quantity ?? 0} → {item.quantity}</span><strong>{money(item.total)}</strong></div>;
             })}
           </div>
-          <label className="approval-note">Note de décision (facultative)<textarea value={notes[sale._id] || ""} onChange={(event) => setNotes((current) => ({ ...current, [sale._id]: event.target.value }))} maxLength={500} placeholder="Ajoutez un contexte pour l'audit…" /></label>
-          <footer className="approval-actions"><button className="reject" disabled={busyId === sale._id} onClick={() => void decide(sale, "rejected")}><X /> Rejeter</button><button className="approve" disabled={busyId === sale._id} onClick={() => void decide(sale, "approved")}><Check /> Approuver et appliquer</button></footer>
+          <label className="approval-note">{t("approvals.note")}<textarea value={notes[sale._id] || ""} onChange={(event) => setNotes((current) => ({ ...current, [sale._id]: event.target.value }))} maxLength={500} placeholder={t("approvals.notePlaceholder")} /></label>
+          <footer className="approval-actions"><button type="button" className="reject" disabled={busyId === sale._id} onClick={() => void decide(sale, "rejected")}><X aria-hidden="true" /> {t("sortieHistory.reject")}</button><button type="button" className="approve" disabled={busyId === sale._id} onClick={() => void decide(sale, "approved")}><Check aria-hidden="true" /> {t("approvals.approve")}</button></footer>
         </article>;
       })}</div>}
   </div>;

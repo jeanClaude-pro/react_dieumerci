@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { toast } from "react-toastify";
+import i18n from "../i18n";
 
 export const RequireAuth: React.FC<React.PropsWithChildren> = ({
   children,
@@ -12,7 +13,7 @@ export const RequireAuth: React.FC<React.PropsWithChildren> = ({
   // If not logged in, show toast once
   useEffect(() => {
     if (!loading && !token) {
-      toast.error("You must be logged in to access this page.");
+      toast.error(i18n.t("states.mustLogin"));
     }
   }, [loading, token]);
 

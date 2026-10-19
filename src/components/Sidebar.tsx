@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { getAccessibleSections, isNavigationItemActive, roleLabels } from "../config/navigation";
+import { useTranslation } from "react-i18next";
+import { getAccessibleSections, isNavigationItemActive } from "../config/navigation";
+import { navLabel, navShort, roleLabel, sectionTitle } from "../i18n/nav";
+import LanguageToggle from "./ui/LanguageToggle";
 import { formatDayGMT2, formatTimeGMT2 } from "../utils/dateUtils";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 
@@ -23,6 +26,7 @@ function readCollapsedPreference() {
  */
 export default function Sidebar() {
   const { token, user, clearAuth } = useAuth();
+  const { t } = useTranslation();
   const location = useLocation();
   const isDesktop = useMediaQuery("(min-width: 1280px)");
   const [collapsed, setCollapsed] = useState(readCollapsedPreference);
@@ -59,32 +63,32 @@ export default function Sidebar() {
   const initials = user.username.slice(0, 2).toUpperCase();
 
   return <div className={`app-sidebar-slot ${isDesktop && !collapsed ? "" : "is-rail"}`}>
-    {isDrawer && <button type="button" className="sidebar-scrim" aria-label="Fermer le menu" onClick={() => setDrawerOpen(false)} />}
-    <aside className={`app-sidebar ${expanded ? "is-expanded" : "is-rail"} ${isDrawer ? "is-drawer" : ""}`} aria-label="Menu de l'application">
+    {isDrawer && <button type="button" className="sidebar-scrim" aria-label={t("nav.closeMenu")} onClick={() => setDrawerOpen(false)} />}
+    <aside className={`app-sidebar ${expanded ? "is-expanded" : "is-rail"} ${isDrawer ? "is-drawer" : ""}`} aria-label={t("nav.appMenu")}>
       <div className="sidebar-head">
-        <Link to="/" className="sidebar-brand" aria-label="ETS. DIEU MERCI — Accueil" title="Accueil">
-          <img src="/logo.jpeg" alt="" /><span>ETS. DIEU MERCI<small>Gestion commerciale</small></span>
+        <Link to="/" className="sidebar-brand" aria-label={t("nav.brandHome")} title={t("nav.items.home.label")}>
+          <img src="/logo.jpeg" alt="" /><span>ETS. DIEU MERCI<small>{t("nav.tagline")}</small></span>
         </Link>
         <button type="button" className="sidebar-toggle" onClick={toggle} aria-expanded={expanded}
-          aria-label={expanded ? "Réduire le menu" : "Développer le menu"} title={expanded ? "Réduire le menu" : "Développer le menu"}>
+          aria-label={expanded ? t("nav.collapse") : t("nav.expand")} title={expanded ? t("nav.collapse") : t("nav.expand")}>
           {expanded ? <PanelLeftClose aria-hidden="true" /> : <PanelLeftOpen aria-hidden="true" />}
         </button>
       </div>
 
-      <nav aria-label="Navigation principale" className="sidebar-nav">
-        {sections.map(section => <section key={section.title} aria-labelledby={`nav-${section.title}`}>
-          <h2 id={`nav-${section.title}`} className={section.hideTitle ? "sr-only" : undefined}>{section.title}</h2>
+      <nav aria-label={t("nav.mainNavigation")} className="sidebar-nav">
+        {sections.map(section => <section key={section.key} aria-labelledby={`nav-${section.key}`}>
+          <h2 id={`nav-${section.key}`} className={section.hideTitle ? "sr-only" : undefined}>{sectionTitle(t, section)}</h2>
           <ul>
             {section.items.map(item => {
               const Icon = item.icon;
               const active = isNavigationItemActive(location.pathname, item);
               return <li key={item.id}>
-                <Link to={item.path} title={expanded ? undefined : item.label} aria-current={active ? "page" : undefined}
+                <Link to={item.path} title={expanded ? undefined : navLabel(t, item)} aria-current={active ? "page" : undefined}
                   className={`sidebar-link ${active ? "is-active" : ""}`}>
                   <Icon aria-hidden="true" />
-                  <span className="label-full">{item.label}</span>
-                  <span className="label-short" aria-hidden="true">{item.shortLabel || item.label}</span>
-                  {!expanded && <span className="sr-only">{item.label}</span>}
+                  <span className="label-full">{navLabel(t, item)}</span>
+                  <span className="label-short" aria-hidden="true">{navShort(t, item)}</span>
+                  {!expanded && <span className="sr-only">{navLabel(t, item)}</span>}
                 </Link>
               </li>;
             })}
@@ -93,11 +97,12 @@ export default function Sidebar() {
       </nav>
 
       <footer className="sidebar-footer">
+        <LanguageToggle compact={!expanded} className="sidebar-lang" />
         <div className="sidebar-clock"><span>{formatDayGMT2(now)}</span><strong>{formatTimeGMT2(now)}</strong></div>
         <div className="sidebar-account">
-          <span className="sidebar-avatar" aria-hidden="true" title={`${user.username} · ${roleLabels[user.role]}`}>{initials}</span>
-          <div className="sidebar-account-text"><strong>{user.username}</strong><small>{roleLabels[user.role]}</small></div>
-          <button type="button" className="sidebar-logout" aria-label="Se déconnecter" title="Se déconnecter" onClick={logout}>
+          <span className="sidebar-avatar" aria-hidden="true" title={`${user.username} · ${roleLabel(t, user.role)}`}>{initials}</span>
+          <div className="sidebar-account-text"><strong>{user.username}</strong><small>{roleLabel(t, user.role)}</small></div>
+          <button type="button" className="sidebar-logout" aria-label={t("nav.logout")} title={t("nav.logout")} onClick={logout}>
             <LogOut aria-hidden="true" />
           </button>
         </div>
