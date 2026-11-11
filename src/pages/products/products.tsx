@@ -16,6 +16,7 @@ import StockCardDialog from "../../components/inventory/StockCardDialog";
 import StockMovementDialog from "../../components/inventory/StockMovementDialog";
 import { isProductSellable, stockHealth } from "../../utils/productAvailability";
 import { formatNumber } from "../../i18n/format";
+import { getVerifiedUserRaw } from "../../lib/sessionManager";
 
 interface StoredUser {
   role?: string;
@@ -37,7 +38,7 @@ const EMPTY_FORM: Partial<Product> = {
 
 function readUser(): StoredUser | null {
   try {
-    const raw = localStorage.getItem("user");
+    const raw = getVerifiedUserRaw();
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;

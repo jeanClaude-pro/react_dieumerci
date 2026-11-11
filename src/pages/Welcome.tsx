@@ -35,9 +35,9 @@ function Launcher({ item, primary = false, tone = "blue" }: { item: NavigationIt
 }
 
 export default function Welcome() {
-  const { user, clearAuth } = useAuth();
+  const { user, logout: serverLogout } = useAuth();
   const { t } = useTranslation();
-  const logout = () => { clearAuth(); window.location.href = "/login"; };
+  const logout = () => { void serverLogout(); };
   const [rate, setRate] = useState<number | null>(null);
   const today = new Date();
 

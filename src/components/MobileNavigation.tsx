@@ -12,7 +12,7 @@ import Dialog from "./ui/Dialog";
 export default function MobileNavigation() {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const location = useLocation();
-  const { token, user, clearAuth } = useAuth();
+  const { token, user, logout: serverLogout } = useAuth();
   const { t } = useTranslation();
   const accessibleSections = useMemo(() => getAccessibleSections(user), [user]);
   const primaryItems = useMemo(() => getMobilePrimaryItems(user), [user]);
@@ -23,7 +23,7 @@ export default function MobileNavigation() {
   useEffect(() => setIsMoreOpen(false), [location.pathname]);
 
   if (!token || !user) return null;
-  const logout = () => { clearAuth(); window.location.href = "/login"; };
+  const logout = () => { void serverLogout(); };
 
   return <>
     {isMoreOpen && <Dialog sheet dismissOnBackdrop label={t("nav.allModules")} onClose={() => setIsMoreOpen(false)}>

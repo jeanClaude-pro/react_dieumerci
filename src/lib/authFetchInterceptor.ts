@@ -14,7 +14,8 @@
 import { serverUrl } from "../utils/constants";
 import { invalidateSession } from "./sessionManager";
 
-const EXCLUDED_PATHS = ["/auth/login", "/auth/register"];
+// /auth/session and /auth/logout handle their own 401 in AuthProvider.
+const EXCLUDED_PATHS = ["/auth/login", "/auth/register", "/auth/session", "/auth/logout"];
 
 function resolveUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;

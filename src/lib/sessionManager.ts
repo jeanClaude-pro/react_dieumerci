@@ -6,7 +6,25 @@
  */
 
 export const AUTH_TOKEN_KEY = "token";
+/** Legacy key: the user is no longer stored in the browser (only removed). */
 export const AUTH_USER_KEY = "user";
+
+/**
+ * The signed-in user exactly as the SERVER last confirmed it (GET
+ * /auth/session or the login answer). Kept in memory only: nothing the
+ * browser stores can grant a role or a page. Pages that need the user read it
+ * through useAuth() or getVerifiedUserRaw().
+ */
+let verifiedUser: unknown = null;
+
+export function setVerifiedUser(user: unknown): void {
+  verifiedUser = user ?? null;
+}
+
+/** JSON of the server-verified user, or null (drop-in for the old storage read). */
+export function getVerifiedUserRaw(): string | null {
+  return verifiedUser ? JSON.stringify(verifiedUser) : null;
+}
 
 export type SessionInvalidationReason = "expired" | "unauthorized";
 
@@ -59,6 +77,7 @@ export function isTokenExpired(token: string | null | undefined): boolean {
 }
 
 export function clearAuthStorage(): void {
+  verifiedUser = null;
   localStorage.removeItem(AUTH_TOKEN_KEY);
   localStorage.removeItem(AUTH_USER_KEY);
 }

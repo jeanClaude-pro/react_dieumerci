@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import PageHeader from "../../components/ui/PageHeader";
 import { formatNumber, formatUSD } from "../../i18n/format";
 import { serverMessage } from "../../i18n/serverMessages";
+import { getVerifiedUserRaw } from "../../lib/sessionManager";
 import {
   CheckCircle,
   Users,
@@ -265,7 +266,7 @@ export default function Customers() {
   // Admin-only: block non-admin users after all hooks and functions are defined
   const isAdmin = (() => {
     try {
-      const raw = localStorage.getItem("user");
+      const raw = getVerifiedUserRaw();
       return raw ? JSON.parse(raw).role === "admin" : false;
     } catch { return false; }
   })();

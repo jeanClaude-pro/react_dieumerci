@@ -208,6 +208,8 @@
       "auth_login": "Connexion",
       "auth_register": "Tentative d'inscription publique",
       "auth_verify_password": "Confirmation du mot de passe",
+      "auth_logout": "Déconnexion",
+      "auth_logout_all": "Déconnexion de tous les appareils",
       "category_create": "Création d'une catégorie",
       "creditor_archive": "Archivage d'un créancier",
       "creditor_create": "Création d'un créancier",
@@ -250,6 +252,7 @@
       "stock_movement": "Mouvement de stock manuel",
       "user_actions_change": "Changement des actions autorisées d'un compte",
       "user_create": "Création d'un compte utilisateur",
+      "user_revoke_sessions": "Sessions fermées par un administrateur",
       "user_delete": "Suppression d'un compte utilisateur",
       "user_permissions_change": "Changement des pages autorisées d'un compte",
       "user_profile_change": "Modification d'un profil utilisateur",
@@ -950,6 +953,8 @@
     "label": "Langue de l'interface"
   },
   "login": {
+    "sessionCheckFailed": "Impossible de vérifier votre session auprès du serveur. Vérifiez la connexion.",
+    "sessionCheckRetry": "Réessayer",
     "email": "Adresse e-mail",
     "emailPlaceholder": "utilisateur@exemple.com",
     "hidePassword": "Masquer le mot de passe",

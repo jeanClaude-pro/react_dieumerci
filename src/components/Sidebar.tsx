@@ -25,7 +25,7 @@ function readCollapsedPreference() {
  * an overlay drawer. Phones use MobileNavigation instead (CSS hides this).
  */
 export default function Sidebar() {
-  const { token, user, clearAuth } = useAuth();
+  const { token, user, logout: serverLogout } = useAuth();
   const { t } = useTranslation();
   const location = useLocation();
   const isDesktop = useMediaQuery("(min-width: 1280px)");
@@ -59,7 +59,7 @@ export default function Sidebar() {
       return !value;
     });
   };
-  const logout = () => { clearAuth(); window.location.href = "/login"; };
+  const logout = () => { void serverLogout(); };
   const initials = user.username.slice(0, 2).toUpperCase();
 
   return <div className={`app-sidebar-slot ${isDesktop && !collapsed ? "" : "is-rail"}`}>

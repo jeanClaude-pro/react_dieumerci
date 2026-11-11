@@ -38,6 +38,9 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { AppliedFilters, ExpenseHistoryEntry, ExpenseSummaryStats } from "../types/records";
+import { FESTIVE_GREETING_CSS, festiveGreetingHtml } from "../utils/festiveGreeting";
+import { getVerifiedUserRaw } from "../lib/sessionManager";
+import { printAndClose } from "../utils/printWindow";
 
 interface ExpenseItem {
   _id: string;
@@ -327,13 +330,13 @@ export default function SortieHistory() {
   const fetchCurrentUser = async () => {
     try {
       // Try to get user from localStorage first
-      const storedUser = localStorage.getItem("user");
+      const storedUser = getVerifiedUserRaw();
       if (storedUser) {
         const userData = JSON.parse(storedUser);
         setCurrentUser(userData);
       } else {
         // Fallback to API call
-        const res = await fetch(`${serverUrl}/auth/me`, {
+        const res = await fetch(`${serverUrl}/users/me`, {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
@@ -343,7 +346,6 @@ export default function SortieHistory() {
         if (res.ok) {
           const userData = await res.json();
           setCurrentUser(userData);
-          localStorage.setItem("user", JSON.stringify(userData));
         }
       }
     } catch (error) {
@@ -956,6 +958,7 @@ export default function SortieHistory() {
           content: none !important;
         }
       }
+    ${FESTIVE_GREETING_CSS}
     </style>
   </head>
   <body>
@@ -1011,6 +1014,7 @@ export default function SortieHistory() {
         ${L("on")}: <strong>${validatedDate}</strong>
       </div>
       
+      ${festiveGreetingHtml()}
       <div class="footer">
         <div class="thank-you"><strong>${L("expenseStub")}</strong></div>
         <div class="warning"><strong>${L("keepStub")}</strong></div>
@@ -1023,22 +1027,11 @@ export default function SortieHistory() {
         ✄ ────────────────────────── ✄
       </div>
     </div>
-    <script>
-      window.onload = function() {
-        try {
-          window.print();
-        } catch(e) {
-          console.error('Print error:', e);
-        }
-        setTimeout(() => {
-          window.close();
-        }, 1000);
-      };
-    </script>
   </body>
 </html>
 `);
       printWindow.document.close();
+      printAndClose(printWindow);
     }
   };
 
@@ -1089,7 +1082,7 @@ export default function SortieHistory() {
     // Double-guard: API permission AND localStorage role must both confirm admin
     const localIsAdmin = (() => {
       try {
-        const raw = localStorage.getItem("user");
+        const raw = getVerifiedUserRaw();
         return raw ? JSON.parse(raw).role === "admin" : false;
       } catch { return false; }
     })();

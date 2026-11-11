@@ -12,6 +12,8 @@ import { entryCategoryLabel, entrySourceLabel, uiPaymentLabel } from "../utils/e
 import { serverUrl } from "../utils/constants";
 import { createAmountSnapshot } from "../utils/salePricing";
 import { apiRequest } from "../lib/api";
+import { FESTIVE_GREETING_CSS, festiveGreetingHtml } from "../utils/festiveGreeting";
+import { printAndClose } from "../utils/printWindow";
 
 interface Entry {
   _id: string;
@@ -458,6 +460,7 @@ export default function Entry() {
           content: none !important;
         }
       }
+    ${FESTIVE_GREETING_CSS}
     </style>
   </head>
   <body>
@@ -532,6 +535,7 @@ export default function Entry() {
         ${L("recordedBy")}: <strong>${escapeHtml(receiptData.agent.toUpperCase())}</strong>
       </div>
       
+      ${festiveGreetingHtml()}
       <div class="footer">
         <div class="thank-you"><strong>${L("entrySaved")}</strong></div>
         <div class="warning"><strong>${L("keepAsProof")}</strong></div>
@@ -544,22 +548,11 @@ export default function Entry() {
         ✄ ────────────────────────── ✄
       </div>
     </div>
-    <script>
-      window.onload = function() {
-        try {
-          window.print();
-        } catch(e) {
-          console.error('Print error:', e);
-        }
-        setTimeout(() => {
-          window.close();
-        }, 1000);
-      };
-    </script>
   </body>
 </html>
 `);
       printWindow.document.close();
+      printAndClose(printWindow);
     }
   };
 
@@ -871,22 +864,11 @@ export default function Entry() {
         ✄ ────────────────────────── ✄
       </div>
     </div>
-    <script>
-      window.onload = function() {
-        try {
-          window.print();
-        } catch(e) {
-          console.error('Print error:', e);
-        }
-        setTimeout(() => {
-          window.close();
-        }, 1000);
-      };
-    </script>
   </body>
 </html>
 `);
       printWindow.document.close();
+      printAndClose(printWindow);
     }
   };
 

@@ -16,6 +16,7 @@ import { formatNumber, formatPercent, formatTimeOfDay, formatUSD } from "../../i
 import { generateCompanyReport, type ReportSections } from "./reportGenerator";
 import ReportBuilderDialog from "./ReportBuilderDialog";
 import { CashBridge, KpiCard, ProductPerformance, RankedList, type ProductRow } from "./ReportParts";
+import { getVerifiedUserRaw } from "../../lib/sessionManager";
 
 /** data of GET /api/analytics/summary (all amounts in USD). */
 interface AnalyticsData {
@@ -63,7 +64,7 @@ const authHeaders = () => {
 
 function readUser(): { role?: string; username?: string; email?: string } | null {
   try {
-    const raw = localStorage.getItem("user");
+    const raw = getVerifiedUserRaw();
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;

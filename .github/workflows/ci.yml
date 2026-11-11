@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Frontend quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: true
+      # Public, non-secret placeholder used only to exercise production-mode
+      # validation and CSP generation. It is not a deployed backend.
+      VITE_API_URL: https://api.test.invalid/api
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: TypeScript checks
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Component tests
+        run: npm run test:component
+
+      - name: Production build
+        run: npm run build
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high

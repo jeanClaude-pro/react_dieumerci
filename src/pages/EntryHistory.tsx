@@ -33,6 +33,9 @@ import { serverMessage } from "../i18n/serverMessages";
 import { entryCategoryLabel, entrySourceLabel, uiPaymentLabel } from "../utils/entryLabels";
 import { pdfSafe } from "../utils/pdfText";
 import type { CountAmount, FieldChange, FieldChanges } from "../types/records";
+import { FESTIVE_GREETING_CSS, festiveGreetingHtml } from "../utils/festiveGreeting";
+import { getVerifiedUserRaw } from "../lib/sessionManager";
+import { printAndClose } from "../utils/printWindow";
 
 interface EditHistoryEntry {
   editedBy: string;
@@ -226,14 +229,14 @@ export default function EntryHistory() {
   const fetchCurrentUser = async () => {
     try {
       // Try to get user from localStorage first
-      const storedUser = localStorage.getItem("user");
+      const storedUser = getVerifiedUserRaw();
       if (storedUser) {
         const userData = JSON.parse(storedUser);
         setCurrentUser(userData);
         setIsAdmin(userData.role === "admin" || userData.role === "administrator");
       } else {
         // Fallback to API call
-        const res = await fetch(`${serverUrl}/auth/me`, {
+        const res = await fetch(`${serverUrl}/users/me`, {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
@@ -244,7 +247,6 @@ export default function EntryHistory() {
           const userData = await res.json();
           setCurrentUser(userData);
           setIsAdmin(userData.role === "admin" || userData.role === "administrator");
-          localStorage.setItem("user", JSON.stringify(userData));
         }
       }
     } catch (error) {
@@ -463,6 +465,7 @@ export default function EntryHistory() {
         .cut-line { page-break-after: always !important; margin-bottom: 0 !important; }
         body::after, body::before { display: none !important; content: none !important; }
       }
+    ${FESTIVE_GREETING_CSS}
     </style>
   </head>
   <body>
@@ -523,6 +526,7 @@ export default function EntryHistory() {
         ${L("recordedBy")}: <strong>${esc((entry.createdBy?.username || t("entryHistory.notSpecified")).toUpperCase())}</strong>
       </div>
       
+      ${festiveGreetingHtml()}
       <div class="footer">
         <div class="thank-you"><strong>${esc(shopSettings.receiptFooter === null ? t("receipt.defaultFooter") : shopSettings.receiptFooter || t("receipt.entrySaved"))}</strong></div>
         <div class="warning"><strong>${L("keepAsProof")}</strong></div>
@@ -531,16 +535,11 @@ export default function EntryHistory() {
       <div class="cut-line">✄ ────────────────────────── ✄</div>
       </div>
     </div>
-    <script>
-      window.onload = function() {
-        try { window.print(); } catch(e) { console.error('Print error:', e); }
-        setTimeout(() => { window.close(); }, 1000);
-      };
-    </script>
   </body>
 </html>
 `);
       printWindow.document.close();
+      printAndClose(printWindow);
     }
   };
 

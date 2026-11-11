@@ -208,6 +208,8 @@
       "auth_login": "Sign-in",
       "auth_register": "Public sign-up attempt",
       "auth_verify_password": "Password confirmation",
+      "auth_logout": "Sign-out",
+      "auth_logout_all": "Sign-out from all devices",
       "category_create": "Category created",
       "creditor_archive": "Creditor archived",
       "creditor_create": "Creditor created",
@@ -250,6 +252,7 @@
       "stock_movement": "Manual stock movement",
       "user_actions_change": "Account allowed actions changed",
       "user_create": "User account created",
+      "user_revoke_sessions": "Sessions ended by an administrator",
       "user_delete": "User account deleted",
       "user_permissions_change": "Account page permissions changed",
       "user_profile_change": "User profile changed",
@@ -950,6 +953,8 @@
     "label": "Interface language"
   },
   "login": {
+    "sessionCheckFailed": "Your session could not be verified with the server. Check the connection.",
+    "sessionCheckRetry": "Retry",
     "email": "E-mail address",
     "emailPlaceholder": "user@example.com",
     "hidePassword": "Hide password",

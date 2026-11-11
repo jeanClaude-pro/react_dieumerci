@@ -2,6 +2,37 @@ import { defineConfig, loadEnv } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import type { Plugin } from 'vite'
+
+// Content-Security-Policy for the built app: only this site's own scripts may
+// run, and the app may only talk to itself and the configured API. An
+// injected script (XSS) can therefore neither run inline nor send data away.
+function contentSecurityPolicy(apiOrigin: string): Plugin {
+  const policy = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    `connect-src 'self' ${apiOrigin}`.trim(),
+    "media-src 'self' blob:",
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join('; ')
+  return {
+    name: 'inject-content-security-policy',
+    apply: 'build',
+    transformIndexHtml(html) {
+      return html.replace(
+        '<head>',
+        `<head>\n    <meta http-equiv="Content-Security-Policy" content="${policy}" />`,
+      )
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -18,11 +49,20 @@ export default defineConfig(({ mode }) => {
   if (mode === 'production' && !apiUrl?.startsWith('https://')) {
     throw new Error('Production VITE_API_URL must use HTTPS.')
   }
+  const isProduction = mode === 'production'
+  const apiOrigin = (() => {
+    try { return apiUrl ? new URL(apiUrl).origin : '' } catch { return '' }
+  })()
 
   return {
+    // Production builds contain no console output and no debugger
+    // statements, and ship no source maps (the original code stays private).
+    esbuild: isProduction ? { drop: ['console', 'debugger'], legalComments: 'none' } : undefined,
+    build: { sourcemap: false },
     plugins: [
     react(),
     tailwindcss(),
+    ...(isProduction ? [contentSecurityPolicy(apiOrigin)] : []),
     VitePWA({
       registerType: 'prompt',
       injectRegister: false,

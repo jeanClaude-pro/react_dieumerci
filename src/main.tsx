@@ -1,3 +1,4 @@
+import './lib/silenceConsole'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { toast } from 'react-toastify'

@@ -160,7 +160,7 @@ test("NewSale asks for sellable products and never offers a product at 0 pieces"
     return Response.json({});
   });
   const view = render(
-    <AuthContext.Provider value={{ user: admin, token: "dashboard-test-token", loading: false, setAuth: vi.fn(), clearAuth: vi.fn() }}>
+    <AuthContext.Provider value={{ user: admin, token: "dashboard-test-token", loading: false, setAuth: vi.fn(), clearAuth: vi.fn(), logout: vi.fn() }}>
       <NewSale />
     </AuthContext.Provider>
   );

@@ -3,12 +3,13 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import Entry from "../src/pages/Entry";
 import Analytics from "../src/pages/analytics/Analytics";
 import { AuthContext } from "../src/context/auth-context";
+import { setVerifiedUser } from "../src/lib/sessionManager";
 
 const user = { id: "u1", username: "Cashier", email: "test@example.com", role: "admin" as const };
 const fetchMock = vi.fn();
 beforeEach(() => {
   localStorage.setItem("token", "entry-test-token");
-  localStorage.setItem("user", JSON.stringify(user));
+  setVerifiedUser(user);
   vi.stubGlobal("fetch", fetchMock);
   vi.spyOn(window, "open").mockReturnValue(null);
   fetchMock.mockReset();
@@ -16,7 +17,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 async function fillEntry(fc = false) {
-  const view = render(<AuthContext.Provider value={{ user, token: "entry-test-token", loading: false, setAuth: vi.fn(), clearAuth: vi.fn() }}><Entry /></AuthContext.Provider>);
+  const view = render(<AuthContext.Provider value={{ user, token: "entry-test-token", loading: false, setAuth: vi.fn(), clearAuth: vi.fn(), logout: vi.fn() }}><Entry /></AuthContext.Provider>);
   await waitFor(() => expect(fetchMock).toHaveBeenCalled());
   if (fc) fireEvent.click(screen.getByRole("button", { name: /USD.*FC/ }));
   const fields: Record<string, string> = { [fc ? "amountInFC" : "amount"]: fc ? "12000" : "25", source: "Transfert Mobile", category: "Investissement", receivedFromName: "Alice", receivedFromPhone: "+243123", paymentMethod: "bank" };

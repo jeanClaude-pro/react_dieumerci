@@ -54,6 +54,9 @@ import {
   type SaleCurrency,
 } from "../../utils/salePricing";
 import type { AppliedFilters, FieldChange, FieldChanges, SalesSummaryStats } from "../../types/records";
+import { FESTIVE_GREETING_CSS, festiveGreetingHtml } from "../../utils/festiveGreeting";
+import { getVerifiedUserRaw } from "../../lib/sessionManager";
+import { printAndClose } from "../../utils/printWindow";
 
 interface SaleItem {
   productId: string;
@@ -382,7 +385,7 @@ export default function SalesHistory() {
   // Fetch current user from localStorage (with API fallback)
   const fetchCurrentUser = async () => {
     try {
-      const storedUser = localStorage.getItem("user");
+      const storedUser = getVerifiedUserRaw();
       if (storedUser) {
         const userData = JSON.parse(storedUser);
         setCurrentUser(userData);
@@ -402,7 +405,6 @@ export default function SalesHistory() {
         const userData = await res.json();
         setCurrentUser(userData);
         setIsAdmin(userData.role === "admin");
-        localStorage.setItem("user", JSON.stringify(userData));
       }
     } catch (error) {
       console.error("Error fetching user data:", error);
@@ -1116,6 +1118,7 @@ export default function SalesHistory() {
           content: none !important;
         }
       }
+    ${FESTIVE_GREETING_CSS}
     </style>
   </head>
   <body>
@@ -1192,6 +1195,7 @@ export default function SalesHistory() {
       
       <div class="receipt-qr"><img src="${qrDataUrl}" alt="${t("newSale.receipt.qrAlt")}" /><div class="qr-promo"><div><strong>${t("newSale.receipt.promoTitle")}</strong></div><div>${t("newSale.receipt.promoBody")}</div><div><strong>WhatsApp : +243 844 311 550</strong></div></div></div>
 
+      ${festiveGreetingHtml()}
       <div class="footer">
         <div class="thank-you"><strong>${shopSettings.receiptFooter || t("newSale.receipt.thanks")}</strong></div>
         <div class="warning"><strong>${t("newSale.receipt.noExchange")}</strong></div>
@@ -1204,22 +1208,11 @@ export default function SalesHistory() {
       </div>
       </div>
     </div>
-    <script>
-      window.onload = function() {
-        try {
-          window.print();
-        } catch(e) {
-          console.error('Print error:', e);
-        }
-        setTimeout(() => {
-          window.close();
-        }, 1000);
-      };
-    </script>
   </body>
 </html>
 `);
       printWindow.document.close();
+      printAndClose(printWindow);
     }
   };
 

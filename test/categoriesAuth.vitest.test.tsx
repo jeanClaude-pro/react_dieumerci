@@ -7,7 +7,11 @@ import { serverUrl } from "../src/utils/constants";
 
 const nativeFetch = vi.fn();
 const invalidateSession = vi.hoisted(() => vi.fn());
-vi.mock("../src/lib/sessionManager", () => ({ invalidateSession }));
+const verifiedUser = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock("../src/lib/sessionManager", () => ({
+  invalidateSession,
+  getVerifiedUserRaw: () => (verifiedUser.current ? JSON.stringify(verifiedUser.current) : null),
+}));
 
 beforeEach(async () => {
   vi.resetModules();
@@ -83,7 +87,7 @@ test("login 401 remains excluded from session invalidation", async () => {
 });
 
 test("Products loads categories in add/edit dialogs and preserves product writes", async () => {
-  localStorage.setItem("user", JSON.stringify({ role: "admin" }));
+  verifiedUser.current = { role: "admin" };
   nativeFetch.mockImplementation(async (url: string, init?: RequestInit) => {
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer test-session-token");
     if (url.endsWith("/categories")) return Response.json([{ _id: "c1", name: "Food" }]);

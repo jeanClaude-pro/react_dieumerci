@@ -24,6 +24,8 @@ import { formatFC, formatUSD } from "../i18n/format";
 import { activeLocale, tr } from "../i18n/translate";
 import { serverMessage } from "../i18n/serverMessages";
 import { WALK_IN_LABEL } from "../utils/saleCustomer";
+import { FESTIVE_GREETING_CSS, festiveGreetingHtml } from "../utils/festiveGreeting";
+import { printAndClose } from "../utils/printWindow";
 
 const compactFc = (value: number) => `${new Intl.NumberFormat(activeLocale(), { maximumFractionDigits: 0 }).format(value)}FC`;
 const compactDualUnit = (item: CartItem, rate?: number) => {
@@ -954,6 +956,7 @@ export default function NewSale() {
           content: none !important;
         }
       }
+    ${FESTIVE_GREETING_CSS}
     </style>
   </head>
   <body>
@@ -1025,6 +1028,7 @@ export default function NewSale() {
 
       ${receiptData.qrDataUrl ? `<div class="receipt-qr"><img src="${receiptData.qrDataUrl}" alt="${t("newSale.receipt.qrAlt")}" /><div class="qr-promo"><div><strong>${t("newSale.receipt.promoTitle")}</strong></div><div>${t("newSale.receipt.promoBody")}</div><div><strong>WhatsApp : +243 844 311 550</strong></div></div></div>` : ""}
       
+      ${festiveGreetingHtml()}
       <div class="footer">
         <div class="thank-you"><strong>${receiptData.receiptFooter || t("newSale.receipt.thanks")}</strong></div>
         <div class="warning"><strong>${t("newSale.receipt.noExchange")}</strong></div>
@@ -1037,22 +1041,11 @@ export default function NewSale() {
       </div>
       </div>
     </div>
-    <script>
-      window.onload = function() {
-        try {
-          window.print();
-        } catch(e) {
-          console.error('Print error:', e);
-        }
-        setTimeout(() => {
-          window.close();
-        }, 1000);
-      };
-    </script>
   </body>
 </html>
 `);
       printWindow.document.close();
+      printAndClose(printWindow);
     }
   };
 
@@ -1437,22 +1430,11 @@ export default function NewSale() {
       </div>
       </div>
     </div>
-    <script>
-      window.onload = function() {
-        try {
-          window.print();
-        } catch(e) {
-          console.error('Print error:', e);
-        }
-        setTimeout(() => {
-          window.close();
-        }, 1000);
-      };
-    </script>
   </body>
 </html>
 `);
       printWindow.document.close();
+      printAndClose(printWindow);
     }
   };
 

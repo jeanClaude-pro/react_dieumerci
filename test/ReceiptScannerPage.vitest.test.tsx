@@ -33,6 +33,7 @@ function renderScanner(mode: "approve" | "verify", role: Role = "cashier_supervi
     loading: false,
     setAuth: vi.fn(),
     clearAuth: vi.fn(),
+    logout: vi.fn(),
   };
   return render(
     <AuthContext.Provider value={value}>
